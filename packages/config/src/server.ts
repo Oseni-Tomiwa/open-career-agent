@@ -22,6 +22,7 @@ const ServerEnvironmentSchema = Type.Object(
     WORKER_POLL_INTERVAL_MS: Type.Optional(
       Type.String({ pattern: '^[0-9]+$' }),
     ),
+    GREENHOUSE_BOARDS: Type.Optional(Type.String()),
     WORKER_LEASE_DURATION_MS: Type.Optional(
       Type.String({ pattern: '^[0-9]+$' }),
     ),
@@ -45,6 +46,7 @@ export interface ApiConfig extends SharedServerConfig {
 export interface WorkerConfig extends SharedServerConfig {
   readonly pollIntervalMs: number;
   readonly leaseDurationMs: number;
+  readonly greenhouseBoards: readonly string[];
 }
 
 function selectEnvironment(input: NodeJS.ProcessEnv) {
@@ -56,6 +58,7 @@ function selectEnvironment(input: NodeJS.ProcessEnv) {
     WEB_ORIGIN: input.WEB_ORIGIN,
     WORKER_POLL_INTERVAL_MS: input.WORKER_POLL_INTERVAL_MS,
     WORKER_LEASE_DURATION_MS: input.WORKER_LEASE_DURATION_MS,
+    GREENHOUSE_BOARDS: input.GREENHOUSE_BOARDS,
   };
 }
 
@@ -98,5 +101,9 @@ export function parseWorkerConfig(input: NodeJS.ProcessEnv): WorkerConfig {
       'WORKER_LEASE_DURATION_MS',
       environment.WORKER_LEASE_DURATION_MS ?? '30000',
     ),
+    greenhouseBoards: (environment.GREENHOUSE_BOARDS ?? 'stripe')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
   };
 }

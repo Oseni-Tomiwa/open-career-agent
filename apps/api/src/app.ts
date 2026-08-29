@@ -4,10 +4,15 @@ import swagger from '@fastify/swagger';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { ApiConfig } from '@oca/config/server';
 import { databaseIsReady, type DatabaseHandle } from '@oca/database';
+import { Type } from '@sinclair/typebox';
+import { OpportunityRepository } from '@oca/database';
+import { opportunityId } from '@oca/domain';
 import {
   ApiErrorEnvelopeSchema,
   HealthResponseSchema,
   ReadinessResponseSchema,
+  OpportunityListResponseSchema,
+  OpportunityDetailResponseSchema
 } from '@oca/schemas';
 import Fastify, { type FastifyInstance } from 'fastify';
 
@@ -143,6 +148,54 @@ export async function createApiApp(
   });
 
   app.addSchema(ApiErrorEnvelopeSchema);
+
+  app.get(
+    '/opportunities',
+    {
+      schema: {
+        tags: ['opportunities'],
+        summary: 'List opportunities',
+        response: { 200: OpportunityListResponseSchema },
+      },
+    },
+    () => {
+      const repo = new OpportunityRepository(options.database);
+      const data = repo.getOpportunitySummaries();
+      return { 
+        data: data as any 
+      };
+    },
+  );
+
+  app.get(
+    '/opportunities/:id',
+    {
+      schema: {
+        tags: ['opportunities'],
+        summary: 'Get opportunity detail',
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: OpportunityDetailResponseSchema, 404: ApiErrorEnvelopeSchema },
+      },
+    },
+    async (request, reply) => {
+      const repo = new OpportunityRepository(options.database);
+      const { id: idRaw } = request.params;
+      const id = opportunityId(idRaw);
+      const opportunity = repo.getOpportunity(id);
+
+      if (!opportunity) {
+        await reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Opportunity not found', requestId: request.id } }); return;
+      }
+
+      const snapshots = repo.getSnapshots(id);
+
+      return {
+        opportunity: { id: opportunity.id, createdAt: new Date(opportunity.createdAt).toISOString() },
+        snapshots: snapshots as any
+      };
+    },
+  );
+
 
   if (options.closeDatabaseOnClose ?? true) {
     app.addHook('onClose', () => {

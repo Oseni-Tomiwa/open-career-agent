@@ -10,7 +10,8 @@ import {
 } from '@oca/database';
 import pino from 'pino';
 
-import { BackgroundWorker, systemTaskHandlers } from './worker.js';
+import { BackgroundWorker } from './worker.js';
+import { createTaskHandlers } from './ingestion/workflow.js';
 
 async function main(): Promise<void> {
   const config = parseWorkerConfig(process.env);
@@ -22,7 +23,7 @@ async function main(): Promise<void> {
     applyMigrations(database);
     const worker = new BackgroundWorker({
       ledger: new BackgroundTaskLedger(database),
-      handlers: systemTaskHandlers,
+      handlers: createTaskHandlers({ db: database, config }),
       logger,
       workerId: randomUUID(),
       pollIntervalMs: config.pollIntervalMs,

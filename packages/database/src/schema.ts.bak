@@ -85,22 +85,11 @@ export type BackgroundTaskEventRow = typeof backgroundTaskEvents.$inferSelect;
 // DOMAIN PERSISTENCE FOUNDATION
 // ==========================================
 
-
 export const candidates = sqliteTable('candidates', {
   id: text('id').primaryKey(),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });
-
-export const CLAIM_STATES = [
-  'SUPPORTED',
-  'INFERRED',
-  'UNKNOWN',
-  'CONFLICTING',
-  'UNSUPPORTED',
-] as const;
-
-export const CLAIM_CONFIDENCE_LEVELS = ['HIGH', 'MODERATE', 'LOW'] as const;
 
 export const candidateClaims = sqliteTable('candidate_claims', {
   id: text('id').primaryKey(),
@@ -109,8 +98,6 @@ export const candidateClaims = sqliteTable('candidate_claims', {
     .references(() => candidates.id, { onDelete: 'restrict' }),
   kind: text('kind').notNull(),
   value: text('value').notNull(),
-  state: text('state', { enum: CLAIM_STATES }).notNull(),
-  confidence: text('confidence', { enum: CLAIM_CONFIDENCE_LEVELS }),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });
@@ -119,11 +106,13 @@ export const opportunities = sqliteTable(
   'opportunities',
   {
     id: text('id').primaryKey(),
+    canonicalSourceId: text('canonical_source_id').notNull(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-  }
+  },
+  (table) => [
+    uniqueIndex('opportunities_source_id_idx').on(table.canonicalSourceId),
+  ],
 );
-
-
 
 export const opportunitySnapshots = sqliteTable(
   'opportunity_snapshots',
@@ -140,7 +129,7 @@ export const opportunitySnapshots = sqliteTable(
     employmentType: text('employment_type'),
     compensation: text('compensation'),
     content: text('content').notNull(),
-    fingerprint: text('fingerprint').notNull(),
+    sourceUrl: text('source_url'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (table) => [
@@ -150,52 +139,6 @@ export const opportunitySnapshots = sqliteTable(
     ),
   ],
 );
-
-export const opportunitySnapshotSources = sqliteTable(
-  'opportunity_snapshot_sources',
-  {
-    snapshotId: text('snapshot_id')
-      .notNull()
-      .references(() => opportunitySnapshots.id, { onDelete: 'restrict' }),
-    sourceObservationId: text('source_observation_id')
-      .notNull()
-      .references(() => sourceObservations.id, { onDelete: 'restrict' }),
-  },
-  (table) => [
-    index('oss_snapshot_idx').on(table.snapshotId),
-    uniqueIndex('oss_unique_idx').on(table.snapshotId, table.sourceObservationId),
-  ],
-);
-
-
-export const sourceListings = sqliteTable('source_listings', {
-  id: text('id').primaryKey(),
-  opportunityId: text('opportunity_id').references(() => opportunities.id, { onDelete: 'restrict' }),
-  sourceSystem: text('source_system').notNull(),
-  sourceExternalId: text('source_external_id').notNull(),
-  sourceUrl: text('source_url'),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
-}, (table) => [
-  uniqueIndex('source_listings_system_ext_idx').on(table.sourceSystem, table.sourceExternalId),
-]);
-
-export const sourceObservations = sqliteTable('source_observations', {
-  id: text('id').primaryKey(),
-  sourceListingId: text('source_listing_id')
-    .notNull()
-    .references(() => sourceListings.id, { onDelete: 'restrict' }),
-  rawPayload: text('raw_payload').notNull(),
-  fingerprint: text('fingerprint').notNull(),
-  observedAt: integer('observed_at', { mode: 'timestamp_ms' }).notNull(),
-  sourceUpdatedAt: integer('source_updated_at', { mode: 'timestamp_ms' }),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-}, (table) => [
-  index('source_observations_listing_time_idx').on(table.sourceListingId, table.observedAt),
-  uniqueIndex('source_observations_listing_fingerprint_idx').on(table.sourceListingId, table.fingerprint),
-]);
-
-
 
 export const EVIDENCE_STATES = [
   'source-verified',
@@ -215,16 +158,15 @@ export const evidence = sqliteTable('evidence', {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
-
 export const candidateClaimEvidence = sqliteTable(
   'candidate_claim_evidence',
   {
     claimId: text('claim_id')
       .notNull()
-      .references(() => candidateClaims.id, { onDelete: 'cascade' }),
+      .references(() => candidateClaims.id, { onDelete: 'restrict' }),
     evidenceId: text('evidence_id')
       .notNull()
-      .references(() => evidence.id, { onDelete: 'cascade' }),
+      .references(() => evidence.id, { onDelete: 'restrict' }),
   },
   (table) => [
     index('cce_claim_idx').on(table.claimId),
@@ -238,10 +180,10 @@ export const opportunitySnapshotEvidence = sqliteTable(
   {
     snapshotId: text('snapshot_id')
       .notNull()
-      .references(() => opportunitySnapshots.id, { onDelete: 'cascade' }),
+      .references(() => opportunitySnapshots.id, { onDelete: 'restrict' }),
     evidenceId: text('evidence_id')
       .notNull()
-      .references(() => evidence.id, { onDelete: 'cascade' }),
+      .references(() => evidence.id, { onDelete: 'restrict' }),
   },
   (table) => [
     index('ose_snapshot_idx').on(table.snapshotId),
@@ -283,55 +225,15 @@ export const evaluations = sqliteTable(
   ],
 );
 
-export const EVALUATION_CATEGORY = ['eligibility', 'fit', 'quality'] as const;
-
-export const evaluationFindings = sqliteTable(
-  'evaluation_findings',
-  {
-    id: text('id').primaryKey(),
-    evaluationId: text('evaluation_id')
-      .notNull()
-      .references(() => evaluations.id, { onDelete: 'cascade' }), // finding deletes if evaluation deletes
-    category: text('category', { enum: EVALUATION_CATEGORY }).notNull(),
-    dimensionKey: text('dimension_key').notNull(),
-    state: text('state').notNull(),
-    summary: text('summary').notNull(),
-    confidence: text('confidence'),
-  },
-  (table) => [
-    index('eval_finding_eval_idx').on(table.evaluationId),
-    uniqueIndex('eval_finding_unique_idx').on(table.evaluationId, table.category, table.dimensionKey),
-  ],
-);
-
-export const evaluationFindingEvidence = sqliteTable(
-  'evaluation_finding_evidence',
-  {
-    findingId: text('finding_id')
-      .notNull()
-      .references(() => evaluationFindings.id, { onDelete: 'cascade' }),
-    evidenceId: text('evidence_id')
-      .notNull()
-      .references(() => evidence.id, { onDelete: 'cascade' }),
-  },
-  (table) => [
-    index('efe_finding_idx').on(table.findingId),
-    uniqueIndex('efe_unique_idx').on(
-      table.findingId,
-      table.evidenceId,
-    ),
-  ],
-);
-
 export const evaluationEvidence = sqliteTable(
   'evaluation_evidence',
   {
     evaluationId: text('evaluation_id')
       .notNull()
-      .references(() => evaluations.id, { onDelete: 'cascade' }),
+      .references(() => evaluations.id, { onDelete: 'restrict' }),
     evidenceId: text('evidence_id')
       .notNull()
-      .references(() => evidence.id, { onDelete: 'cascade' }),
+      .references(() => evidence.id, { onDelete: 'restrict' }),
     dimension: text('dimension').notNull(),
   },
   (table) => [

@@ -119,9 +119,3 @@ export class BackgroundWorker {
     }
   }
 }
-
-export const systemTaskHandlers: Readonly<
-  Record<string, BackgroundTaskHandler>
-> = {
-  'system.noop': () => undefined,
-};

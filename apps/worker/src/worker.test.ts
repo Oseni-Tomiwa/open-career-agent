@@ -11,7 +11,9 @@ import {
 import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { BackgroundWorker, systemTaskHandlers } from './worker.js';
+import { BackgroundWorker } from './worker.js';
+import { createTaskHandlers } from './ingestion/workflow.js';
+import { parseWorkerConfig } from '@oca/config/server';
 
 describe('background worker', () => {
   let directory: string;
@@ -34,7 +36,7 @@ describe('background worker', () => {
     const task = ledger.enqueue({ taskType: 'system.noop' });
     const worker = new BackgroundWorker({
       ledger,
-      handlers: systemTaskHandlers,
+      handlers: createTaskHandlers({ db: database, config: parseWorkerConfig(process.env) }),
       logger: pino({ enabled: false }),
       workerId: 'worker-test',
       pollIntervalMs: 10,

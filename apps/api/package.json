@@ -16,6 +16,7 @@
     "@fastify/swagger": "9.8.1",
     "@fastify/type-provider-typebox": "6.1.0",
     "@oca/config": "workspace:*",
+    "@oca/domain": "workspace:*",
     "@oca/database": "workspace:*",
     "@oca/schemas": "workspace:*",
     "@sinclair/typebox": "0.34.52",

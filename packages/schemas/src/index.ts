@@ -10,3 +10,4 @@ export type {
   ReadinessResponse,
   ServiceMetadata,
 } from './service.js';
+export * from './opportunity.js';
