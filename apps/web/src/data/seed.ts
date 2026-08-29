@@ -1,0 +1,975 @@
+import type {
+  Application,
+  CandidateProfile,
+  Company,
+  EvidenceReference,
+  Opportunity,
+  ProductSnapshot,
+  SearchPreferences,
+  SourceStatus,
+} from './types.js';
+
+const companies = {
+  northstar: {
+    id: 'northstar',
+    name: 'Northstar Ledger',
+    initials: 'NL',
+    mark: 'orbit',
+    color: '#2e6c63',
+  },
+  ember: {
+    id: 'ember',
+    name: 'Emberline Systems',
+    initials: 'ES',
+    mark: 'spark',
+    color: '#a55237',
+  },
+  atlas: {
+    id: 'atlas',
+    name: 'Atlas Grove',
+    initials: 'AG',
+    mark: 'grid',
+    color: '#5263a5',
+  },
+  clearpath: {
+    id: 'clearpath',
+    name: 'Clearpath Healthworks',
+    initials: 'CH',
+    mark: 'bridge',
+    color: '#447865',
+  },
+  meridian: {
+    id: 'meridian',
+    name: 'Meridian Works',
+    initials: 'MW',
+    mark: 'wave',
+    color: '#755d98',
+  },
+  quietlake: {
+    id: 'quietlake',
+    name: 'Quiet Lake Security',
+    initials: 'QL',
+    mark: 'none',
+    color: '#5e6673',
+  },
+  paperplane: {
+    id: 'paperplane',
+    name: 'Paperplane Commerce',
+    initials: 'PC',
+    mark: 'spark',
+    color: '#97613d',
+  },
+  juniper: {
+    id: 'juniper',
+    name: 'Juniper Arc',
+    initials: 'JA',
+    mark: 'bridge',
+    color: '#337478',
+  },
+} as const satisfies Record<string, Company>;
+
+function opportunityEvidence(
+  id: string,
+  label: string,
+  source: string,
+  excerpt: string,
+  state: EvidenceReference['state'] = 'source-verified',
+): EvidenceReference {
+  return {
+    id,
+    label,
+    source,
+    excerpt,
+    state,
+    observedAt: '28 Aug 2026',
+  };
+}
+
+const candidateBackendEvidence = opportunityEvidence(
+  'candidate-backend',
+  'Backend delivery evidence',
+  'Career Memory · work and projects',
+  'Three years building and operating TypeScript and Node.js services across two verified work entries and two projects.',
+  'candidate-confirmed',
+);
+
+const candidateAuthEvidence = opportunityEvidence(
+  'candidate-auth',
+  'Work authorization preference',
+  'Career Memory · candidate assertion',
+  'Requires employer sponsorship for UK and US roles; can work without sponsorship in Nigeria.',
+  'candidate-confirmed',
+);
+
+function makeOpportunity(
+  input: Partial<Opportunity> &
+    Pick<
+      Opportunity,
+      | 'id'
+      | 'company'
+      | 'role'
+      | 'location'
+      | 'country'
+      | 'workModel'
+      | 'source'
+      | 'eligibility'
+      | 'eligibilityLabel'
+      | 'fit'
+      | 'fitScore'
+      | 'quality'
+      | 'qualityScore'
+      | 'decision'
+      | 'decisionLabel'
+      | 'explanation'
+      | 'nextAction'
+      | 'sponsorship'
+    >,
+): Opportunity {
+  const listingEvidence = opportunityEvidence(
+    `${input.id}-listing`,
+    'Role listing',
+    `${input.source} · fictional development fixture`,
+    input.explanation,
+  );
+  const eligibilityState =
+    input.eligibility === 'ineligible'
+      ? 'blocker'
+      : input.eligibility === 'eligible'
+        ? 'pass'
+        : 'unknown';
+
+  return {
+    summary:
+      'Build reliable product systems with a collaborative team that values clear decisions, careful delivery, and durable customer outcomes.',
+    description: [
+      'Work with product and engineering partners to design and deliver reliable services used by operational teams.',
+      'Own changes from discovery through production, including testing, observability, and thoughtful technical documentation.',
+    ],
+    remotePolicy:
+      input.workModel === 'Remote'
+        ? `Remote within ${input.country}`
+        : `${input.workModel} arrangement described in the listing`,
+    compensation: '$92,000–$118,000',
+    employmentType: 'Full-time',
+    seniority: 'Mid-level',
+    technologies: ['TypeScript', 'Node.js', 'PostgreSQL'],
+    sourceReference: `${input.source} fixture · ${input.id}`,
+    freshness: 'Updated yesterday',
+    publishedAt: '2026-08-24T09:00:00Z',
+    updatedAt: '2026-08-28T09:00:00Z',
+    relocation: 'Unknown',
+    completeness: input.eligibility === 'unknown' ? 68 : 91,
+    requirements: [
+      'Production TypeScript and Node.js experience',
+      'Evidence of owning reliable backend services',
+      'Clear written communication across disciplines',
+    ],
+    eligibilitySignals: [
+      {
+        id: `${input.id}-eligibility`,
+        label: 'Work authorization and geography',
+        state: eligibilityState,
+        summary: input.eligibilityLabel,
+        evidenceIds: [`${input.id}-listing`, 'candidate-auth'],
+        confidence: input.eligibility === 'unknown' ? 'moderate' : 'high',
+        ...(input.eligibility === 'unknown' ||
+        input.eligibility === 'investigate'
+          ? {
+              investigate:
+                'Confirm the role-specific sponsorship and permitted-work-location policy before investing in an application.',
+            }
+          : {}),
+      },
+    ],
+    fitSignals: [
+      {
+        id: `${input.id}-fit-node`,
+        label: 'Node.js services',
+        state: input.fit === 'weak' ? 'partial' : 'matched',
+        summary:
+          input.fit === 'weak'
+            ? 'Related service work, but limited evidence at the requested scope.'
+            : 'Directly supported by verified work and project evidence.',
+        evidenceIds: ['candidate-backend'],
+        impact: input.fit === 'weak' ? 'Moderate Fit reduction' : 'Strong Fit support',
+      },
+      {
+        id: `${input.id}-fit-platform`,
+        label: 'Production platform ownership',
+        state: input.fit === 'strong' ? 'matched' : 'partial',
+        summary:
+          input.fit === 'strong'
+            ? 'Two current evidence items show delivery through production.'
+            : 'Delivery evidence exists, but ownership depth is below the role expectation.',
+        evidenceIds: ['candidate-backend'],
+        impact: input.fit === 'strong' ? 'Strong Fit support' : 'Fit reduction only',
+      },
+    ],
+    qualitySignals: [
+      {
+        id: `${input.id}-quality-source`,
+        label: 'Direct ATS provenance',
+        state: 'positive',
+        summary: `Captured from a structured ${input.source} fixture with intact role identity.`,
+      },
+      {
+        id: `${input.id}-quality-comp`,
+        label: 'Compensation transparency',
+        state: input.compensation === null ? 'neutral' : 'positive',
+        summary:
+          input.compensation === null
+            ? 'The listing does not state a compensation range.'
+            : 'The listing states a scoped salary range.',
+      },
+    ],
+    evidence: [listingEvidence, candidateBackendEvidence, candidateAuthEvidence],
+    history: [
+      {
+        id: `${input.id}-history-discovered`,
+        date: '24 Aug',
+        title: 'Opportunity discovered',
+        detail: `Captured from the seeded ${input.source} source fixture.`,
+        kind: 'discovered',
+      },
+      {
+        id: `${input.id}-history-evaluated`,
+        date: '28 Aug',
+        title: 'Evaluation completed',
+        detail: 'Eligibility, Fit, and Quality were evaluated as separate outputs.',
+        kind: 'evaluation',
+      },
+    ],
+    tags: [],
+    isNew: false,
+    ...input,
+  };
+}
+
+export const seedOpportunities: readonly Opportunity[] = [
+  makeOpportunity({
+    id: 'northstar-platform-engineer',
+    company: companies.northstar,
+    role: 'Platform Engineer, Developer Experience',
+    location: 'Lagos, Nigeria',
+    country: 'Nigeria',
+    workModel: 'Hybrid',
+    source: 'Ashby',
+    eligibility: 'eligible',
+    eligibilityLabel: 'Eligible — local work authorization confirmed',
+    fit: 'strong',
+    fitScore: 91,
+    quality: 'strong',
+    qualityScore: 88,
+    decision: 'high-priority',
+    decisionLabel: 'Apply this week',
+    explanation:
+      'Strong evidence for Node.js platform delivery, clearly eligible geography, transparent compensation, and a fresh direct listing.',
+    nextAction: 'Review the platform ownership examples before Friday',
+    sponsorship: 'Unavailable',
+    relocation: 'Supported',
+    compensation: '₦32m–₦42m',
+    technologies: ['TypeScript', 'Node.js', 'Terraform', 'AWS'],
+    tags: ['priority', 'relocation'],
+    isNew: true,
+  }),
+  makeOpportunity({
+    id: 'ember-backend-engineer',
+    company: companies.ember,
+    role: 'Senior Backend Engineer',
+    location: 'London, United Kingdom',
+    country: 'United Kingdom',
+    workModel: 'Hybrid',
+    source: 'Greenhouse',
+    eligibility: 'ineligible',
+    eligibilityLabel: 'Blocked — this role explicitly cannot sponsor',
+    fit: 'strong',
+    fitScore: 94,
+    quality: 'strong',
+    qualityScore: 86,
+    decision: 'ineligible',
+    decisionLabel: 'Do not pursue now',
+    explanation:
+      'The technical match is excellent, but the role-specific listing explicitly excludes sponsorship required by the candidate.',
+    nextAction: 'Revisit only if independent UK authorization changes',
+    sponsorship: 'Unavailable',
+    technologies: ['TypeScript', 'Node.js', 'Kafka', 'PostgreSQL'],
+    tags: ['blocker', 'sponsorship'],
+  }),
+  makeOpportunity({
+    id: 'atlas-api-engineer',
+    company: companies.atlas,
+    role: 'API Engineer',
+    location: 'Remote · Europe and Africa',
+    country: 'United Kingdom',
+    workModel: 'Remote',
+    source: 'Lever',
+    eligibility: 'investigate',
+    eligibilityLabel: 'Needs investigation — sponsorship is not stated',
+    fit: 'strong',
+    fitScore: 89,
+    quality: 'strong',
+    qualityScore: 82,
+    decision: 'investigate',
+    decisionLabel: 'Confirm sponsorship',
+    explanation:
+      'The role is a strong skills match and allows African time zones, but the listing is silent on employer sponsorship.',
+    nextAction: 'Check application questions for sponsorship policy',
+    sponsorship: 'Unknown',
+    compensation: null,
+    tags: ['investigate', 'sponsorship', 'compensation-unknown'],
+  }),
+  makeOpportunity({
+    id: 'clearpath-software-engineer',
+    company: companies.clearpath,
+    role: 'Software Engineer, Care Operations',
+    location: 'Lagos, Nigeria',
+    country: 'Nigeria',
+    workModel: 'Remote',
+    source: 'Greenhouse',
+    eligibility: 'eligible',
+    eligibilityLabel: 'Eligible — Nigeria is an explicit hiring location',
+    fit: 'moderate',
+    fitScore: 72,
+    quality: 'strong',
+    qualityScore: 87,
+    decision: 'consider',
+    decisionLabel: 'Worth a closer look',
+    explanation:
+      'Clear eligibility and strong listing quality offset a moderate domain-learning gap.',
+    nextAction: 'Review healthcare-domain expectations',
+    sponsorship: 'Unavailable',
+    compensation: '$68,000–$84,000 equivalent',
+    tags: ['eligible'],
+  }),
+  makeOpportunity({
+    id: 'meridian-product-engineer',
+    company: companies.meridian,
+    role: 'Product Engineer, Data Tools',
+    location: 'Berlin, Germany',
+    country: 'Germany',
+    workModel: 'Hybrid',
+    source: 'Ashby',
+    eligibility: 'eligible',
+    eligibilityLabel: 'Eligible — relocation and visa support are explicit',
+    fit: 'weak',
+    fitScore: 48,
+    quality: 'strong',
+    qualityScore: 92,
+    decision: 'low-priority',
+    decisionLabel: 'Low priority',
+    explanation:
+      'The role is transparent and well sourced, but the candidate has limited evidence for its data-visualization focus.',
+    nextAction: 'Pursue only if data-tooling direction becomes a priority',
+    sponsorship: 'Available',
+    relocation: 'Supported',
+    technologies: ['React', 'TypeScript', 'D3', 'Python'],
+    tags: ['relocation', 'quality-strong'],
+  }),
+  makeOpportunity({
+    id: 'paperplane-fullstack-engineer',
+    company: companies.paperplane,
+    role: 'Full-stack Engineer',
+    location: 'Toronto, Canada',
+    country: 'Canada',
+    workModel: 'Remote',
+    source: 'Lever',
+    eligibility: 'investigate',
+    eligibilityLabel: 'Needs investigation — work authorization wording is ambiguous',
+    fit: 'strong',
+    fitScore: 86,
+    quality: 'moderate',
+    qualityScore: 71,
+    decision: 'investigate',
+    decisionLabel: 'Resolve conflicting policy',
+    explanation:
+      'A role-specific no-sponsorship statement conflicts with the employer’s general engineering immigration policy.',
+    nextAction: 'Ask whether the engineering sponsorship policy applies to this requisition',
+    sponsorship: 'Conflicting',
+    tags: ['investigate', 'conflict', 'sponsorship'],
+    evidence: [
+      opportunityEvidence(
+        'paperplane-role-policy',
+        'Role-specific policy',
+        'Lever · fictional role fixture',
+        'Applicants must already be authorized to work in Canada; sponsorship is not available for this role.',
+        'disputed',
+      ),
+      opportunityEvidence(
+        'paperplane-general-policy',
+        'General engineering policy',
+        'Fictional employer policy fixture',
+        'Qualified engineering hires may be considered for immigration support.',
+        'disputed',
+      ),
+      candidateAuthEvidence,
+      candidateBackendEvidence,
+    ],
+    eligibilitySignals: [
+      {
+        id: 'paperplane-sponsorship-conflict',
+        label: 'Sponsorship policy conflict',
+        state: 'unknown',
+        summary: 'Two current official fixture sources disagree in scope.',
+        evidenceIds: ['paperplane-role-policy', 'paperplane-general-policy'],
+        confidence: 'low',
+        investigate: 'Ask whether the general engineering exception applies to this role.',
+      },
+    ],
+  }),
+  makeOpportunity({
+    id: 'juniper-services-engineer',
+    company: companies.juniper,
+    role: 'Services Engineer',
+    location: 'Remote · Global',
+    country: 'Global',
+    workModel: 'Remote',
+    source: 'Ashby',
+    eligibility: 'eligible',
+    eligibilityLabel: 'Eligible — global contractor engagement supported',
+    fit: 'moderate',
+    fitScore: 67,
+    quality: 'moderate',
+    qualityScore: 73,
+    decision: 'consider',
+    decisionLabel: 'Consider',
+    explanation:
+      'The candidate lacks a preferred degree, but it is not mandatory and project evidence supports the core requirements.',
+    nextAction: 'Lead with supported project outcomes',
+    sponsorship: 'Unavailable',
+    employmentType: 'Contract',
+    tags: ['degree-preferred'],
+  }),
+  makeOpportunity({
+    id: 'northstar-infrastructure-engineer',
+    company: companies.northstar,
+    role: 'Infrastructure Software Engineer',
+    location: 'Remote · Nigeria',
+    country: 'Nigeria',
+    workModel: 'Remote',
+    source: 'Ashby',
+    eligibility: 'eligible',
+    eligibilityLabel: 'Eligible — location and engagement model align',
+    fit: 'moderate',
+    fitScore: 74,
+    quality: 'strong',
+    qualityScore: 83,
+    decision: 'consider',
+    decisionLabel: 'Build evidence, then apply',
+    explanation:
+      'Strong container and deployment evidence is transferable, but Kubernetes is a preferred skill with no direct evidence.',
+    nextAction: 'Decide whether to add a Kubernetes learning artifact',
+    sponsorship: 'Unavailable',
+    technologies: ['Kubernetes', 'Go', 'AWS', 'Terraform'],
+    tags: ['skill-gap', 'transferable'],
+    fitSignals: [
+      {
+        id: 'northstar-kubernetes-gap',
+        label: 'Kubernetes',
+        state: 'missing',
+        summary: 'No direct Kubernetes evidence is recorded.',
+        evidenceIds: ['candidate-backend'],
+        impact: 'Preferred-skill Fit reduction only — not an Eligibility blocker',
+      },
+      {
+        id: 'northstar-container-transfer',
+        label: 'Container operations',
+        state: 'transferable',
+        summary: 'Docker deployment and service operations support part of the platform expectation.',
+        evidenceIds: ['candidate-backend'],
+        impact: 'Partial transferable support; not proof of Kubernetes experience',
+      },
+    ],
+  }),
+  makeOpportunity({
+    id: 'clearpath-graduate-intern',
+    company: companies.clearpath,
+    role: 'Graduate Software Internship',
+    location: 'Accra, Ghana',
+    country: 'Ghana',
+    workModel: 'Hybrid',
+    source: 'Greenhouse',
+    eligibility: 'ineligible',
+    eligibilityLabel: 'Blocked — current enrollment is mandatory',
+    fit: 'strong',
+    fitScore: 84,
+    quality: 'strong',
+    qualityScore: 85,
+    decision: 'ineligible',
+    decisionLabel: 'Not eligible',
+    explanation:
+      'The program requires current student enrollment for the full term; the candidate graduated and is not enrolled.',
+    nextAction: 'Focus on early-career roles without enrollment gates',
+    sponsorship: 'Unknown',
+    employmentType: 'Internship',
+    seniority: 'Early career',
+    compensation: 'GHS 7,500 monthly',
+    tags: ['blocker', 'student-status'],
+  }),
+  makeOpportunity({
+    id: 'quietlake-cleared-engineer',
+    company: companies.quietlake,
+    role: 'Backend Engineer, Public Sector',
+    location: 'Arlington, United States',
+    country: 'United States',
+    workModel: 'On-site',
+    source: 'Lever',
+    eligibility: 'ineligible',
+    eligibilityLabel: 'Blocked — US citizenship is explicitly required',
+    fit: 'strong',
+    fitScore: 88,
+    quality: 'moderate',
+    qualityScore: 78,
+    decision: 'ineligible',
+    decisionLabel: 'Not eligible',
+    explanation:
+      'The contract requires US citizenship; candidate evidence confirms another citizenship. Technical Fit remains separate.',
+    nextAction: 'Exclude citizenship-restricted public-sector roles',
+    sponsorship: 'Unavailable',
+    relocation: 'Not offered',
+    technologies: ['Node.js', 'TypeScript', 'AWS GovCloud'],
+    tags: ['blocker', 'citizenship'],
+  }),
+  makeOpportunity({
+    id: 'ember-reliability-engineer',
+    company: companies.ember,
+    role: 'Site Reliability Engineer',
+    location: 'Remote · EMEA',
+    country: 'EMEA',
+    workModel: 'Remote',
+    source: 'Greenhouse',
+    eligibility: 'investigate',
+    eligibilityLabel: 'Needs investigation — remote hiring countries are unspecified',
+    fit: 'moderate',
+    fitScore: 70,
+    quality: 'risk',
+    qualityScore: 32,
+    decision: 'investigate',
+    decisionLabel: 'Verify listing first',
+    explanation:
+      'The listing is 214 days old, location differs across snapshots, and the current application link is unresolved.',
+    nextAction: 'Verify the requisition on the employer’s current careers fixture',
+    sponsorship: 'Unknown',
+    freshness: 'Last confirmed 214 days ago',
+    publishedAt: '2026-01-26T09:00:00Z',
+    updatedAt: '2026-02-02T09:00:00Z',
+    compensation: null,
+    tags: ['stale', 'risk', 'remote-restriction'],
+    qualitySignals: [
+      {
+        id: 'ember-sre-stale',
+        label: 'Listing freshness',
+        state: 'risk',
+        summary: 'No successful direct-source confirmation in 214 days.',
+      },
+      {
+        id: 'ember-sre-location',
+        label: 'Conflicting location snapshots',
+        state: 'warning',
+        summary: 'Earlier snapshot said UK only; the latest cached copy says EMEA.',
+      },
+    ],
+  }),
+  makeOpportunity({
+    id: 'atlas-frontend-platform',
+    company: companies.atlas,
+    role: 'Frontend Platform Engineer',
+    location: 'Amsterdam, Netherlands',
+    country: 'Netherlands',
+    workModel: 'Hybrid',
+    source: 'Lever',
+    eligibility: 'eligible',
+    eligibilityLabel: 'Eligible — visa and relocation support are explicit',
+    fit: 'moderate',
+    fitScore: 64,
+    quality: 'strong',
+    qualityScore: 89,
+    decision: 'consider',
+    decisionLabel: 'Consider',
+    explanation:
+      'Relocation is supported and TypeScript evidence transfers well, though frontend-platform depth is only partially matched.',
+    nextAction: 'Review design-system ownership expectations',
+    sponsorship: 'Available',
+    relocation: 'Supported',
+    technologies: ['React', 'TypeScript', 'Vite', 'Design systems'],
+    tags: ['relocation', 'transferable'],
+  }),
+  makeOpportunity({
+    id: 'paperplane-payments-engineer',
+    company: companies.paperplane,
+    role: 'Payments Backend Engineer',
+    location: 'Remote · Americas only',
+    country: 'Americas',
+    workModel: 'Remote',
+    source: 'Lever',
+    eligibility: 'ineligible',
+    eligibilityLabel: 'Blocked — remote work is restricted to the Americas',
+    fit: 'strong',
+    fitScore: 90,
+    quality: 'strong',
+    qualityScore: 84,
+    decision: 'ineligible',
+    decisionLabel: 'Not eligible',
+    explanation:
+      'The candidate’s location is outside the explicit remote employment geography, despite strong payments-service Fit.',
+    nextAction: 'Look for equivalent globally remote roles',
+    sponsorship: 'Unavailable',
+    tags: ['blocker', 'remote-restriction'],
+  }),
+  makeOpportunity({
+    id: 'meridian-integration-engineer',
+    company: companies.meridian,
+    role: 'Integration Engineer',
+    location: 'Remote · Africa',
+    country: 'Africa',
+    workModel: 'Remote',
+    source: 'Ashby',
+    eligibility: 'eligible',
+    eligibilityLabel: 'Eligible — Nigeria is included in the hiring region',
+    fit: 'moderate',
+    fitScore: 69,
+    quality: 'moderate',
+    qualityScore: 76,
+    decision: 'consider',
+    decisionLabel: 'Consider',
+    explanation:
+      'API delivery maps well, while enterprise integration experience is partially supported through adjacent work.',
+    nextAction: 'Frame transferable integration work precisely',
+    sponsorship: 'Unavailable',
+    compensation: null,
+    technologies: ['REST', 'Webhooks', 'TypeScript', 'OAuth'],
+    tags: ['transferable', 'compensation-unknown'],
+  }),
+  makeOpportunity({
+    id: 'juniper-developer-advocate',
+    company: companies.juniper,
+    role: 'Developer Advocate, APIs',
+    location: 'Remote · EMEA',
+    country: 'EMEA',
+    workModel: 'Remote',
+    source: 'Greenhouse',
+    eligibility: 'unknown',
+    eligibilityLabel: 'Unknown — country employment list is incomplete',
+    fit: 'weak',
+    fitScore: 44,
+    quality: 'moderate',
+    qualityScore: 74,
+    decision: 'low-priority',
+    decisionLabel: 'Low priority',
+    explanation:
+      'The role’s public-speaking emphasis has little supporting evidence and country eligibility is incomplete.',
+    nextAction: 'Do not prioritize unless career direction changes',
+    sponsorship: 'Unknown',
+    technologies: ['APIs', 'Technical writing', 'Public speaking'],
+    tags: ['unknown', 'fit-weak'],
+  }),
+  makeOpportunity({
+    id: 'northstar-backend-engineer-updated',
+    company: companies.northstar,
+    role: 'Backend Engineer, Financial Systems',
+    location: 'Lagos, Nigeria',
+    country: 'Nigeria',
+    workModel: 'Hybrid',
+    source: 'Ashby',
+    eligibility: 'eligible',
+    eligibilityLabel: 'Eligible — local role with confirmed authorization',
+    fit: 'strong',
+    fitScore: 87,
+    quality: 'strong',
+    qualityScore: 81,
+    decision: 'high-priority',
+    decisionLabel: 'Review updated scope',
+    explanation:
+      'A strong eligible match, but the latest snapshot added on-call expectations and changed compensation.',
+    nextAction: 'Review the new on-call requirement before shortlisting',
+    sponsorship: 'Unavailable',
+    compensation: '₦28m–₦38m',
+    changed: 'On-call rotation added; compensation range increased',
+    tags: ['priority', 'changed-listing'],
+    history: [
+      {
+        id: 'northstar-updated-discovered',
+        date: '19 Aug',
+        title: 'First snapshot captured',
+        detail: 'Original scope focused on core ledger services.',
+        kind: 'discovered',
+      },
+      {
+        id: 'northstar-updated-snapshot',
+        date: '27 Aug',
+        title: 'Listing changed',
+        detail: 'On-call rotation added and compensation moved from ₦25m–₦34m to ₦28m–₦38m.',
+        kind: 'snapshot',
+      },
+      {
+        id: 'northstar-updated-decision',
+        date: '28 Aug',
+        title: 'Decision refreshed',
+        detail: 'Remains high priority; review the new schedule requirement.',
+        kind: 'decision',
+      },
+    ],
+  }),
+];
+
+export const seedApplications: readonly Application[] = [
+  {
+    id: 'app-northstar-platform',
+    opportunityId: 'northstar-platform-engineer',
+    status: 'Interview',
+    nextAction: 'Prepare two platform ownership examples',
+    dueDate: '31 Aug · 10:00',
+    updatedAt: 'Today',
+    events: [
+      {
+        id: 'app-northstar-1',
+        date: '19 Aug',
+        title: 'Preparation started',
+        detail: 'Application materials drafted; this did not mark submission.',
+        actor: 'System',
+      },
+      {
+        id: 'app-northstar-2',
+        date: '20 Aug',
+        title: 'Candidate marked submitted',
+        detail: 'Submission was recorded from candidate confirmation.',
+        actor: 'Candidate',
+      },
+      {
+        id: 'app-northstar-3',
+        date: '28 Aug',
+        title: 'Technical interview scheduled',
+        detail: '60-minute systems discussion on 31 August.',
+        actor: 'Employer',
+      },
+    ],
+  },
+  {
+    id: 'app-clearpath-care',
+    opportunityId: 'clearpath-software-engineer',
+    status: 'Assessment',
+    nextAction: 'Complete take-home assessment',
+    dueDate: '2 Sep · 18:00',
+    updatedAt: 'Yesterday',
+    events: [
+      {
+        id: 'app-clearpath-1',
+        date: '23 Aug',
+        title: 'Candidate marked submitted',
+        detail: 'Submission recorded after candidate confirmation.',
+        actor: 'Candidate',
+      },
+      {
+        id: 'app-clearpath-2',
+        date: '27 Aug',
+        title: 'Assessment received',
+        detail: 'Take-home assessment due 2 September.',
+        actor: 'Employer',
+      },
+    ],
+  },
+  {
+    id: 'app-atlas-frontend',
+    opportunityId: 'atlas-frontend-platform',
+    status: 'Preparing',
+    nextAction: 'Review supported design-system evidence',
+    dueDate: null,
+    updatedAt: '2 days ago',
+    events: [
+      {
+        id: 'app-atlas-1',
+        date: '26 Aug',
+        title: 'Application created',
+        detail: 'Preparation is in progress; no submission has occurred.',
+        actor: 'Candidate',
+      },
+    ],
+  },
+  {
+    id: 'app-juniper-services',
+    opportunityId: 'juniper-services-engineer',
+    status: 'Rejected',
+    nextAction: 'Record any useful feedback',
+    dueDate: null,
+    updatedAt: '6 days ago',
+    events: [
+      {
+        id: 'app-juniper-1',
+        date: '9 Aug',
+        title: 'Candidate marked submitted',
+        detail: 'Submission recorded from candidate confirmation.',
+        actor: 'Candidate',
+      },
+      {
+        id: 'app-juniper-2',
+        date: '22 Aug',
+        title: 'Rejection received',
+        detail: 'Employer moved forward with candidates with deeper client integration experience.',
+        actor: 'Employer',
+      },
+    ],
+  },
+  {
+    id: 'app-meridian-product',
+    opportunityId: 'meridian-product-engineer',
+    status: 'Withdrawn',
+    nextAction: 'No action required',
+    dueDate: null,
+    updatedAt: '11 days ago',
+    events: [
+      {
+        id: 'app-meridian-1',
+        date: '14 Aug',
+        title: 'Application preparation started',
+        detail: 'Materials were drafted but not submitted.',
+        actor: 'System',
+      },
+      {
+        id: 'app-meridian-2',
+        date: '17 Aug',
+        title: 'Candidate withdrew preparation',
+        detail: 'Candidate chose to focus on backend platform roles.',
+        actor: 'Candidate',
+      },
+    ],
+  },
+];
+
+export const seedProfile: CandidateProfile = {
+  name: 'Amara Okafor',
+  initials: 'AO',
+  headline: 'Backend-focused software engineer building reliable product systems',
+  summary:
+    'Fictional candidate with three years of supported TypeScript and Node.js delivery evidence, growing infrastructure depth, and a preference for globally minded product teams.',
+  location: 'Lagos, Nigeria',
+  targetRoles: ['Backend Engineer', 'Platform Engineer', 'Product Engineer'],
+  skills: [
+    { name: 'TypeScript', level: 'Strong', evidenceIds: ['career-work-1', 'career-project-1', 'career-project-2'] },
+    { name: 'Node.js', level: 'Strong', evidenceIds: ['career-work-1', 'career-work-2', 'career-project-1', 'career-project-2'] },
+    { name: 'PostgreSQL', level: 'Strong', evidenceIds: ['career-work-1', 'career-project-1'] },
+    { name: 'Docker', level: 'Developing', evidenceIds: ['career-work-2', 'career-project-2'] },
+    { name: 'Kubernetes', level: 'Needs evidence', evidenceIds: [] },
+  ],
+  experience: [
+    {
+      role: 'Software Engineer',
+      organization: 'ResolveAI Labs · fictional',
+      period: '2024–2026',
+      summary: 'Built TypeScript services and operational tooling for a support workflow product.',
+      evidenceIds: ['career-work-1'],
+    },
+    {
+      role: 'Junior Backend Engineer',
+      organization: 'Cedar Stack · fictional',
+      period: '2023–2024',
+      summary: 'Maintained APIs, background tasks, and containerized development environments.',
+      evidenceIds: ['career-work-2'],
+    },
+  ],
+  projects: [
+    {
+      name: 'Subscription Tracker',
+      summary: 'A TypeScript service for tracking recurring billing and renewal events.',
+      technologies: ['TypeScript', 'Node.js', 'PostgreSQL'],
+      evidenceIds: ['career-project-1'],
+    },
+    {
+      name: 'Release Observatory',
+      summary: 'A containerized project that records deploy health and change history.',
+      technologies: ['Node.js', 'Docker', 'OpenTelemetry'],
+      evidenceIds: ['career-project-2'],
+    },
+  ],
+  education: ['Professional Diploma in Software Engineering · fictional institute · 2023'],
+  certifications: ['AWS Cloud Practitioner · candidate-confirmed'],
+  preferences: [
+    'Remote or hybrid roles hiring in Nigeria',
+    'Relocation considered when support is explicit',
+    'Requires sponsorship for UK, EU, Canada, and US employment',
+    'Target compensation: USD 65,000 equivalent or above',
+  ],
+  evidence: [
+    {
+      id: 'career-work-1',
+      label: 'ResolveAI Labs work history',
+      type: 'Work',
+      source: 'Candidate-entered work record and redacted reference',
+      state: 'candidate-confirmed',
+      detail: 'Supports TypeScript, Node.js, PostgreSQL, API delivery, and production ownership claims.',
+    },
+    {
+      id: 'career-work-2',
+      label: 'Cedar Stack work history',
+      type: 'Work',
+      source: 'Candidate-entered work record',
+      state: 'candidate-confirmed',
+      detail: 'Supports API maintenance, background work, Docker, and operational collaboration.',
+    },
+    {
+      id: 'career-project-1',
+      label: 'Subscription Tracker repository',
+      type: 'Project',
+      source: 'Fictional repository fixture',
+      state: 'source-verified',
+      detail: 'Supports TypeScript, Node.js, PostgreSQL, migrations, and event history.',
+    },
+    {
+      id: 'career-project-2',
+      label: 'Release Observatory repository',
+      type: 'Project',
+      source: 'Fictional repository fixture',
+      state: 'source-verified',
+      detail: 'Supports Docker and service-observability claims; does not support Kubernetes experience.',
+    },
+    {
+      id: 'career-education-1',
+      label: 'Professional diploma',
+      type: 'Education',
+      source: 'Candidate-entered education record',
+      state: 'unreviewed',
+      detail: 'Completion is recorded but supporting documentation has not been reviewed.',
+    },
+  ],
+  completeness: 82,
+};
+
+export const seedSearchPreferences: SearchPreferences = {
+  targetRoles: ['Backend Engineer', 'Platform Engineer', 'Product Engineer'],
+  locations: ['Nigeria', 'Remote · Africa', 'Relocation supported'],
+  remotePreferences: ['Remote', 'Hybrid'],
+  salaryMinimum: 65000,
+  currency: 'USD',
+  employmentTypes: ['Full-time', 'Contract'],
+  requiresSponsorship: true,
+  willingToRelocate: true,
+  sources: ['Greenhouse', 'Ashby', 'Lever'],
+  freshnessDays: 21,
+};
+
+export const seedSourceStatuses: readonly SourceStatus[] = [
+  {
+    name: 'Greenhouse',
+    state: 'Ready',
+    lastSeededScan: 'Fixture refreshed 28 Aug · 08:42',
+    detail: '5 fictional records available in development mode.',
+  },
+  {
+    name: 'Ashby',
+    state: 'Ready',
+    lastSeededScan: 'Fixture refreshed 28 Aug · 08:39',
+    detail: '6 fictional records available in development mode.',
+  },
+  {
+    name: 'Lever',
+    state: 'Needs attention',
+    lastSeededScan: 'Fixture refreshed 27 Aug · 18:10',
+    detail: 'One deliberately stale fixture exercises recovery UI.',
+  },
+];
+
+export const initialSeedSnapshot: ProductSnapshot = {
+  opportunities: seedOpportunities,
+  applications: seedApplications,
+  profile: seedProfile,
+  searchPreferences: seedSearchPreferences,
+  sourceStatuses: seedSourceStatuses,
+};
