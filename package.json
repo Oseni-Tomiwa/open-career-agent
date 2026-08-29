@@ -19,7 +19,7 @@
     "db:migrate": "pnpm build:packages && pnpm --filter @oca/database db:migrate",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "eslint .",
+    "lint": "pnpm build:packages && eslint .",
     "test": "pnpm -r --if-present test",
     "test:e2e": "pnpm build:packages && pnpm --filter @oca/web build && playwright test",
     "typecheck": "pnpm build:packages && pnpm -r --if-present typecheck"
