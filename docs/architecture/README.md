@@ -1,26 +1,58 @@
 # Architecture
 
-Architecture is intentionally **not frozen** during Phase 0. This directory will hold approved architecture documentation after product questions are sufficiently clear and decisions have been recorded through architecture decision records (ADRs).
+## Status
 
-No runtime, framework, repository structure, database, persistence model, cloud provider, AI provider, background-job system, authentication model, or deployment topology is approved yet. PostgreSQL is a candidate that may be evaluated later; it is not a decision.
+These documents propose an implementable architecture for the first usable version. They define logical boundaries and one justified persistence decision without selecting a programming language, framework, cloud provider, AI provider, ORM, or complete deployment stack.
 
-## Constraints already established
+## Documents
 
-Later architecture work must preserve these product constraints:
+- [System overview](system-overview.md)
+- [Conceptual domain model](domain-model.md)
+- [Persistence](persistence.md)
+- [Background processing](background-processing.md)
+- [Source adapters and Opportunity identity](source-adapters.md)
+- [Intelligence and AI provider boundary](intelligence-boundary.md)
+- [Deployment model](deployment-model.md)
+- [Architecture decision records](../adrs/README.md)
+- [Architecture diagrams](../diagrams/README.md)
 
-- Eligibility is evaluated separately from Fit and Opportunity Quality.
-- Missing information is represented explicitly; unknown is not equivalent to no.
-- Candidate claims require Evidence and provenance.
-- Deterministic or cheap processing should precede expensive AI where practical.
-- Consequential actions remain under human control.
-- Application state must be durable and visible to downstream workflows.
-- The dashboard is a first-class interface, not the intelligence engine.
-- Local/self-hosted and possible future hosted operation should remain viable until their boundary is decided.
-- The intelligence core should not fundamentally depend on an AI coding CLI.
-- Provider independence and open extensibility should be preserved where practical.
+## Recommended architecture
 
-These are product and system qualities, not a detailed architecture.
+- A modular monolith with explicit logical modules.
+- One deployment unit with separate Web/API and worker process roles in v0.1.
+- SQLite as canonical v0.1 local/self-hosted persistence, with versioned human-readable export rather than dual-write files.
+- A database-backed durable job ledger with one write-heavy worker by default; no external queue until measured requirements justify one.
+- `Source Adapter → SourceRecord → Normalizer → Opportunity/OpportunitySnapshot`, keeping source structures outside the core domain.
+- Deterministic extraction, normalization, filtering, and identity rules before bounded model assistance.
+- AI providers behind a provider-neutral, validated proposal boundary.
+- Append-oriented OpportunitySnapshots, Evaluations, Decisions, and ApplicationEvents where historical explanation matters.
 
-## Next steps
+## Architectural working principles
 
-Before implementation, contributors should define the necessary product and intelligence specifications, identify decision options and tradeoffs, and record consequential architecture choices in [`docs/adrs/`](../adrs/README.md). Detailed diagrams should be added to [`docs/diagrams/`](../diagrams/README.md) only when they reflect reviewed decisions.
+- Modular monolith before microservices.
+- Domain logic independent from presentation.
+- Domain logic independent from AI providers.
+- Durable state and explicit provenance.
+- Deterministic before probabilistic.
+- Idempotent background processing.
+- Uncertainty and contradictions preserved.
+- Source Records treated as untrusted input.
+- Human authority for consequential actions.
+- Local/self-hosted and future hosted viability.
+- Observable failures instead of silent corruption.
+
+These architectural choices follow the [product principles](../product/principles.md) and [intelligence specifications](../intelligence/README.md). They do not redefine Eligibility, Fit, Opportunity Quality, Evidence, or Decision behavior.
+
+## Unresolved decisions
+
+- Backend language/runtime and frontend framework
+- Repository or monorepo structure
+- ORM/query layer and physical schema
+- Authentication and authorization
+- Exact job-ledger implementation and future queue technology
+- Exact Source Adapter API
+- AI provider SDK, semantic matching, embeddings, and vector search
+- Ranking formula and caching
+- Hosted tenancy, encryption, secrets management, and observability
+
+Unresolved choices should remain proposals until evidence justifies an ADR.

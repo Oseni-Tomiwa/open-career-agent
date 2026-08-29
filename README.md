@@ -1,6 +1,6 @@
 # Open Career Agent
 
-> **Phase 0:** product definition and research. “Open Career Agent” is a temporary codename, not a permanent product brand. Implementation has not started.
+> **Phase 0:** product definition, intelligence specification, and architecture design. “Open Career Agent” is a temporary codename, not a permanent product brand. Implementation has not started.
 
 Open Career Agent is exploring an open-source career intelligence platform that helps a candidate answer:
 
@@ -8,7 +8,7 @@ Open Career Agent is exploring an open-source career intelligence platform that 
 
 The product thesis is that useful career guidance must evaluate whether an opportunity is realistically attainable before assessing fit, explain its reasoning and uncertainty, and ground candidate claims in verified evidence. Jobs are the first planned opportunity type, but the domain direction is broader than jobs alone.
 
-This repository currently contains product, intelligence, and research documentation only. It has no application, installation process, or production-ready features.
+This repository currently contains product, intelligence, architecture, and research documentation only. It has no application, installation process, or production-ready features.
 
 ## Documentation
 

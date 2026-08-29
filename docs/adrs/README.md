@@ -31,6 +31,10 @@ Small, local implementation details do not need ADRs.
 
 Other decisions may qualify as the system is specified. Listing an example here does not select an option.
 
+## Records
+
+- [ADR-001: Canonical persistence for v0.1](ADR-001-canonical-persistence.md) — Accepted
+
 ## Suggested record structure
 
 Future ADRs should include:
@@ -41,4 +45,4 @@ Future ADRs should include:
 4. **Decision:** the approved choice and scope.
 5. **Consequences:** benefits, costs, risks, and follow-up work.
 
-No architecture decisions have been recorded yet.
+New records should use the structure above and link superseding decisions rather than rewriting accepted history.
