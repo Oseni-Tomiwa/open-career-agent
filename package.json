@@ -1,0 +1,41 @@
+{
+  "name": "open-career-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.17.0",
+  "engines": {
+    "node": "24.x",
+    "pnpm": "11.x"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "build:packages": "pnpm --filter './packages/**' build",
+    "dev": "pnpm build:packages && pnpm --parallel --stream --filter @oca/domain --filter @oca/schemas --filter @oca/config --filter @oca/database --filter @oca/web --filter @oca/api --filter @oca/worker dev",
+    "dev:api": "pnpm build:packages && pnpm --filter @oca/api dev",
+    "dev:web": "pnpm build:packages && pnpm --filter @oca/web dev",
+    "dev:worker": "pnpm build:packages && pnpm --filter @oca/worker dev",
+    "db:generate": "pnpm --filter @oca/database db:generate",
+    "db:migrate": "pnpm build:packages && pnpm --filter @oca/database db:migrate",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "pnpm -r --if-present test",
+    "test:e2e": "pnpm build:packages && pnpm --filter @oca/web build && playwright test",
+    "typecheck": "pnpm build:packages && pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.62.1",
+    "@types/node": "24.13.3",
+    "eslint": "10.9.1",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.5",
+    "globals": "17.11.0",
+    "prettier": "3.9.6",
+    "tsx": "4.23.12",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.68.0",
+    "vitest": "4.1.11"
+  }
+}

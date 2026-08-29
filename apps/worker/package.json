@@ -1,0 +1,18 @@
+{
+  "name": "@oca/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch --env-file-if-exists=../../.env src/main.ts",
+    "start": "node --env-file-if-exists=../../.env --enable-source-maps dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@oca/config": "workspace:*",
+    "@oca/database": "workspace:*",
+    "pino": "10.3.1"
+  }
+}

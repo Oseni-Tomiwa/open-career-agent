@@ -1,0 +1,24 @@
+{
+  "name": "@oca/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch --env-file-if-exists=../../.env src/main.ts",
+    "start": "node --env-file-if-exists=../../.env --enable-source-maps dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "11.3.0",
+    "@fastify/helmet": "13.1.1",
+    "@fastify/swagger": "9.8.1",
+    "@fastify/type-provider-typebox": "6.1.0",
+    "@oca/config": "workspace:*",
+    "@oca/database": "workspace:*",
+    "@oca/schemas": "workspace:*",
+    "@sinclair/typebox": "0.34.52",
+    "fastify": "5.12.1"
+  }
+}

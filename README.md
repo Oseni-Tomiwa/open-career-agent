@@ -1,6 +1,6 @@
 # Open Career Agent
 
-> **Phase 0:** product definition, intelligence specification, architecture design, and implementation-stack selection. “Open Career Agent” is a temporary codename, not a permanent product brand. Implementation has not started.
+> **Early implementation:** the approved TypeScript modular-monolith foundation is now scaffolded. “Open Career Agent” is a temporary codename, not a permanent product brand.
 
 Open Career Agent is exploring an open-source career intelligence platform that helps a candidate answer:
 
@@ -8,7 +8,22 @@ Open Career Agent is exploring an open-source career intelligence platform that 
 
 The product thesis is that useful career guidance must evaluate whether an opportunity is realistically attainable before assessing fit, explain its reasoning and uncertainty, and ground candidate claims in verified evidence. Jobs are the first planned opportunity type, but the domain direction is broader than jobs alone.
 
-This repository currently contains product, intelligence, architecture, and research documentation only. It has no application, installation process, or production-ready features.
+The repository now includes the Web/API and worker process foundations, canonical SQLite persistence, and a durable background-task ledger. The visible web page is a development bootstrap only; the production product interface has not been implemented yet.
+
+## Development
+
+Prerequisites are Node.js 24 LTS and pnpm 11.17.0. Docker and external services are not required.
+
+```bash
+corepack enable
+corepack prepare pnpm@11.17.0 --activate
+cp .env.example .env
+pnpm install --frozen-lockfile
+pnpm db:migrate
+pnpm dev
+```
+
+See the [development setup guide](docs/development/setup.md) for service endpoints, commands, data location, testing, and deferred work.
 
 ## Documentation
 
@@ -22,6 +37,7 @@ This repository currently contains product, intelligence, architecture, and rese
 - [Architecture status](docs/architecture/README.md)
 - [Architecture decision records](docs/adrs/README.md)
 - [Implementation stack and repository strategy](docs/implementation/stack-evaluation.md)
+- [Development setup](docs/development/setup.md)
 
 ## License
 

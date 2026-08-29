@@ -6,7 +6,7 @@ The repository should make the modular monolith visible, allow the Web/API and w
 
 Use a pnpm workspace. Do not add Turborepo, Nx, or a custom build system to the first scaffold. Root scripts may use pnpm's recursive, filtered, and parallel execution; package build order follows declared workspace dependencies.
 
-## Proposed layout
+## Initial implemented layout
 
 ```text
 .
@@ -15,80 +15,69 @@ Use a pnpm workspace. Do not add Turborepo, Nx, or a custom build system to the 
 │   ├── api/                 # Fastify composition root and HTTP transport
 │   └── worker/              # background-process composition root
 ├── packages/
-│   ├── core/                # domain, application use cases, and ports
-│   ├── contracts/           # TypeBox boundary schemas and OpenAPI inputs
+│   ├── domain/              # portable domain identifiers and value concepts
+│   ├── schemas/             # TypeBox boundary schemas and OpenAPI inputs
 │   ├── database/            # Drizzle schema, repositories, transactions, jobs
-│   ├── sources/             # ATS adapters, raw SourceRecords, normalization
-│   ├── providers/           # model/provider adapters behind core ports
-│   └── ui/                  # tokens, accessible primitives, product components
+│   └── config/              # validated browser/API/worker configuration
 ├── docs/                    # product, intelligence, architecture, ADRs, implementation
-├── tooling/                 # add only when shared executable configuration warrants it
-├── package.json             # future root scripts; not created by this task
-├── pnpm-workspace.yaml      # future workspace declaration
-└── tsconfig.base.json       # future shared compiler baseline
+├── package.json             # root scripts and pinned toolchain
+├── pnpm-workspace.yaml      # workspace declaration
+└── tsconfig.base.json       # strict shared compiler baseline
 ```
 
-This is a target for the next scaffold, not permission to create empty directories preemptively. A package is created when it has a real owner, public surface, and at least one consumer.
+This is the intentionally small first scaffold. A package is created when it has a real owner, public surface, and at least one consumer. Source, provider, intelligence, UI, MCP, and CLI packages remain deferred until working code needs those boundaries.
 
 ## Why these packages
 
-### `packages/core`
+### `packages/domain`
 
-Own domain entities, value objects, invariants, domain services, application commands/queries, repository ports, clocks/ID capabilities, and provider capabilities. Internal folders can separate `domain`, `application`, and the existing intelligence concepts without publishing each concept as a package.
+Initially owns only portable identifiers and Opportunity-type concepts. It will later own domain entities, value objects, invariants, domain services, and capability/repository ports as those behaviors are implemented.
 
-Core performs no browser, HTTP, filesystem, database, source-network, or model-provider I/O. Eligibility, Fit, Quality, Evidence, and Decision semantics live here. Keeping domain and application layers together initially avoids a package for every architectural noun.
+Domain performs no browser, HTTP, filesystem, database, source-network, or model-provider I/O. Eligibility, Fit, Quality, Evidence, and Decision semantics will live here rather than in delivery or infrastructure code. Internal modules should be preferred over a package for every architectural noun.
 
-### `packages/contracts`
+### `packages/schemas`
 
-Own TypeBox schemas for HTTP input/output, import/export envelopes, Source Adapter boundary records where cross-package sharing is required, and validated provider proposal shapes. Registered HTTP schemas support OpenAPI generation and generated clients.
+Initially owns TypeBox health, readiness, service metadata, and API error schemas. It will own HTTP input/output, import/export envelopes, Source Adapter boundary records where cross-package sharing is required, and validated provider proposal shapes. Registered HTTP schemas support OpenAPI generation and generated clients.
 
-Contracts are not domain entities. Transport optionality, pagination, serialization, and compatibility concerns should not reshape core models. Mappers at application edges make this distinction explicit.
+Schemas are not domain entities. Transport optionality, pagination, serialization, and compatibility concerns should not reshape domain models. Mappers at application edges make this distinction explicit.
 
 ### `packages/database`
 
-Own Drizzle schema and queries, migrations once implementation begins, SQLite connection policy, repository adapters, transaction helpers, persisted projections, and the durable job ledger. It implements core repository ports and must not become the location of business rules.
+Own Drizzle schema and queries, migrations, SQLite connection policy, repository adapters, transaction helpers, persisted projections, and the durable task ledger. It will implement domain repository ports and must not become the location of business rules.
 
-Migration files remain versioned implementation artifacts. They are not to be generated in this documentation task.
+Migration files are reviewed, versioned implementation artifacts. The first migration creates only the durable background-task ledger and its append-oriented transition events.
 
-### `packages/sources`
+### `packages/config`
 
-Own source-specific clients and parsers for Greenhouse, Ashby, and Lever, retained raw-record handling, adapter fixtures, and source-neutral normalization/identity implementations. Adapters produce the agreed SourceRecord boundary; they do not create their own Opportunity or Decision definitions.
-
-### `packages/providers`
-
-Own AI SDK and provider SDK imports, configuration translation, model-call telemetry/provenance capture, and adapters for the provider-neutral capabilities declared by core. Provider response types end here. A local or OpenAI-compatible implementation can be added without changing domain contracts.
-
-### `packages/ui`
-
-Own design tokens, theme mechanics, accessible primitives, data-display conventions, chart wrappers, and reusable career-product components. It may depend on transport-facing view types where appropriate, but never on database, sources, providers, or server composition roots. Product-page composition remains in `apps/web`.
+Own validated browser-safe and server configuration parsers. Browser exports contain no Node or secret-reading behavior. API and worker composition roots select their own environment values and pass narrow configuration to concrete capabilities.
 
 ## Dependency direction
 
 ```text
-apps/web ────────────────> contracts, ui
-apps/api ────────────────> core, contracts, database
-apps/worker ─────────────> core, contracts, database, sources, providers
+apps/web ────────────────> schemas, config/browser
+apps/api ────────────────> schemas, database, config/server
+apps/worker ─────────────> database, config/server
 
-database ────────────────> core
-sources ─────────────────> core, contracts
-providers ───────────────> core, contracts
-ui ──────────────────────> contracts
+database ────────────────> config/server (migration command only)
 
-core ────────────────────> no project infrastructure or UI package
-contracts ───────────────> no project infrastructure package
+domain ──────────────────> no project package
+schemas ─────────────────> no project infrastructure package
+config ──────────────────> no project infrastructure package
 ```
 
-Composition roots may connect concrete adapters to core ports. Reverse imports are prohibited. Cross-package imports use declared package exports, never another package's `src/` path. Cycles fail linting and type checking.
+Composition roots may connect concrete adapters to domain ports. Reverse imports are prohibited. Cross-package imports use declared package exports, never another package's `src/` path. Cycles fail linting and type checking.
 
-The API and worker do not import each other. Shared behavior moves into core or a justified infrastructure package; process startup and delivery concerns stay in the app that owns them.
+API and worker will depend on domain when implemented application use cases require it; the technical health/task scaffold does not add an unused dependency merely to draw that future arrow.
+
+The API and worker do not import each other. Shared behavior moves into domain or a justified infrastructure package; process startup and delivery concerns stay in the app that owns them.
 
 ## API and contract ownership
 
-Fastify route modules in `apps/api` own HTTP method/path, authentication hooks when introduced, and response mapping. TypeBox schemas come from `packages/contracts`; handlers call application use cases from core. OpenAPI is generated from registered route schemas and checked for drift in CI. Generated clients are outputs, not a parallel hand-maintained contract.
+Fastify route modules in `apps/api` own HTTP method/path, authentication hooks when introduced, and response mapping. TypeBox schemas come from `packages/schemas`; handlers will call application use cases from domain/application modules. OpenAPI is generated from registered route schemas and validated in tests. Generated clients will be outputs, not a parallel hand-maintained contract, once product endpoints justify generation.
 
 This preserves future delivery options:
 
-- the web uses a generated HTTP client;
+- the web will use a generated HTTP client once product endpoints justify generation;
 - a CLI can use the same client or invoke application use cases when packaged locally;
 - MCP tools adapt MCP inputs to the same application commands/queries;
 - integrations and third parties can rely on versioned OpenAPI rather than TypeScript-only RPC metadata.
@@ -109,16 +98,16 @@ For that reason, tRPC is not the canonical interface. It would optimize the firs
 ## Boundaries to enforce
 
 - Browser code cannot import Node-only modules, secrets, database code, or provider SDKs.
-- Core cannot import React, Fastify, Drizzle, TypeBox transport DTOs, source SDKs, or AI SDK types.
+- Domain cannot import React, Fastify, Drizzle, TypeBox transport DTOs, source SDKs, or AI SDK types.
 - Source adapters cannot redefine canonical Opportunity identity or Candidate-specific evaluation rules.
 - Database rows cannot be passed through the API as accidental public DTOs.
-- Model output is mapped and validated before core considers a proposal.
+- Model output is mapped and validated before domain behavior considers a proposal.
 - UI components may present explanations but cannot calculate canonical Eligibility, Fit, Quality, or ranking.
 - ApplicationEvents are appended through application behavior; UI actions do not overwrite pipeline history directly.
 
 ## Why no additional packages yet
 
-Separate `domain`, `application`, `intelligence`, `config`, `jobs`, `observability`, and `shared` packages would initially create more manifests and dependency edges than stable boundaries. Use internal modules first. Extract only when ownership, runtime reuse, or independent testing demonstrates a real package boundary. A generic `utils` package is specifically discouraged because it erodes dependency direction.
+Separate `application`, `intelligence`, `sources`, `providers`, `ui`, `jobs`, `observability`, and `shared` packages would initially create more manifests and dependency edges than stable boundaries. Use internal modules first. Extract only when ownership, runtime reuse, or independent testing demonstrates a real package boundary. A generic `utils` package is specifically discouraged because it erodes dependency direction.
 
 ## Revisit conditions
 

@@ -15,7 +15,7 @@ run one development command
 
 That command should supervise the Vite web application, Fastify API, and worker with readable process prefixes and coordinated shutdown. It should require no PostgreSQL, Redis, hosted control plane, container runtime, AI account, or telemetry service. Containers may be offered later, but they are not the only contributor path.
 
-No commands or package files described here are implemented by this documentation task.
+The first application scaffold now implements this local path. The commands and operational notes are maintained in the [development setup guide](../development/setup.md).
 
 ## Local defaults
 
@@ -95,13 +95,13 @@ Human-readable export/import is a supported portability and inspection path, not
 
 ## Contributor documentation for the scaffold task
 
-When implementation begins, add a concise root quick start and package-level notes only where behavior cannot be understood from scripts and exports. The scaffold is complete from a developer-experience perspective when a new contributor can:
+Maintain a concise root quick start and package-level notes only where behavior cannot be understood from scripts and exports. The scaffold is complete from a developer-experience perspective when a new contributor can:
 
 1. identify and install the pinned prerequisites;
 2. start all three process roles with one command;
-3. see the production-intent shell populated by fictional data;
+3. see the explicit technical bootstrap surface, with fictional product data deferred to the dedicated UI task;
 4. run the documented quality suite;
-5. find SQLite data, reset/reseed it deliberately, and perform a tested backup/restore;
+5. find SQLite data, reset it deliberately, and perform a tested backup/restore;
 6. work without provider/source credentials and understand which results are partial;
 7. diagnose validation, port, worker, and database errors without reading framework internals.
 

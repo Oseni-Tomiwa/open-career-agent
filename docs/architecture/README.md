@@ -54,7 +54,7 @@ These architectural choices follow the [product principles](../product/principle
 ## Unresolved decisions
 
 - Authentication and authorization
-- Physical database schema and exact job-ledger record/state design
+- Product-domain physical schema and future task-ledger evolution
 - Exact Source Adapter API
 - Concrete AI provider/model configuration, semantic matching, embeddings, and vector search
 - Ranking formula and caching
