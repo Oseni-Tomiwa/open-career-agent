@@ -2,7 +2,7 @@
 
 ## Status
 
-These documents propose an implementable architecture for the first usable version. They define logical boundaries and one justified persistence decision without selecting a programming language, framework, cloud provider, AI provider, ORM, or complete deployment stack.
+These documents define the logical architecture for the first usable version. The implementation strategy now selects a language/runtime, web and API frameworks, database access layer, and repository structure without selecting a cloud, AI provider/model, authentication provider, or complete deployment platform.
 
 ## Documents
 
@@ -15,6 +15,12 @@ These documents propose an implementable architecture for the first usable versi
 - [Deployment model](deployment-model.md)
 - [Architecture decision records](../adrs/README.md)
 - [Architecture diagrams](../diagrams/README.md)
+- [Implementation stack evaluation](../implementation/stack-evaluation.md)
+- [Repository structure](../implementation/repository-structure.md)
+- [Frontend strategy](../implementation/frontend-strategy.md)
+- [Backend strategy](../implementation/backend-strategy.md)
+- [Testing strategy](../implementation/testing-strategy.md)
+- [Development experience](../implementation/development-experience.md)
 
 ## Recommended architecture
 
@@ -26,6 +32,8 @@ These documents propose an implementable architecture for the first usable versi
 - Deterministic extraction, normalization, filtering, and identity rules before bounded model assistance.
 - AI providers behind a provider-neutral, validated proposal boundary.
 - Append-oriented OpportunitySnapshots, Evaluations, Decisions, and ApplicationEvents where historical explanation matters.
+- TypeScript on Node.js 24 LTS in a pnpm workspace, with React/Vite for the web, an independent Fastify API, and a separate worker.
+- TypeBox boundary schemas with generated OpenAPI/clients, and Drizzle for SQLite access and migrations.
 
 ## Architectural working principles
 
@@ -45,14 +53,11 @@ These architectural choices follow the [product principles](../product/principle
 
 ## Unresolved decisions
 
-- Backend language/runtime and frontend framework
-- Repository or monorepo structure
-- ORM/query layer and physical schema
 - Authentication and authorization
-- Exact job-ledger implementation and future queue technology
+- Physical database schema and exact job-ledger record/state design
 - Exact Source Adapter API
-- AI provider SDK, semantic matching, embeddings, and vector search
+- Concrete AI provider/model configuration, semantic matching, embeddings, and vector search
 - Ranking formula and caching
-- Hosted tenancy, encryption, secrets management, and observability
+- Packaging, hosted tenancy, encryption, secrets management, and observability
 
 Unresolved choices should remain proposals until evidence justifies an ADR.

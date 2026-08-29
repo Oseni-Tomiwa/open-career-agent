@@ -2,7 +2,7 @@
 
 ## Status
 
-This document proposes the logical architecture for the first usable version. It preserves the product and intelligence specifications without selecting a programming language, web framework, cloud provider, or AI provider.
+This document defines the logical architecture for the first usable version. The concrete language and framework choices are recorded separately in the [implementation strategy](../implementation/stack-evaluation.md) so they do not redefine these boundaries. Cloud and AI provider/model choices remain open.
 
 ## Architecture style
 
@@ -66,7 +66,7 @@ Deterministic extraction and rules run first. Bounded model-assisted steps may p
 
 Recommended process roles:
 
-1. **Web/API process:** serves the dashboard and programmatic API.
+1. **Web/API role:** a React/Vite browser application and independent Fastify API serve the dashboard and programmatic boundary; they may be packaged behind one local origin.
 2. **Worker process:** runs scheduling, discovery, normalization, deduplication, and Evaluations.
 
 They should initially ship as one deployment unit and may be started together by a local installation. Separating process roles prevents slow or failed source/model work from blocking interactive requests and allows independent restart and resource control. It does not justify microservices or separate repositories.
@@ -87,12 +87,9 @@ A CLI, MCP interface, hosted web product, and integrations should call the same 
 
 ## Unresolved decisions
 
-- Backend language and runtime
-- Frontend framework
-- Repository or monorepo structure
 - Authentication and authorization design
-- Concrete API protocol and versioning
-- Persistence access library or ORM
+- Concrete API versioning and compatibility policy
+- Physical persistence schema and migration details
 - Caching approach
 - Observability stack
 - Encryption and secrets-management implementation

@@ -1,6 +1,6 @@
 # Open Career Agent
 
-> **Phase 0:** product definition, intelligence specification, and architecture design. “Open Career Agent” is a temporary codename, not a permanent product brand. Implementation has not started.
+> **Phase 0:** product definition, intelligence specification, architecture design, and implementation-stack selection. “Open Career Agent” is a temporary codename, not a permanent product brand. Implementation has not started.
 
 Open Career Agent is exploring an open-source career intelligence platform that helps a candidate answer:
 
@@ -21,6 +21,7 @@ This repository currently contains product, intelligence, architecture, and rese
 - [Reference-system research](docs/research/)
 - [Architecture status](docs/architecture/README.md)
 - [Architecture decision records](docs/adrs/README.md)
+- [Implementation stack and repository strategy](docs/implementation/stack-evaluation.md)
 
 ## License
 

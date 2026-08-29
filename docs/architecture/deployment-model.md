@@ -19,8 +19,8 @@ This is not a microservice architecture. No internal network API between the pro
 
 | Piece | v0.1 role | Future direction |
 |---|---|---|
-| Web Dashboard | Candidate interface delivered by Web/API runtime | May be served separately if justified, but domain logic remains server-side |
-| Programmatic API | Interactive application boundary | Also supports future CLI, MCP, and integrations through shared use cases |
+| Web Dashboard | React/Vite Candidate interface served with or alongside the API | May be served separately if justified, but domain logic remains server-side |
+| Programmatic API | Independent Fastify application boundary | Also supports future CLI, MCP, and integrations through shared use cases and OpenAPI contracts |
 | Background Worker | Single active write-heavy worker by default | May scale or split by workload after measured need |
 | Persistence | Canonical SQLite database on durable local storage | PostgreSQL is the leading hosted/high-concurrency candidate under ADR revisit conditions |
 | Optional AI Provider | Remote or local provider behind server-side boundary | Configurable capability providers; no provider is mandatory architecture |
@@ -105,7 +105,6 @@ Deployment configuration may select ports, storage location, scan cadence, sourc
 ## Unresolved decisions
 
 - Packaging and container strategy
-- Backend and frontend runtimes
 - Local process supervision and upgrades
 - Authentication for local and hosted modes
 - Public network exposure and TLS guidance

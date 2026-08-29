@@ -6,7 +6,7 @@ An architecture decision record (ADR) is a short, durable document that captures
 
 ## Why this project will use ADRs
 
-Phase 0 intentionally avoids freezing architecture before the product boundary is understood. Once technical work begins, ADRs will make the distinction between proposal and approval explicit, preserve uncertainty and dissent, and let decisions be superseded without rewriting history.
+Phase 0 intentionally avoided freezing architecture before the product boundary was understood. As technical work approaches, ADRs make the distinction between proposal and approval explicit, preserve uncertainty and dissent, and let decisions be superseded without rewriting history.
 
 An ADR should be written when a choice:
 
@@ -34,6 +34,11 @@ Other decisions may qualify as the system is specified. Listing an example here 
 ## Records
 
 - [ADR-001: Canonical persistence for v0.1](ADR-001-canonical-persistence.md) — Accepted
+- [ADR-002: TypeScript and Node.js implementation runtime](ADR-002-typescript-node-runtime.md) — Accepted
+- [ADR-003: React and Vite for the web application](ADR-003-react-vite-web.md) — Accepted
+- [ADR-004: Fastify for an independent API application](ADR-004-fastify-api.md) — Accepted
+- [ADR-005: Drizzle for SQLite database access and migrations](ADR-005-drizzle-database-access.md) — Accepted
+- [ADR-006: pnpm workspace without an initial task orchestrator](ADR-006-pnpm-workspace.md) — Accepted
 
 ## Suggested record structure
 
