@@ -44,7 +44,7 @@ node_modules/
 jspm_packages/
 
 # Local application data
-data/
+/data/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
