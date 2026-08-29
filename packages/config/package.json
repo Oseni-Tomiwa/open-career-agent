@@ -5,10 +5,12 @@
   "type": "module",
   "exports": {
     "./browser": {
+      "development": "./src/browser.ts",
       "types": "./src/browser.ts",
       "default": "./dist/browser.js"
     },
     "./server": {
+      "development": "./src/server.ts",
       "types": "./src/server.ts",
       "default": "./dist/server.js"
     }
