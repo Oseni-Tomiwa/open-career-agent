@@ -1,7 +1,19 @@
 import { eq } from 'drizzle-orm';
 import type { DatabaseHandle } from '../client.js';
-import { evaluations, decisions, evaluationFindings, evaluationFindingEvidence } from '../schema.js';
-import type { CandidateId, SnapshotId, EvaluationId, DecisionId, FindingId, EvidenceId } from '@oca/domain';
+import {
+  evaluations,
+  decisions,
+  evaluationFindings,
+  evaluationFindingEvidence,
+} from '../schema.js';
+import type {
+  CandidateId,
+  SnapshotId,
+  EvaluationId,
+  DecisionId,
+  FindingId,
+  EvidenceId,
+} from '@oca/domain';
 
 export class EvaluationRepository {
   public constructor(private readonly db: DatabaseHandle) {}
@@ -12,53 +24,64 @@ export class EvaluationRepository {
       candidateId: CandidateId;
       snapshotId: SnapshotId;
       eligibilityState: 'eligible' | 'ineligible' | 'investigate' | 'unknown';
-      fitLevel: 'strong' | 'moderate' | 'weak';
-      qualityLevel: 'strong' | 'moderate' | 'weak' | 'risk';
+      fitLevel?: 'strong' | 'moderate' | 'weak' | null;
+      qualityLevel?: 'strong' | 'moderate' | 'weak' | 'risk' | null;
     },
     timestamp: number = Date.now(),
   ): void {
-    this.db.db.insert(evaluations).values({
-      id: evaluation.id,
-      candidateId: evaluation.candidateId,
-      snapshotId: evaluation.snapshotId,
-      eligibilityState: evaluation.eligibilityState,
-      fitLevel: evaluation.fitLevel,
-      qualityLevel: evaluation.qualityLevel,
-      createdAt: new Date(timestamp),
-    }).run();
+    this.db.db
+      .insert(evaluations)
+      .values({
+        id: evaluation.id,
+        candidateId: evaluation.candidateId,
+        snapshotId: evaluation.snapshotId,
+        eligibilityState: evaluation.eligibilityState,
+        fitLevel: evaluation.fitLevel ?? null,
+        qualityLevel: evaluation.qualityLevel ?? null,
+        createdAt: new Date(timestamp),
+      })
+      .run();
   }
 
-  public persistFinding(
-    finding: {
-      id: FindingId;
-      evaluationId: EvaluationId;
-      category: 'eligibility' | 'fit' | 'quality';
-      dimensionKey: string;
-      state: string;
-      summary: string;
-      confidence?: string;
-    }
+  public persistFinding(finding: {
+    id: FindingId;
+    evaluationId: EvaluationId;
+    category: 'eligibility' | 'fit' | 'quality';
+    dimensionKey: string;
+    state: string;
+    summary: string;
+    confidence?: string;
+  }): void {
+    this.db.db
+      .insert(evaluationFindings)
+      .values({
+        id: finding.id,
+        evaluationId: finding.evaluationId,
+        category: finding.category,
+        dimensionKey: finding.dimensionKey,
+        state: finding.state,
+        summary: finding.summary,
+        confidence: finding.confidence,
+      })
+      .run();
+  }
+
+  public attachEvidenceToFinding(
+    findingId: FindingId,
+    evidenceId: EvidenceId,
   ): void {
-    this.db.db.insert(evaluationFindings).values({
-      id: finding.id,
-      evaluationId: finding.evaluationId,
-      category: finding.category,
-      dimensionKey: finding.dimensionKey,
-      state: finding.state,
-      summary: finding.summary,
-      confidence: finding.confidence,
-    }).run();
-  }
-
-  public attachEvidenceToFinding(findingId: FindingId, evidenceId: EvidenceId): void {
-    this.db.db.insert(evaluationFindingEvidence).values({
-      findingId,
-      evidenceId,
-    }).run();
+    this.db.db
+      .insert(evaluationFindingEvidence)
+      .values({
+        findingId,
+        evidenceId,
+      })
+      .run();
   }
 
   public getEvaluation(id: EvaluationId) {
-    const result = this.db.db.select()
+    const result = this.db.db
+      .select()
       .from(evaluations)
       .where(eq(evaluations.id, id))
       .get();
@@ -66,7 +89,8 @@ export class EvaluationRepository {
   }
 
   public getFindings(evaluationId: EvaluationId) {
-    return this.db.db.select()
+    return this.db.db
+      .select()
       .from(evaluationFindings)
       .where(eq(evaluationFindings.evaluationId, evaluationId))
       .all();
@@ -76,22 +100,31 @@ export class EvaluationRepository {
     decision: {
       id: DecisionId;
       evaluationId: EvaluationId;
-      priority: 'high-priority' | 'consider' | 'investigate' | 'low-priority' | 'ineligible';
+      priority:
+        | 'high-priority'
+        | 'consider'
+        | 'investigate'
+        | 'low-priority'
+        | 'ineligible';
       explanation: string;
     },
     timestamp: number = Date.now(),
   ): void {
-    this.db.db.insert(decisions).values({
-      id: decision.id,
-      evaluationId: decision.evaluationId,
-      priority: decision.priority,
-      explanation: decision.explanation,
-      createdAt: new Date(timestamp),
-    }).run();
+    this.db.db
+      .insert(decisions)
+      .values({
+        id: decision.id,
+        evaluationId: decision.evaluationId,
+        priority: decision.priority,
+        explanation: decision.explanation,
+        createdAt: new Date(timestamp),
+      })
+      .run();
   }
 
   public getDecision(id: DecisionId) {
-    const result = this.db.db.select()
+    const result = this.db.db
+      .select()
       .from(decisions)
       .where(eq(decisions.id, id))
       .get();

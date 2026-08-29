@@ -1,0 +1,25 @@
+{
+  "name": "@oca/intelligence",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@oca/domain": "workspace:*",
+    "@oca/schemas": "workspace:*",
+    "@oca/database": "workspace:*"
+  },
+  "devDependencies": {
+    "@oca/config": "workspace:*",
+    "typescript": "5.6.3",
+    "vitest": "^2.1.2"
+  }
+}

@@ -12,7 +12,7 @@ import {
   HealthResponseSchema,
   ReadinessResponseSchema,
   OpportunityListResponseSchema,
-  OpportunityDetailResponseSchema
+  OpportunityDetailResponseSchema,
 } from '@oca/schemas';
 import Fastify, { type FastifyInstance } from 'fastify';
 
@@ -161,8 +161,8 @@ export async function createApiApp(
     () => {
       const repo = new OpportunityRepository(options.database);
       const data = repo.getOpportunitySummaries();
-      return { 
-        data: data as any 
+      return {
+        data: data as any,
       };
     },
   );
@@ -174,7 +174,10 @@ export async function createApiApp(
         tags: ['opportunities'],
         summary: 'Get opportunity detail',
         params: Type.Object({ id: Type.String() }),
-        response: { 200: OpportunityDetailResponseSchema, 404: ApiErrorEnvelopeSchema },
+        response: {
+          200: OpportunityDetailResponseSchema,
+          404: ApiErrorEnvelopeSchema,
+        },
       },
     },
     async (request, reply) => {
@@ -184,18 +187,29 @@ export async function createApiApp(
       const opportunity = repo.getOpportunity(id);
 
       if (!opportunity) {
-        await reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Opportunity not found', requestId: request.id } }); return;
+        await reply
+          .status(404)
+          .send({
+            error: {
+              code: 'NOT_FOUND',
+              message: 'Opportunity not found',
+              requestId: request.id,
+            },
+          });
+        return;
       }
 
       const snapshots = repo.getSnapshots(id);
 
       return {
-        opportunity: { id: opportunity.id, createdAt: new Date(opportunity.createdAt).toISOString() },
-        snapshots: snapshots as any
+        opportunity: {
+          id: opportunity.id,
+          createdAt: new Date(opportunity.createdAt).toISOString(),
+        },
+        snapshots: snapshots as any,
       };
     },
   );
-
 
   if (options.closeDatabaseOnClose ?? true) {
     app.addHook('onClose', () => {

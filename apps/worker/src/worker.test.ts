@@ -36,7 +36,10 @@ describe('background worker', () => {
     const task = ledger.enqueue({ taskType: 'system.noop' });
     const worker = new BackgroundWorker({
       ledger,
-      handlers: createTaskHandlers({ db: database, config: parseWorkerConfig(process.env) }),
+      handlers: createTaskHandlers({
+        db: database,
+        config: parseWorkerConfig(process.env),
+      }),
       logger: pino({ enabled: false }),
       workerId: 'worker-test',
       pollIntervalMs: 10,

@@ -1,7 +1,11 @@
 import { eq } from 'drizzle-orm';
 import type { DatabaseHandle } from '../client.js';
-import { opportunities, opportunitySnapshots, opportunitySnapshotSources } from '../schema.js';
-import type { OpportunityId, SnapshotId} from '@oca/domain';
+import {
+  opportunities,
+  opportunitySnapshots,
+  opportunitySnapshotSources,
+} from '../schema.js';
+import type { OpportunityId, SnapshotId } from '@oca/domain';
 
 export class OpportunityRepository {
   public constructor(private readonly db: DatabaseHandle) {}
@@ -10,10 +14,13 @@ export class OpportunityRepository {
     id: OpportunityId,
     timestamp: number = Date.now(),
   ): void {
-    this.db.db.insert(opportunities).values({
-      id,
-      createdAt: new Date(timestamp),
-    }).run();
+    this.db.db
+      .insert(opportunities)
+      .values({
+        id,
+        createdAt: new Date(timestamp),
+      })
+      .run();
   }
 
   public appendSnapshot(
@@ -33,32 +40,37 @@ export class OpportunityRepository {
     timestamp: number = Date.now(),
   ): void {
     this.db.db.transaction((tx) => {
-      tx.insert(opportunitySnapshots).values({
-        id: snapshot.id,
-        opportunityId: snapshot.opportunityId,
-        title: snapshot.title,
-        organization: snapshot.organization,
-        location: snapshot.location,
-        workModel: snapshot.workModel,
-        employmentType: snapshot.employmentType,
-        compensation: snapshot.compensation,
-        content: snapshot.content,
-        fingerprint: snapshot.fingerprint,
-        observedAt: new Date(timestamp),
-        createdAt: new Date(timestamp),
-      }).run();
+      tx.insert(opportunitySnapshots)
+        .values({
+          id: snapshot.id,
+          opportunityId: snapshot.opportunityId,
+          title: snapshot.title,
+          organization: snapshot.organization,
+          location: snapshot.location,
+          workModel: snapshot.workModel,
+          employmentType: snapshot.employmentType,
+          compensation: snapshot.compensation,
+          content: snapshot.content,
+          fingerprint: snapshot.fingerprint,
+          observedAt: new Date(timestamp),
+          createdAt: new Date(timestamp),
+        })
+        .run();
 
       if (snapshot.sourceObservationId) {
-        tx.insert(opportunitySnapshotSources).values({
-          snapshotId: snapshot.id,
-          sourceObservationId: snapshot.sourceObservationId,
-        }).run();
+        tx.insert(opportunitySnapshotSources)
+          .values({
+            snapshotId: snapshot.id,
+            sourceObservationId: snapshot.sourceObservationId,
+          })
+          .run();
       }
     });
   }
 
   public getLatestSnapshot(opportunityId: OpportunityId) {
-    const result = this.db.db.select()
+    const result = this.db.db
+      .select()
       .from(opportunitySnapshots)
       .where(eq(opportunitySnapshots.opportunityId, opportunityId))
       .orderBy(opportunitySnapshots.observedAt)
@@ -66,15 +78,27 @@ export class OpportunityRepository {
     return result[result.length - 1] ?? null;
   }
 
+  public getSnapshot(snapshotId: SnapshotId) {
+    return (
+      this.db.db
+        .select()
+        .from(opportunitySnapshots)
+        .where(eq(opportunitySnapshots.id, snapshotId))
+        .get() ?? null
+    );
+  }
+
   public getSnapshots(opportunityId: OpportunityId) {
-    return this.db.db.select()
+    return this.db.db
+      .select()
       .from(opportunitySnapshots)
       .where(eq(opportunitySnapshots.opportunityId, opportunityId))
       .all();
   }
 
   public getSnapshotSources(snapshotId: SnapshotId) {
-    return this.db.db.select()
+    return this.db.db
+      .select()
       .from(opportunitySnapshotSources)
       .where(eq(opportunitySnapshotSources.snapshotId, snapshotId))
       .all();
@@ -86,11 +110,10 @@ export class OpportunityRepository {
 
   public getOpportunitySummaries() {
     const opps = this.getOpportunities();
-    return opps.map(opp => {
+    return opps.map((opp) => {
       const latest = this.getLatestSnapshot(opp.id as OpportunityId);
       const sourceSystems: string[] = [];
       if (latest) {
-        
         // Note: strictly speaking, we'd need to look up the listing from the observation to get the system.
         // For now, returning it empty or querying it if necessary.
       }
@@ -108,9 +131,12 @@ export class OpportunityRepository {
     });
   }
 
-
   public getOpportunity(id: OpportunityId) {
-    const result = this.db.db.select().from(opportunities).where(eq(opportunities.id, id)).get();
+    const result = this.db.db
+      .select()
+      .from(opportunities)
+      .where(eq(opportunities.id, id))
+      .get();
     return result ?? null;
   }
 }

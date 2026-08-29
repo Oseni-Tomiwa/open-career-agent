@@ -5,7 +5,7 @@ export const OpportunitySchema = Type.Object(
     id: Type.String(),
     createdAt: Type.String(),
   },
-  { $id: 'Opportunity' }
+  { $id: 'Opportunity' },
 );
 
 export const OpportunitySummarySchema = Type.Object(
@@ -20,7 +20,7 @@ export const OpportunitySummarySchema = Type.Object(
     sourceSystems: Type.Array(Type.String()),
     latestSnapshotId: Type.Optional(Type.String()),
   },
-  { $id: 'OpportunitySummary' }
+  { $id: 'OpportunitySummary' },
 );
 
 export const OpportunitySnapshotSchema = Type.Object(
@@ -36,7 +36,7 @@ export const OpportunitySnapshotSchema = Type.Object(
     content: Type.String(),
     observedAt: Type.String(),
   },
-  { $id: 'OpportunitySnapshot' }
+  { $id: 'OpportunitySnapshot' },
 );
 
 export const OpportunityListResponseSchema = Type.Object({

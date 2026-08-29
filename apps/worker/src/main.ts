@@ -12,6 +12,7 @@ import pino from 'pino';
 
 import { BackgroundWorker } from './worker.js';
 import { createTaskHandlers } from './ingestion/workflow.js';
+import { createEligibilityHandlers } from './eligibility/workflow.js';
 
 async function main(): Promise<void> {
   const config = parseWorkerConfig(process.env);
@@ -23,7 +24,10 @@ async function main(): Promise<void> {
     applyMigrations(database);
     const worker = new BackgroundWorker({
       ledger: new BackgroundTaskLedger(database),
-      handlers: createTaskHandlers({ db: database, config }),
+      handlers: {
+        ...createTaskHandlers({ db: database, config }),
+        ...createEligibilityHandlers({ db: database }),
+      },
       logger,
       workerId: randomUUID(),
       pollIntervalMs: config.pollIntervalMs,

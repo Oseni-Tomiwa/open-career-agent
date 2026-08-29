@@ -1,6 +1,12 @@
-import { opportunityId, snapshotId, type OpportunityId, type SnapshotId } from '@oca/domain';
+import { opportunityId } from '@oca/domain';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { databaseIsReady, openDatabase, type DatabaseHandle, OpportunityRepository, applyMigrations } from '@oca/database';
+import {
+  databaseIsReady,
+  openDatabase,
+  type DatabaseHandle,
+  OpportunityRepository,
+  applyMigrations,
+} from '@oca/database';
 
 import { GreenhouseAdapter, GreenhouseNormalizer } from '@oca/sources';
 import { createTaskHandlers } from './workflow.js';
@@ -17,16 +23,20 @@ const mockGreenhousePayload = {
       title: 'Software Engineer',
       company_name: 'Acme',
       location: { name: 'Remote' },
-      content: '<h2>Job</h2><p>Great job</p>'
-    }
-  ]
+      content: '<h2>Job</h2><p>Great job</p>',
+    },
+  ],
 };
 
 describe('Greenhouse Ingestion Flow', () => {
   let db: DatabaseHandle;
 
   beforeEach(() => {
-    try { unlinkSync(TEST_DB_PATH); } catch { /* ignore */ }
+    try {
+      unlinkSync(TEST_DB_PATH);
+    } catch {
+      /* ignore */
+    }
     db = openDatabase(TEST_DB_PATH);
     databaseIsReady(db);
     applyMigrations(db);
@@ -35,7 +45,11 @@ describe('Greenhouse Ingestion Flow', () => {
 
   afterEach(() => {
     db.close();
-    try { unlinkSync(TEST_DB_PATH); } catch { /* ignore */ }
+    try {
+      unlinkSync(TEST_DB_PATH);
+    } catch {
+      /* ignore */
+    }
     vi.restoreAllMocks();
   });
 
@@ -43,7 +57,7 @@ describe('Greenhouse Ingestion Flow', () => {
     it('parses representative payload', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(mockGreenhousePayload)
+        json: () => Promise.resolve(mockGreenhousePayload),
       } as unknown as Response);
 
       const adapter = new GreenhouseAdapter();
@@ -60,24 +74,28 @@ describe('Greenhouse Ingestion Flow', () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         status: 500,
-        statusText: 'Internal Server Error'
+        statusText: 'Internal Server Error',
       } as unknown as Response);
 
       const adapter = new GreenhouseAdapter();
       await expect(async () => {
-        for await (const _r of adapter.discover('test')) { /* empty */ }
+        for await (const _r of adapter.discover('test')) {
+          /* empty */
+        }
       }).rejects.toThrow(/Greenhouse API returned 500/);
     });
 
     it('handles malformed response', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({})
+        json: () => Promise.resolve({}),
       } as unknown as Response);
 
       const adapter = new GreenhouseAdapter();
       await expect(async () => {
-        for await (const _r of adapter.discover('test')) { /* empty */ }
+        for await (const _r of adapter.discover('test')) {
+          /* empty */
+        }
       }).rejects.toThrow(/Malformed Greenhouse response/);
     });
   });
@@ -89,9 +107,9 @@ describe('Greenhouse Ingestion Flow', () => {
         sourceSystem: 'greenhouse',
         sourceExternalId: '123',
         rawPayload: JSON.stringify(mockGreenhousePayload.jobs[0]),
-        observedAt: new Date()
+        observedAt: new Date(),
       });
-      
+
       expect(normalized.title).toBe('Software Engineer');
       expect(normalized.organization).toBe('Acme');
       expect(normalized.location).toBe('Remote');
@@ -102,13 +120,19 @@ describe('Greenhouse Ingestion Flow', () => {
 
   describe('BACKGROUND FLOW & DB PERSISTENCE', () => {
     it('executes adapter, persists SourceRecord, deduplicates, and creates Snapshots', async () => {
-      const config = { environment: 'test' as const, databasePath: TEST_DB_PATH, pollIntervalMs: 1000, leaseDurationMs: 30000, greenhouseBoards: ['acme'] };
+      const config = {
+        environment: 'test' as const,
+        databasePath: TEST_DB_PATH,
+        pollIntervalMs: 1000,
+        leaseDurationMs: 30000,
+        greenhouseBoards: ['acme'],
+      };
       const handlers = createTaskHandlers({ db, config });
       const handler = handlers['source.greenhouse.discover']!;
 
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(mockGreenhousePayload)
+        json: () => Promise.resolve(mockGreenhousePayload),
       } as unknown as Response);
 
       await handler({
@@ -121,22 +145,25 @@ describe('Greenhouse Ingestion Flow', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
         availableAt: new Date(),
-        leaseOwner: null, leaseExpiresAt: null, idempotencyKey: null, lastError: null
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        idempotencyKey: null,
+        lastError: null,
       });
 
       const oppRepo = new OpportunityRepository(db);
       const opps = oppRepo.getOpportunities();
       expect(opps).toHaveLength(1);
       const oppId = opps[0]!.id;
-      
-      const snaps = oppRepo.getSnapshots(opportunityId(oppId as string));
+
+      const snaps = oppRepo.getSnapshots(opportunityId(oppId));
       expect(snaps).toHaveLength(1);
       expect(snaps[0]!.title).toBe('Software Engineer');
 
       // Second run with identical payload - no new snapshot
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(mockGreenhousePayload)
+        json: () => Promise.resolve(mockGreenhousePayload),
       } as unknown as Response);
 
       await handler({
@@ -149,21 +176,26 @@ describe('Greenhouse Ingestion Flow', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
         availableAt: new Date(),
-        leaseOwner: null, leaseExpiresAt: null, idempotencyKey: null, lastError: null
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        idempotencyKey: null,
+        lastError: null,
       });
 
       const oppsAfter = oppRepo.getOpportunities();
       expect(oppsAfter).toHaveLength(1); // Deduplicated Opportunity
-      const snapsAfter = oppRepo.getSnapshots(opportunityId(oppId as string));
+      const snapsAfter = oppRepo.getSnapshots(opportunityId(oppId));
       expect(snapsAfter).toHaveLength(1); // Deduplicated Snapshot
 
       // Third run with changed payload - new snapshot
-      const changedPayload = JSON.parse(JSON.stringify(mockGreenhousePayload)) as typeof mockGreenhousePayload;
+      const changedPayload = JSON.parse(
+        JSON.stringify(mockGreenhousePayload),
+      ) as typeof mockGreenhousePayload;
       changedPayload.jobs[0]!.title = 'Senior Software Engineer';
-      
+
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(changedPayload)
+        json: () => Promise.resolve(changedPayload),
       } as unknown as Response);
 
       await handler({
@@ -176,10 +208,13 @@ describe('Greenhouse Ingestion Flow', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
         availableAt: new Date(),
-        leaseOwner: null, leaseExpiresAt: null, idempotencyKey: null, lastError: null
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        idempotencyKey: null,
+        lastError: null,
       });
 
-      const snapsFinal = oppRepo.getSnapshots(opportunityId(oppId as string));
+      const snapsFinal = oppRepo.getSnapshots(opportunityId(oppId));
       expect(snapsFinal).toHaveLength(2); // New snapshot appended
       expect(snapsFinal[1]!.title).toBe('Senior Software Engineer');
       expect(snapsFinal[0]!.title).toBe('Software Engineer'); // Previous intact

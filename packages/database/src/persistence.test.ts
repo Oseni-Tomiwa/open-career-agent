@@ -1,5 +1,9 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { databaseIsReady, openDatabase, type DatabaseHandle } from './client.js';
+import {
+  databaseIsReady,
+  openDatabase,
+  type DatabaseHandle,
+} from './client.js';
 import { applyMigrations } from './migrate.js';
 import {
   CandidateRepository,
@@ -11,7 +15,8 @@ import {
 import {
   candidateId,
   claimId,
-  opportunityId, snapshotId,
+  opportunityId,
+  snapshotId,
   evidenceId,
   evaluationId,
   decisionId,
@@ -27,7 +32,9 @@ describe('Domain Persistence Foundation', () => {
   beforeEach(() => {
     try {
       unlinkSync(TEST_DB_PATH);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     db = openDatabase(TEST_DB_PATH);
     databaseIsReady(db);
     applyMigrations(db, './migrations');
@@ -37,14 +44,23 @@ describe('Domain Persistence Foundation', () => {
     db.close();
     try {
       unlinkSync(TEST_DB_PATH);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   });
 
   describe('SOURCE IDENTITY', () => {
     it('SourceRecord persists without Opportunity', () => {
       const repo = new SourceListingRepository(db);
       const srId = snapshotId('sr_1');
-      repo.persistListing(srId, { sourceSystem: 'Greenhouse', sourceExternalId: 'gh_123' }); repo.persistObservation('obs_' + srId, srId, { rawPayload: '{"title": "Engineer"}', fingerprint: 'hash' });
+      repo.persistListing(srId, {
+        sourceSystem: 'Greenhouse',
+        sourceExternalId: 'gh_123',
+      });
+      repo.persistObservation('obs_' + srId, srId, {
+        rawPayload: '{"title": "Engineer"}',
+        fingerprint: 'hash',
+      });
       const record = repo.getListing(srId);
       expect(record).toBeDefined();
       expect(record?.sourceSystem).toBe('Greenhouse');
@@ -56,7 +72,14 @@ describe('Domain Persistence Foundation', () => {
       const oppRepo = new OpportunityRepository(db);
 
       const srId = snapshotId('sr_1');
-      srcRepo.persistListing(srId, { sourceSystem: 'Greenhouse', sourceExternalId: 'gh_123' }); srcRepo.persistObservation('obs_' + srId, srId, { rawPayload: '{"title": "Engineer"}', fingerprint: 'hash' });
+      srcRepo.persistListing(srId, {
+        sourceSystem: 'Greenhouse',
+        sourceExternalId: 'gh_123',
+      });
+      srcRepo.persistObservation('obs_' + srId, srId, {
+        rawPayload: '{"title": "Engineer"}',
+        fingerprint: 'hash',
+      });
 
       const oId = opportunityId('opp_1');
       oppRepo.createOpportunity(oId);
@@ -74,14 +97,30 @@ describe('Domain Persistence Foundation', () => {
       oppRepo.createOpportunity(oId);
 
       const srId1 = snapshotId('sr_1');
-      srcRepo.persistListing(srId1, { sourceSystem: 'Greenhouse', sourceExternalId: 'gh_123' }); srcRepo.persistObservation('obs_' + srId1, srId1, { rawPayload: '{}', fingerprint: 'hash' });
+      srcRepo.persistListing(srId1, {
+        sourceSystem: 'Greenhouse',
+        sourceExternalId: 'gh_123',
+      });
+      srcRepo.persistObservation('obs_' + srId1, srId1, {
+        rawPayload: '{}',
+        fingerprint: 'hash',
+      });
       srcRepo.associateListingWithOpportunity(srId1, oId);
 
       const srId2 = snapshotId('sr_2');
-      srcRepo.persistListing(srId2, { sourceSystem: 'Workday', sourceExternalId: 'wd_456' }); srcRepo.persistObservation('obs_' + srId2, srId2, { rawPayload: '{}', fingerprint: 'hash' });
+      srcRepo.persistListing(srId2, {
+        sourceSystem: 'Workday',
+        sourceExternalId: 'wd_456',
+      });
+      srcRepo.persistObservation('obs_' + srId2, srId2, {
+        rawPayload: '{}',
+        fingerprint: 'hash',
+      });
       srcRepo.associateListingWithOpportunity(srId2, oId);
 
-      const records = srcRepo.getListing(srId1); const records2 = srcRepo.getListing(srId2); const arr = [records, records2].filter(r => r?.opportunityId === oId);
+      const records = srcRepo.getListing(srId1);
+      const records2 = srcRepo.getListing(srId2);
+      const arr = [records, records2].filter((r) => r?.opportunityId === oId);
       expect(arr).toHaveLength(2);
     });
   });
@@ -92,19 +131,26 @@ describe('Domain Persistence Foundation', () => {
       const oppRepo = new OpportunityRepository(db);
 
       const srId = snapshotId('sr_1');
-      srcRepo.persistListing(srId, { sourceSystem: 'Greenhouse', sourceExternalId: 'gh_123' }); srcRepo.persistObservation('obs_' + srId, srId, { rawPayload: '{"title": "Engineer"}', fingerprint: 'hash' });
+      srcRepo.persistListing(srId, {
+        sourceSystem: 'Greenhouse',
+        sourceExternalId: 'gh_123',
+      });
+      srcRepo.persistObservation('obs_' + srId, srId, {
+        rawPayload: '{"title": "Engineer"}',
+        fingerprint: 'hash',
+      });
 
       const oId = opportunityId('opp_1');
       oppRepo.createOpportunity(oId);
 
       const sId = snapshotId('snap_1');
       oppRepo.appendSnapshot({
-          fingerprint: 'test-hash',
+        fingerprint: 'test-hash',
         id: sId,
         opportunityId: oId,
         title: 'Engineer',
         organization: 'Acme',
-        content: 'Content', 
+        content: 'Content',
         sourceObservationId: 'obs_' + srId,
       });
 
@@ -120,10 +166,36 @@ describe('Domain Persistence Foundation', () => {
       const cId = candidateId('cand_1');
       candidateRepo.createCandidate(cId);
 
-      candidateRepo.addClaim({ id: claimId('cl_1'), candidateId: cId, kind: 'skill', value: 'React', state: 'SUPPORTED', confidence: 'HIGH' });
-      candidateRepo.addClaim({ id: claimId('cl_2'), candidateId: cId, kind: 'skill', value: 'Vue', state: 'INFERRED', confidence: 'MODERATE' });
-      candidateRepo.addClaim({ id: claimId('cl_3'), candidateId: cId, kind: 'education', value: 'Degree', state: 'UNKNOWN' });
-      candidateRepo.addClaim({ id: claimId('cl_4'), candidateId: cId, kind: 'location', value: 'NY', state: 'CONFLICTING' });
+      candidateRepo.addClaim({
+        id: claimId('cl_1'),
+        candidateId: cId,
+        kind: 'skill',
+        value: 'React',
+        state: 'SUPPORTED',
+        confidence: 'HIGH',
+      });
+      candidateRepo.addClaim({
+        id: claimId('cl_2'),
+        candidateId: cId,
+        kind: 'skill',
+        value: 'Vue',
+        state: 'INFERRED',
+        confidence: 'MODERATE',
+      });
+      candidateRepo.addClaim({
+        id: claimId('cl_3'),
+        candidateId: cId,
+        kind: 'education',
+        value: 'Degree',
+        state: 'UNKNOWN',
+      });
+      candidateRepo.addClaim({
+        id: claimId('cl_4'),
+        candidateId: cId,
+        kind: 'location',
+        value: 'NY',
+        state: 'CONFLICTING',
+      });
 
       const claims = candidateRepo.getClaims(cId);
       expect(claims).toHaveLength(4);
@@ -140,7 +212,13 @@ describe('Domain Persistence Foundation', () => {
       candidateRepo.createCandidate(cId);
 
       const clId = claimId('cl_1');
-      candidateRepo.addClaim({ id: clId, candidateId: cId, kind: 'skill', value: 'React', state: 'SUPPORTED' });
+      candidateRepo.addClaim({
+        id: clId,
+        candidateId: cId,
+        kind: 'skill',
+        value: 'React',
+        state: 'SUPPORTED',
+      });
 
       const evId = evidenceId('ev_1');
       evidenceRepo.attachToClaim(clId, {
@@ -171,12 +249,12 @@ describe('Domain Persistence Foundation', () => {
 
       const sId = snapshotId('snap_1');
       oppRepo.appendSnapshot({
-          fingerprint: 'test-hash',
+        fingerprint: 'test-hash',
         id: sId,
         opportunityId: oId,
         title: 'Role',
         organization: 'Org',
-        content: 'Content', 
+        content: 'Content',
       });
 
       const eId = evaluationId('eval_1');
@@ -190,20 +268,57 @@ describe('Domain Persistence Foundation', () => {
       });
 
       // Eligibility
-      evalRepo.persistFinding({ id: findingId('f_1'), evaluationId: eId, category: 'eligibility', dimensionKey: 'work_authorization', state: 'SUPPORTED', summary: 'Has visa' });
-      evalRepo.persistFinding({ id: findingId('f_2'), evaluationId: eId, category: 'eligibility', dimensionKey: 'sponsorship', state: 'CONTRADICTORY', summary: 'Needs sponsorship but listing says no.' });
-      
+      evalRepo.persistFinding({
+        id: findingId('f_1'),
+        evaluationId: eId,
+        category: 'eligibility',
+        dimensionKey: 'work_authorization',
+        state: 'SUPPORTED',
+        summary: 'Has visa',
+      });
+      evalRepo.persistFinding({
+        id: findingId('f_2'),
+        evaluationId: eId,
+        category: 'eligibility',
+        dimensionKey: 'sponsorship',
+        state: 'CONTRADICTORY',
+        summary: 'Needs sponsorship but listing says no.',
+      });
+
       // Fit
-      evalRepo.persistFinding({ id: findingId('f_3'), evaluationId: eId, category: 'fit', dimensionKey: 'nodejs', state: 'MATCH', summary: '5 years node' });
-      evalRepo.persistFinding({ id: findingId('f_4'), evaluationId: eId, category: 'fit', dimensionKey: 'kubernetes', state: 'GAP', summary: 'No k8s' });
+      evalRepo.persistFinding({
+        id: findingId('f_3'),
+        evaluationId: eId,
+        category: 'fit',
+        dimensionKey: 'nodejs',
+        state: 'MATCH',
+        summary: '5 years node',
+      });
+      evalRepo.persistFinding({
+        id: findingId('f_4'),
+        evaluationId: eId,
+        category: 'fit',
+        dimensionKey: 'kubernetes',
+        state: 'GAP',
+        summary: 'No k8s',
+      });
 
       // Quality
-      evalRepo.persistFinding({ id: findingId('f_5'), evaluationId: eId, category: 'quality', dimensionKey: 'freshness', state: 'STRONG', summary: 'Posted today' });
+      evalRepo.persistFinding({
+        id: findingId('f_5'),
+        evaluationId: eId,
+        category: 'quality',
+        dimensionKey: 'freshness',
+        state: 'STRONG',
+        summary: 'Posted today',
+      });
 
       const findings = evalRepo.getFindings(eId);
       expect(findings).toHaveLength(5);
-      
-      const sponsorship = findings.find(f => f.dimensionKey === 'sponsorship');
+
+      const sponsorship = findings.find(
+        (f) => f.dimensionKey === 'sponsorship',
+      );
       expect(sponsorship?.state).toBe('CONTRADICTORY');
 
       const evId = evidenceId('ev_1');
@@ -214,7 +329,9 @@ describe('Domain Persistence Foundation', () => {
         excerpt: 'No sponsorship available',
       });
 
-      const findingEvidence = evidenceRepo.getFindingEvidence(findingId(sponsorship!.id));
+      const findingEvidence = evidenceRepo.getFindingEvidence(
+        findingId(sponsorship!.id),
+      );
       expect(findingEvidence).toHaveLength(1);
       expect(findingEvidence[0]?.id).toBe(evId);
     });
@@ -234,13 +351,31 @@ describe('Domain Persistence Foundation', () => {
 
       const sId = snapshotId('snap_1');
       oppRepo.appendSnapshot({
-          fingerprint: 'test-hash', id: sId, opportunityId: oId, title: 'Role', organization: 'Org', content: 'Content' });
+        fingerprint: 'test-hash',
+        id: sId,
+        opportunityId: oId,
+        title: 'Role',
+        organization: 'Org',
+        content: 'Content',
+      });
 
       const eId = evaluationId('eval_1');
-      evalRepo.persistEvaluation({ id: eId, candidateId: cId, snapshotId: sId, eligibilityState: 'unknown', fitLevel: 'moderate', qualityLevel: 'strong' });
+      evalRepo.persistEvaluation({
+        id: eId,
+        candidateId: cId,
+        snapshotId: sId,
+        eligibilityState: 'unknown',
+        fitLevel: 'moderate',
+        qualityLevel: 'strong',
+      });
 
       const dId = decisionId('dec_1');
-      evalRepo.persistDecision({ id: dId, evaluationId: eId, priority: 'investigate', explanation: 'Need info' });
+      evalRepo.persistDecision({
+        id: dId,
+        evaluationId: eId,
+        priority: 'investigate',
+        explanation: 'Need info',
+      });
 
       const decision = evalRepo.getDecision(dId);
       expect(decision).toBeDefined();
@@ -254,7 +389,15 @@ describe('Domain Persistence Foundation', () => {
       const cId = candidateId('cand_does_not_exist');
       const clId = claimId('cl_1');
 
-      expect(() => candRepo.addClaim({ id: clId, candidateId: cId, kind: 'skill', value: 'TS', state: 'SUPPORTED' })).toThrow();
+      expect(() =>
+        candRepo.addClaim({
+          id: clId,
+          candidateId: cId,
+          kind: 'skill',
+          value: 'TS',
+          state: 'SUPPORTED',
+        }),
+      ).toThrow();
     });
   });
 });

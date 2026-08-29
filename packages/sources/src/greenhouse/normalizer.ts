@@ -1,10 +1,16 @@
 import { createHash } from 'node:crypto';
-import type { SourceOpportunity, NormalizedOpportunity, OpportunityNormalizer } from '../core/index.js';
+import type {
+  SourceOpportunity,
+  NormalizedOpportunity,
+  OpportunityNormalizer,
+} from '../core/index.js';
 
 export class GreenhouseNormalizer implements OpportunityNormalizer {
   public normalize(record: SourceOpportunity): NormalizedOpportunity {
     if (record.sourceSystem !== 'greenhouse') {
-      throw new Error(`Unsupported source system for GreenhouseNormalizer: ${record.sourceSystem}`);
+      throw new Error(
+        `Unsupported source system for GreenhouseNormalizer: ${record.sourceSystem}`,
+      );
     }
 
     const payload = JSON.parse(record.rawPayload) as {

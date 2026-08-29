@@ -17,33 +17,50 @@ export class SourceListingRepository {
     opportunityId?: string,
     observedAt: number = Date.now(),
   ): void {
-    this.db.db.insert(sourceListings).values({
-      id,
-      opportunityId: opportunityId ?? null,
-      sourceSystem: listing.sourceSystem,
-      sourceExternalId: listing.sourceExternalId,
-      sourceUrl: listing.sourceUrl,
-      createdAt: new Date(observedAt),
-      updatedAt: new Date(observedAt),
-    }).onConflictDoUpdate({
-      target: [sourceListings.sourceSystem, sourceListings.sourceExternalId],
-      set: {
+    this.db.db
+      .insert(sourceListings)
+      .values({
+        id,
+        opportunityId: opportunityId ?? null,
+        sourceSystem: listing.sourceSystem,
+        sourceExternalId: listing.sourceExternalId,
         sourceUrl: listing.sourceUrl,
+        createdAt: new Date(observedAt),
         updatedAt: new Date(observedAt),
-      }
-    }).run();
+      })
+      .onConflictDoUpdate({
+        target: [sourceListings.sourceSystem, sourceListings.sourceExternalId],
+        set: {
+          sourceUrl: listing.sourceUrl,
+          updatedAt: new Date(observedAt),
+        },
+      })
+      .run();
   }
 
-  public findListingByExternalId(sourceSystem: string, sourceExternalId: string) {
-    const result = this.db.db.select()
+  public findListingByExternalId(
+    sourceSystem: string,
+    sourceExternalId: string,
+  ) {
+    const result = this.db.db
+      .select()
       .from(sourceListings)
-      .where(and(eq(sourceListings.sourceSystem, sourceSystem), eq(sourceListings.sourceExternalId, sourceExternalId)))
+      .where(
+        and(
+          eq(sourceListings.sourceSystem, sourceSystem),
+          eq(sourceListings.sourceExternalId, sourceExternalId),
+        ),
+      )
       .get();
     return result ?? null;
   }
 
-  public associateListingWithOpportunity(id: string, opportunityId: OpportunityId): void {
-    this.db.db.update(sourceListings)
+  public associateListingWithOpportunity(
+    id: string,
+    opportunityId: OpportunityId,
+  ): void {
+    this.db.db
+      .update(sourceListings)
       .set({ opportunityId, updatedAt: new Date() })
       .where(eq(sourceListings.id, id))
       .run();
@@ -58,28 +75,45 @@ export class SourceListingRepository {
     },
     observedAt: number = Date.now(),
   ): void {
-    this.db.db.insert(sourceObservations).values({
-      id,
-      sourceListingId,
-      rawPayload: observation.rawPayload,
-      fingerprint: observation.fingerprint,
-      observedAt: new Date(observedAt),
-      createdAt: new Date(observedAt),
-    }).onConflictDoNothing({
-      target: [sourceObservations.sourceListingId, sourceObservations.fingerprint]
-    }).run();
+    this.db.db
+      .insert(sourceObservations)
+      .values({
+        id,
+        sourceListingId,
+        rawPayload: observation.rawPayload,
+        fingerprint: observation.fingerprint,
+        observedAt: new Date(observedAt),
+        createdAt: new Date(observedAt),
+      })
+      .onConflictDoNothing({
+        target: [
+          sourceObservations.sourceListingId,
+          sourceObservations.fingerprint,
+        ],
+      })
+      .run();
   }
 
-  public findObservationByFingerprint(sourceListingId: string, fingerprint: string) {
-    const result = this.db.db.select()
+  public findObservationByFingerprint(
+    sourceListingId: string,
+    fingerprint: string,
+  ) {
+    const result = this.db.db
+      .select()
       .from(sourceObservations)
-      .where(and(eq(sourceObservations.sourceListingId, sourceListingId), eq(sourceObservations.fingerprint, fingerprint)))
+      .where(
+        and(
+          eq(sourceObservations.sourceListingId, sourceListingId),
+          eq(sourceObservations.fingerprint, fingerprint),
+        ),
+      )
       .get();
     return result ?? null;
   }
 
   public getListing(id: string) {
-    const result = this.db.db.select()
+    const result = this.db.db
+      .select()
       .from(sourceListings)
       .where(eq(sourceListings.id, id))
       .get();

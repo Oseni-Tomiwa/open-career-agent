@@ -4,7 +4,7 @@ import {
   evidence,
   candidateClaimEvidence,
   opportunitySnapshotEvidence,
-  evaluationFindingEvidence
+  evaluationFindingEvidence,
 } from '../schema.js';
 import type { ClaimId, EvidenceId, SnapshotId, FindingId } from '@oca/domain';
 
@@ -18,24 +18,29 @@ export class EvidenceRepository {
       evidenceType: string;
       sourceReference: string;
       excerpt: string;
-      state?: 'source-verified' | 'candidate-confirmed' | 'unreviewed' | 'disputed';
+      state?:
+        'source-verified' | 'candidate-confirmed' | 'unreviewed' | 'disputed';
     },
     timestamp: number = Date.now(),
   ): void {
     this.db.db.transaction((tx) => {
-      tx.insert(evidence).values({
-        id: ev.id,
-        evidenceType: ev.evidenceType,
-        sourceReference: ev.sourceReference,
-        excerpt: ev.excerpt,
-        state: ev.state ?? 'unreviewed',
-        createdAt: new Date(timestamp),
-      }).run();
+      tx.insert(evidence)
+        .values({
+          id: ev.id,
+          evidenceType: ev.evidenceType,
+          sourceReference: ev.sourceReference,
+          excerpt: ev.excerpt,
+          state: ev.state ?? 'unreviewed',
+          createdAt: new Date(timestamp),
+        })
+        .run();
 
-      tx.insert(candidateClaimEvidence).values({
-        claimId,
-        evidenceId: ev.id,
-      }).run();
+      tx.insert(candidateClaimEvidence)
+        .values({
+          claimId,
+          evidenceId: ev.id,
+        })
+        .run();
     });
   }
 
@@ -46,24 +51,29 @@ export class EvidenceRepository {
       evidenceType: string;
       sourceReference: string;
       excerpt: string;
-      state?: 'source-verified' | 'candidate-confirmed' | 'unreviewed' | 'disputed';
+      state?:
+        'source-verified' | 'candidate-confirmed' | 'unreviewed' | 'disputed';
     },
     timestamp: number = Date.now(),
   ): void {
     this.db.db.transaction((tx) => {
-      tx.insert(evidence).values({
-        id: ev.id,
-        evidenceType: ev.evidenceType,
-        sourceReference: ev.sourceReference,
-        excerpt: ev.excerpt,
-        state: ev.state ?? 'unreviewed',
-        createdAt: new Date(timestamp),
-      }).run();
+      tx.insert(evidence)
+        .values({
+          id: ev.id,
+          evidenceType: ev.evidenceType,
+          sourceReference: ev.sourceReference,
+          excerpt: ev.excerpt,
+          state: ev.state ?? 'unreviewed',
+          createdAt: new Date(timestamp),
+        })
+        .run();
 
-      tx.insert(opportunitySnapshotEvidence).values({
-        snapshotId,
-        evidenceId: ev.id,
-      }).run();
+      tx.insert(opportunitySnapshotEvidence)
+        .values({
+          snapshotId,
+          evidenceId: ev.id,
+        })
+        .run();
     });
   }
 
@@ -74,29 +84,35 @@ export class EvidenceRepository {
       evidenceType: string;
       sourceReference: string;
       excerpt: string;
-      state?: 'source-verified' | 'candidate-confirmed' | 'unreviewed' | 'disputed';
+      state?:
+        'source-verified' | 'candidate-confirmed' | 'unreviewed' | 'disputed';
     },
     timestamp: number = Date.now(),
   ): void {
     this.db.db.transaction((tx) => {
-      tx.insert(evidence).values({
-        id: ev.id,
-        evidenceType: ev.evidenceType,
-        sourceReference: ev.sourceReference,
-        excerpt: ev.excerpt,
-        state: ev.state ?? 'unreviewed',
-        createdAt: new Date(timestamp),
-      }).run();
+      tx.insert(evidence)
+        .values({
+          id: ev.id,
+          evidenceType: ev.evidenceType,
+          sourceReference: ev.sourceReference,
+          excerpt: ev.excerpt,
+          state: ev.state ?? 'unreviewed',
+          createdAt: new Date(timestamp),
+        })
+        .run();
 
-      tx.insert(evaluationFindingEvidence).values({
-        findingId,
-        evidenceId: ev.id,
-      }).run();
+      tx.insert(evaluationFindingEvidence)
+        .values({
+          findingId,
+          evidenceId: ev.id,
+        })
+        .run();
     });
   }
 
   public getClaimEvidence(claimId: ClaimId) {
-    return this.db.db.select({
+    return this.db.db
+      .select({
         id: evidence.id,
         evidenceType: evidence.evidenceType,
         sourceReference: evidence.sourceReference,
@@ -105,13 +121,17 @@ export class EvidenceRepository {
         createdAt: evidence.createdAt,
       })
       .from(evidence)
-      .innerJoin(candidateClaimEvidence, eq(evidence.id, candidateClaimEvidence.evidenceId))
+      .innerJoin(
+        candidateClaimEvidence,
+        eq(evidence.id, candidateClaimEvidence.evidenceId),
+      )
       .where(eq(candidateClaimEvidence.claimId, claimId))
       .all();
   }
 
   public getFindingEvidence(findingId: FindingId) {
-    return this.db.db.select({
+    return this.db.db
+      .select({
         id: evidence.id,
         evidenceType: evidence.evidenceType,
         sourceReference: evidence.sourceReference,
@@ -120,7 +140,10 @@ export class EvidenceRepository {
         createdAt: evidence.createdAt,
       })
       .from(evidence)
-      .innerJoin(evaluationFindingEvidence, eq(evidence.id, evaluationFindingEvidence.evidenceId))
+      .innerJoin(
+        evaluationFindingEvidence,
+        eq(evidence.id, evaluationFindingEvidence.evidenceId),
+      )
       .where(eq(evaluationFindingEvidence.findingId, findingId))
       .all();
   }

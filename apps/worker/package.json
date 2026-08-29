@@ -14,6 +14,7 @@
     "@oca/config": "workspace:*",
     "@oca/sources": "workspace:*",
     "@oca/domain": "workspace:*",
+    "@oca/intelligence": "workspace:*",
     "@oca/database": "workspace:*",
     "pino": "10.3.1"
   }

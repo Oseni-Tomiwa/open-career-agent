@@ -85,7 +85,6 @@ export type BackgroundTaskEventRow = typeof backgroundTaskEvents.$inferSelect;
 // DOMAIN PERSISTENCE FOUNDATION
 // ==========================================
 
-
 export const candidates = sqliteTable('candidates', {
   id: text('id').primaryKey(),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
@@ -115,15 +114,10 @@ export const candidateClaims = sqliteTable('candidate_claims', {
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
-export const opportunities = sqliteTable(
-  'opportunities',
-  {
-    id: text('id').primaryKey(),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-  }
-);
-
-
+export const opportunities = sqliteTable('opportunities', {
+  id: text('id').primaryKey(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+});
 
 export const opportunitySnapshots = sqliteTable(
   'opportunity_snapshots',
@@ -163,39 +157,58 @@ export const opportunitySnapshotSources = sqliteTable(
   },
   (table) => [
     index('oss_snapshot_idx').on(table.snapshotId),
-    uniqueIndex('oss_unique_idx').on(table.snapshotId, table.sourceObservationId),
+    uniqueIndex('oss_unique_idx').on(
+      table.snapshotId,
+      table.sourceObservationId,
+    ),
   ],
 );
 
+export const sourceListings = sqliteTable(
+  'source_listings',
+  {
+    id: text('id').primaryKey(),
+    opportunityId: text('opportunity_id').references(() => opportunities.id, {
+      onDelete: 'restrict',
+    }),
+    sourceSystem: text('source_system').notNull(),
+    sourceExternalId: text('source_external_id').notNull(),
+    sourceUrl: text('source_url'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    uniqueIndex('source_listings_system_ext_idx').on(
+      table.sourceSystem,
+      table.sourceExternalId,
+    ),
+  ],
+);
 
-export const sourceListings = sqliteTable('source_listings', {
-  id: text('id').primaryKey(),
-  opportunityId: text('opportunity_id').references(() => opportunities.id, { onDelete: 'restrict' }),
-  sourceSystem: text('source_system').notNull(),
-  sourceExternalId: text('source_external_id').notNull(),
-  sourceUrl: text('source_url'),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
-}, (table) => [
-  uniqueIndex('source_listings_system_ext_idx').on(table.sourceSystem, table.sourceExternalId),
-]);
-
-export const sourceObservations = sqliteTable('source_observations', {
-  id: text('id').primaryKey(),
-  sourceListingId: text('source_listing_id')
-    .notNull()
-    .references(() => sourceListings.id, { onDelete: 'restrict' }),
-  rawPayload: text('raw_payload').notNull(),
-  fingerprint: text('fingerprint').notNull(),
-  observedAt: integer('observed_at', { mode: 'timestamp_ms' }).notNull(),
-  sourceUpdatedAt: integer('source_updated_at', { mode: 'timestamp_ms' }),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-}, (table) => [
-  index('source_observations_listing_time_idx').on(table.sourceListingId, table.observedAt),
-  uniqueIndex('source_observations_listing_fingerprint_idx').on(table.sourceListingId, table.fingerprint),
-]);
-
-
+export const sourceObservations = sqliteTable(
+  'source_observations',
+  {
+    id: text('id').primaryKey(),
+    sourceListingId: text('source_listing_id')
+      .notNull()
+      .references(() => sourceListings.id, { onDelete: 'restrict' }),
+    rawPayload: text('raw_payload').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    observedAt: integer('observed_at', { mode: 'timestamp_ms' }).notNull(),
+    sourceUpdatedAt: integer('source_updated_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    index('source_observations_listing_time_idx').on(
+      table.sourceListingId,
+      table.observedAt,
+    ),
+    uniqueIndex('source_observations_listing_fingerprint_idx').on(
+      table.sourceListingId,
+      table.fingerprint,
+    ),
+  ],
+);
 
 export const EVIDENCE_STATES = [
   'source-verified',
@@ -214,7 +227,6 @@ export const evidence = sqliteTable('evidence', {
     .default('unreviewed'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });
-
 
 export const candidateClaimEvidence = sqliteTable(
   'candidate_claim_evidence',
@@ -270,9 +282,11 @@ export const evaluations = sqliteTable(
     snapshotId: text('snapshot_id')
       .notNull()
       .references(() => opportunitySnapshots.id, { onDelete: 'restrict' }),
-    eligibilityState: text('eligibility_state', { enum: ELIGIBILITY_STATES }).notNull(),
-    fitLevel: text('fit_level', { enum: FIT_LEVELS }).notNull(),
-    qualityLevel: text('quality_level', { enum: QUALITY_LEVELS }).notNull(),
+    eligibilityState: text('eligibility_state', {
+      enum: ELIGIBILITY_STATES,
+    }).notNull(),
+    fitLevel: text('fit_level', { enum: FIT_LEVELS }),
+    qualityLevel: text('quality_level', { enum: QUALITY_LEVELS }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (table) => [
@@ -300,7 +314,11 @@ export const evaluationFindings = sqliteTable(
   },
   (table) => [
     index('eval_finding_eval_idx').on(table.evaluationId),
-    uniqueIndex('eval_finding_unique_idx').on(table.evaluationId, table.category, table.dimensionKey),
+    uniqueIndex('eval_finding_unique_idx').on(
+      table.evaluationId,
+      table.category,
+      table.dimensionKey,
+    ),
   ],
 );
 
@@ -316,10 +334,7 @@ export const evaluationFindingEvidence = sqliteTable(
   },
   (table) => [
     index('efe_finding_idx').on(table.findingId),
-    uniqueIndex('efe_unique_idx').on(
-      table.findingId,
-      table.evidenceId,
-    ),
+    uniqueIndex('efe_unique_idx').on(table.findingId, table.evidenceId),
   ],
 );
 
@@ -406,9 +421,6 @@ export const applicationEvents = sqliteTable(
     occurredAt: integer('occurred_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (table) => [
-    index('app_events_app_time_idx').on(
-      table.applicationId,
-      table.occurredAt,
-    ),
+    index('app_events_app_time_idx').on(table.applicationId, table.occurredAt),
   ],
 );
