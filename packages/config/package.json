@@ -5,11 +5,11 @@
   "type": "module",
   "exports": {
     "./browser": {
-      "types": "./dist/browser.d.ts",
+      "types": "./src/browser.ts",
       "default": "./dist/browser.js"
     },
     "./server": {
-      "types": "./dist/server.d.ts",
+      "types": "./src/server.ts",
       "default": "./dist/server.js"
     }
   },
