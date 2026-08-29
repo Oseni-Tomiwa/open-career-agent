@@ -15,10 +15,14 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: 'mobile-chromium',
+      use: { ...devices['Pixel 5'] },
+    },
   ],
   webServer: {
     command: 'pnpm --filter @oca/web preview --host 127.0.0.1',
-    port: 4173,
+    url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
   },
 });

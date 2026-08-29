@@ -1,4 +1,6 @@
-import { isRouteErrorResponse, useRouteError } from 'react-router-dom';
+import { isRouteErrorResponse, Link, useRouteError } from 'react-router-dom';
+
+import { Icon } from './components/Icon.js';
 
 export function RouteError() {
   const error: unknown = useRouteError();
@@ -9,14 +11,15 @@ export function RouteError() {
       : 'An unexpected route error occurred.';
 
   return (
-    <main className="bootstrap-shell">
-      <section className="bootstrap-panel" role="alert">
-        <p className="eyebrow">Development bootstrap</p>
-        <h1>Unable to render this route</h1>
-        <p className="intro">{message}</p>
-        <a className="contract-link" href="/">
-          Return to bootstrap status
-        </a>
+    <main className="route-error-page">
+      <section role="alert">
+        <Icon name="warning" size={28} />
+        <p className="eyebrow">Application error</p>
+        <h1>Unable to render this view</h1>
+        <p>{message}</p>
+        <Link className="button button-primary" to="/today">
+          Return to Today
+        </Link>
       </section>
     </main>
   );
