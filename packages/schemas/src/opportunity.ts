@@ -51,6 +51,57 @@ export const FitEvaluationSchema = Type.Object({
   findings: Type.Array(FitFindingSchema),
 });
 
+export const QualityLevelSchema = Type.Union([
+  Type.Literal('strong'),
+  Type.Literal('moderate'),
+  Type.Literal('weak'),
+  Type.Literal('risk'),
+]);
+
+export const QualityFindingStateSchema = Type.Union([
+  Type.Literal('STRONG'),
+  Type.Literal('ADEQUATE'),
+  Type.Literal('WEAK'),
+  Type.Literal('RISK'),
+  Type.Literal('UNKNOWN'),
+]);
+
+export const QualityFindingEvidenceSchema = Type.Object({
+  id: Type.String(),
+  evidenceType: Type.String(),
+  sourceReference: Type.String(),
+  excerpt: Type.String(),
+  state: Type.String(),
+});
+
+export const QualityFindingSchema = Type.Object({
+  id: Type.String(),
+  dimension: Type.String(),
+  label: Type.String(),
+  state: QualityFindingStateSchema,
+  importance: Type.Union([
+    Type.Literal('critical'),
+    Type.Literal('important'),
+    Type.Literal('transparency'),
+  ]),
+  explanation: Type.String(),
+  evidence: Type.Array(QualityFindingEvidenceSchema),
+});
+
+export const QualityEvaluationSchema = Type.Object({
+  level: QualityLevelSchema,
+  summary: Type.String(),
+  engineVersion: Type.String(),
+  freshnessBucket: Type.Union([
+    Type.Literal('recent'),
+    Type.Literal('aging'),
+    Type.Literal('stale'),
+    Type.Literal('very_stale'),
+  ]),
+  evaluatedAt: Type.Optional(Type.String()),
+  findings: Type.Array(QualityFindingSchema),
+});
+
 export const OpportunitySchema = Type.Object(
   {
     id: Type.String(),
@@ -71,6 +122,7 @@ export const OpportunitySummarySchema = Type.Object(
     sourceSystems: Type.Array(Type.String()),
     latestSnapshotId: Type.Optional(Type.String()),
     fitLevel: Type.Optional(FitLevelSchema),
+    qualityLevel: Type.Optional(QualityLevelSchema),
   },
   { $id: 'OpportunitySummary' },
 );
@@ -88,6 +140,7 @@ export const OpportunitySnapshotSchema = Type.Object(
     content: Type.String(),
     observedAt: Type.String(),
     fit: Type.Optional(FitEvaluationSchema),
+    quality: Type.Optional(QualityEvaluationSchema),
   },
   { $id: 'OpportunitySnapshot' },
 );

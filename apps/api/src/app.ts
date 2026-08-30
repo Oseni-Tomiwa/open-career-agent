@@ -173,10 +173,16 @@ export async function createApiApp(
       const evaluationRepository = new EvaluationRepository(options.database);
       const data = repo.getOpportunitySummaries().map((item) => {
         if (!item.latestSnapshotId) return item;
-        const fit = evaluationRepository.getLatestFitForSnapshot(
-          snapshotId(item.latestSnapshotId),
-        );
-        return fit?.fitLevel ? { ...item, fitLevel: fit.fitLevel } : item;
+        const sId = snapshotId(item.latestSnapshotId);
+        const fit = evaluationRepository.getLatestFitForSnapshot(sId);
+        const quality = evaluationRepository.getLatestQualityForSnapshot(sId);
+        return {
+          ...item,
+          ...(fit?.fitLevel ? { fitLevel: fit.fitLevel } : {}),
+          ...(quality?.qualityLevel
+            ? { qualityLevel: quality.qualityLevel }
+            : {}),
+        };
       });
       return {
         data: data as unknown as Static<
@@ -220,42 +226,83 @@ export async function createApiApp(
       const evaluationRepository = new EvaluationRepository(options.database);
       const evidenceRepository = new EvidenceRepository(options.database);
 
-      const snapshotsWithFit = snapshots.map((snapshot) => {
-        const fit = evaluationRepository.getLatestFitForSnapshot(
-          snapshotId(snapshot.id),
-        );
-        if (!fit?.fitLevel || !fit.fitEngineVersion || !fit.fitSummary) {
-          return snapshot;
-        }
-        const findings = evaluationRepository
-          .getFitFindings(evaluationId(fit.id))
-          .map((item) => ({
-            id: item.id,
-            dimension: item.dimensionKey.split(':')[0] ?? item.dimensionKey,
-            label: item.label ?? item.dimensionKey,
-            state: item.state,
-            modality: item.modality,
-            requirement: item.requirementText,
-            explanation: item.explanation ?? item.summary,
-            confidence: item.confidence,
-            evidence: evidenceRepository
-              .getFindingEvidence(findingId(item.id))
-              .map((evidence) => ({
-                id: evidence.id,
-                evidenceType: evidence.evidenceType,
-                sourceReference: evidence.sourceReference,
-                excerpt: evidence.excerpt,
-                state: evidence.state,
-              })),
-          }));
-        return {
-          ...snapshot,
-          fit: {
+      const snapshotsWithEvaluations = snapshots.map((snapshot) => {
+        const sId = snapshotId(snapshot.id);
+        const fit = evaluationRepository.getLatestFitForSnapshot(sId);
+        const quality = evaluationRepository.getLatestQualityForSnapshot(sId);
+
+        let fitResult = undefined;
+        if (fit?.fitLevel && fit.fitEngineVersion && fit.fitSummary) {
+          const findings = evaluationRepository
+            .getFitFindings(evaluationId(fit.id))
+            .map((item) => ({
+              id: item.id,
+              dimension: item.dimensionKey.split(':')[0] ?? item.dimensionKey,
+              label: item.label ?? item.dimensionKey,
+              state: item.state,
+              modality: item.modality,
+              requirement: item.requirementText,
+              explanation: item.explanation ?? item.summary,
+              confidence: item.confidence,
+              evidence: evidenceRepository
+                .getFindingEvidence(findingId(item.id))
+                .map((evidence) => ({
+                  id: evidence.id,
+                  evidenceType: evidence.evidenceType,
+                  sourceReference: evidence.sourceReference,
+                  excerpt: evidence.excerpt,
+                  state: evidence.state,
+                })),
+            }));
+          fitResult = {
             level: fit.fitLevel,
             summary: fit.fitSummary,
             engineVersion: fit.fitEngineVersion,
             findings,
-          },
+          };
+        }
+
+        let qualityResult = undefined;
+        if (
+          quality?.qualityLevel &&
+          quality.qualityEngineVersion &&
+          quality.qualitySummary
+        ) {
+          const findings = evaluationRepository
+            .getQualityFindings(evaluationId(quality.id))
+            .map((item) => ({
+              id: item.id,
+              dimension: item.dimensionKey,
+              label: item.label ?? item.dimensionKey,
+              state: item.state,
+              importance: item.confidence ?? 'important',
+              explanation: item.explanation ?? item.summary,
+              evidence: evidenceRepository
+                .getFindingEvidence(findingId(item.id))
+                .map((evidence) => ({
+                  id: evidence.id,
+                  evidenceType: evidence.evidenceType,
+                  sourceReference: evidence.sourceReference,
+                  excerpt: evidence.excerpt,
+                  state: evidence.state,
+                })),
+            }));
+          qualityResult = {
+            level: quality.qualityLevel,
+            summary: quality.qualitySummary,
+            engineVersion: quality.qualityEngineVersion,
+            freshnessBucket: quality.qualityFreshnessBucket ?? 'recent',
+            evaluatedAt: quality.qualityEvaluatedAt
+              ? new Date(quality.qualityEvaluatedAt).toISOString()
+              : undefined,
+            findings,
+          };
+        }
+
+        return {
+          ...snapshot,
+          ...(fitResult ? { fit: fitResult } : {}),
+          ...(qualityResult ? { quality: qualityResult } : {}),
         };
       });
 
@@ -264,7 +311,7 @@ export async function createApiApp(
           id: opportunity.id,
           createdAt: new Date(opportunity.createdAt).toISOString(),
         },
-        snapshots: snapshotsWithFit as unknown as Static<
+        snapshots: snapshotsWithEvaluations as unknown as Static<
           typeof OpportunityDetailResponseSchema
         >['snapshots'],
       };

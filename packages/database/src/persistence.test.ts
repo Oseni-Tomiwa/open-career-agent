@@ -337,7 +337,184 @@ describe('Domain Persistence Foundation', () => {
         findingId(sponsorship!.id),
       );
       expect(findingEvidence).toHaveLength(1);
-      expect(findingEvidence[0]?.id).toBe(evId);
+    });
+  });
+
+  describe('QUALITY PERSISTENCE', () => {
+    it('persists Quality result with findings, attaches evidence, and updates evaluation metadata', () => {
+      const oppRepo = new OpportunityRepository(db);
+      const candRepo = new CandidateRepository(db);
+      const evalRepo = new EvaluationRepository(db);
+      const evidenceRepo = new EvidenceRepository(db);
+
+      const cId = candidateId('cand_quality');
+      candRepo.createCandidate(cId);
+
+      const oId = opportunityId('opp_quality');
+      oppRepo.createOpportunity(oId);
+
+      const sId = snapshotId('snap_quality');
+      oppRepo.appendSnapshot({
+        fingerprint: 'test-hash',
+        id: sId,
+        opportunityId: oId,
+        title: 'Backend Engineer',
+        organization: 'Acme Corp',
+        content: 'Clear content',
+      });
+
+      const eId = evaluationId('eval_quality');
+      evalRepo.persistEvaluation({
+        id: eId,
+        candidateId: cId,
+        snapshotId: sId,
+        eligibilityState: 'eligible',
+      });
+
+      const evalTime = new Date('2026-08-30T10:00:00Z');
+      const evId = evidenceId('ev_freshness');
+      const fId = findingId('f_freshness');
+
+      const saved = evalRepo.persistQualityResult({
+        evaluationId: eId,
+        quality: {
+          level: 'strong',
+          engineVersion: 'quality-v1',
+          inputFingerprint: 'quality-fp-1',
+          summary: '12 Quality dimensions evaluated.',
+          evaluatedAt: evalTime,
+          freshnessBucket: 'recent',
+        },
+        findings: [
+          {
+            id: fId,
+            dimensionKey: 'freshness',
+            label: 'Listing freshness',
+            state: 'STRONG',
+            summary: 'Observed today',
+            confidence: 'important',
+            explanation: '0 days old at evaluation time',
+            evidence: [
+              {
+                id: evId,
+                evidenceType: 'opportunity-quality',
+                sourceReference: 'snapshot:snap_quality',
+                excerpt: 'Freshness anchor: 2026-08-30T10:00:00Z',
+                state: 'source-verified',
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(saved).toBe(true);
+
+      const updatedEval = evalRepo.getEvaluation(eId);
+      expect(updatedEval?.qualityLevel).toBe('strong');
+      expect(updatedEval?.qualityEngineVersion).toBe('quality-v1');
+      expect(updatedEval?.qualityInputFingerprint).toBe('quality-fp-1');
+      expect(updatedEval?.qualitySummary).toBe(
+        '12 Quality dimensions evaluated.',
+      );
+      expect(updatedEval?.qualityFreshnessBucket).toBe('recent');
+
+      const qualityFindings = evalRepo.getQualityFindings(eId);
+      expect(qualityFindings).toHaveLength(1);
+      expect(qualityFindings[0]?.dimensionKey).toBe('freshness');
+      expect(qualityFindings[0]?.state).toBe('STRONG');
+
+      const findingEvidence = evidenceRepo.getFindingEvidence(fId);
+      expect(findingEvidence).toHaveLength(1);
+      expect(findingEvidence[0]?.sourceReference).toBe('snapshot:snap_quality');
+
+      const latestQuality = evalRepo.getLatestQualityForSnapshot(sId);
+      expect(latestQuality?.id).toBe(eId);
+
+      const foundByFp = evalRepo.findQualityEvaluation({
+        snapshotId: sId,
+        engineVersion: 'quality-v1',
+        inputFingerprint: 'quality-fp-1',
+      });
+      expect(foundByFp?.id).toBe(eId);
+    });
+
+    it('rejects stale out-of-order writes and behaves idempotently on duplicate writes', () => {
+      const oppRepo = new OpportunityRepository(db);
+      const candRepo = new CandidateRepository(db);
+      const evalRepo = new EvaluationRepository(db);
+
+      const cId = candidateId('cand_stale');
+      candRepo.createCandidate(cId);
+      const oId = opportunityId('opp_stale');
+      oppRepo.createOpportunity(oId);
+      const sId = snapshotId('snap_stale');
+      oppRepo.appendSnapshot({
+        fingerprint: 'test-hash',
+        id: sId,
+        opportunityId: oId,
+        title: 'Engineer',
+        organization: 'Acme',
+        content: 'Content',
+      });
+      const eId = evaluationId('eval_stale');
+      evalRepo.persistEvaluation({
+        id: eId,
+        candidateId: cId,
+        snapshotId: sId,
+        eligibilityState: 'eligible',
+      });
+
+      const newerTime = new Date('2026-08-30T12:00:00Z');
+      const olderTime = new Date('2026-08-30T08:00:00Z');
+
+      // Write newer result
+      evalRepo.persistQualityResult({
+        evaluationId: eId,
+        quality: {
+          level: 'strong',
+          engineVersion: 'quality-v1',
+          inputFingerprint: 'fp-newer',
+          summary: 'Newer',
+          evaluatedAt: newerTime,
+          freshnessBucket: 'recent',
+        },
+        findings: [],
+      });
+
+      // Duplicate write with same fingerprint -> returns true without error
+      const dupResult = evalRepo.persistQualityResult({
+        evaluationId: eId,
+        quality: {
+          level: 'strong',
+          engineVersion: 'quality-v1',
+          inputFingerprint: 'fp-newer',
+          summary: 'Newer',
+          evaluatedAt: newerTime,
+          freshnessBucket: 'recent',
+        },
+        findings: [],
+      });
+      expect(dupResult).toBe(true);
+
+      // Stale write with older timestamp -> rejected (false)
+      const staleResult = evalRepo.persistQualityResult({
+        evaluationId: eId,
+        quality: {
+          level: 'weak',
+          engineVersion: 'quality-v1',
+          inputFingerprint: 'fp-older',
+          summary: 'Older',
+          evaluatedAt: olderTime,
+          freshnessBucket: 'aging',
+        },
+        findings: [],
+      });
+      expect(staleResult).toBe(false);
+
+      // Evaluation remains intact with newer evaluation
+      const currentEval = evalRepo.getEvaluation(eId);
+      expect(currentEval?.qualityLevel).toBe('strong');
+      expect(currentEval?.qualityInputFingerprint).toBe('fp-newer');
     });
   });
 

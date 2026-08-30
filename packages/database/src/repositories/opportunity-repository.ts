@@ -4,6 +4,8 @@ import {
   opportunities,
   opportunitySnapshots,
   opportunitySnapshotSources,
+  sourceListings,
+  sourceObservations,
 } from '../schema.js';
 import type { OpportunityId, SnapshotId } from '@oca/domain';
 
@@ -101,6 +103,66 @@ export class OpportunityRepository {
       .select()
       .from(opportunitySnapshotSources)
       .where(eq(opportunitySnapshotSources.snapshotId, snapshotId))
+      .all();
+  }
+
+  public getObservationsForSnapshot(snapshotId: SnapshotId) {
+    const direct = this.db.db
+      .select({
+        id: sourceObservations.id,
+        sourceListingId: sourceObservations.sourceListingId,
+        rawPayload: sourceObservations.rawPayload,
+        fingerprint: sourceObservations.fingerprint,
+        observedAt: sourceObservations.observedAt,
+        sourceUpdatedAt: sourceObservations.sourceUpdatedAt,
+        sourceSystem: sourceListings.sourceSystem,
+        sourceExternalId: sourceListings.sourceExternalId,
+        sourceUrl: sourceListings.sourceUrl,
+      })
+      .from(opportunitySnapshotSources)
+      .innerJoin(
+        sourceObservations,
+        eq(
+          opportunitySnapshotSources.sourceObservationId,
+          sourceObservations.id,
+        ),
+      )
+      .innerJoin(
+        sourceListings,
+        eq(sourceObservations.sourceListingId, sourceListings.id),
+      )
+      .where(eq(opportunitySnapshotSources.snapshotId, snapshotId))
+      .all();
+
+    if (direct.length > 0) return direct;
+
+    const snapshot = this.getSnapshot(snapshotId);
+    if (!snapshot) return [];
+
+    return this.getObservationsForOpportunity(
+      snapshot.opportunityId as OpportunityId,
+    );
+  }
+
+  public getObservationsForOpportunity(opportunityId: OpportunityId) {
+    return this.db.db
+      .select({
+        id: sourceObservations.id,
+        sourceListingId: sourceObservations.sourceListingId,
+        rawPayload: sourceObservations.rawPayload,
+        fingerprint: sourceObservations.fingerprint,
+        observedAt: sourceObservations.observedAt,
+        sourceUpdatedAt: sourceObservations.sourceUpdatedAt,
+        sourceSystem: sourceListings.sourceSystem,
+        sourceExternalId: sourceListings.sourceExternalId,
+        sourceUrl: sourceListings.sourceUrl,
+      })
+      .from(sourceListings)
+      .innerJoin(
+        sourceObservations,
+        eq(sourceObservations.sourceListingId, sourceListings.id),
+      )
+      .where(eq(sourceListings.opportunityId, opportunityId))
       .all();
   }
 

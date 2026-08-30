@@ -189,4 +189,100 @@ describe('API application', () => {
       data: [{ id: opportunity, fitLevel: 'strong' }],
     });
   });
+
+  it('exposes additive Quality summary and structured findings with freshness and evidence', async () => {
+    const candidate = candidateId('candidate-api-qual');
+    new CandidateRepository(database).createCandidate(candidate);
+    const opportunity = opportunityId('opportunity-api-qual');
+    const snapshot = snapshotId('snapshot-api-qual');
+    const opportunityRepository = new OpportunityRepository(database);
+    opportunityRepository.createOpportunity(opportunity);
+    opportunityRepository.appendSnapshot({
+      id: snapshot,
+      opportunityId: opportunity,
+      title: 'Full Stack Engineer',
+      organization: 'Example Corp',
+      content: 'TypeScript and React required. Remote — US.',
+      fingerprint: 'api-qual-hash',
+    });
+    const evaluation = evaluationId('evaluation-api-qual');
+    const finding = findingId('finding-api-qual');
+    const evaluationRepository = new EvaluationRepository(database);
+    evaluationRepository.persistEvaluation({
+      id: evaluation,
+      candidateId: candidate,
+      snapshotId: snapshot,
+      eligibilityState: 'eligible',
+    });
+
+    const evalTime = new Date('2026-08-30T12:00:00Z');
+    evaluationRepository.persistQualityResult({
+      evaluationId: evaluation,
+      quality: {
+        level: 'strong',
+        engineVersion: 'quality-v1',
+        inputFingerprint: 'qual-input-hash',
+        summary: '12 Quality dimensions evaluated.',
+        evaluatedAt: evalTime,
+        freshnessBucket: 'recent',
+      },
+      findings: [
+        {
+          id: finding,
+          dimensionKey: 'freshness',
+          label: 'Listing freshness',
+          state: 'STRONG',
+          summary: '0 days old at evaluation time',
+          confidence: 'important',
+          explanation: '0 days old at evaluation time; classified as recent.',
+          evidence: [
+            {
+              id: evidenceId('evidence-api-qual'),
+              evidenceType: 'opportunity-quality',
+              sourceReference: 'snapshot:snapshot-api-qual',
+              excerpt: 'Freshness anchor: 2026-08-30T12:00:00Z',
+              state: 'source-verified',
+            },
+          ],
+        },
+      ],
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/opportunities/${opportunity}`,
+    });
+    const body: unknown = response.json();
+    expect(response.statusCode).toBe(200);
+    expect(Value.Check(OpportunityDetailResponseSchema, body)).toBe(true);
+    expect(body).toMatchObject({
+      snapshots: [
+        {
+          quality: {
+            level: 'strong',
+            engineVersion: 'quality-v1',
+            freshnessBucket: 'recent',
+            summary: '12 Quality dimensions evaluated.',
+            findings: [
+              {
+                dimension: 'freshness',
+                label: 'Listing freshness',
+                state: 'STRONG',
+                importance: 'important',
+                evidence: [{ sourceReference: 'snapshot:snapshot-api-qual' }],
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: '/opportunities',
+    });
+    expect(listResponse.json()).toMatchObject({
+      data: [{ id: opportunity, qualityLevel: 'strong' }],
+    });
+  });
 });

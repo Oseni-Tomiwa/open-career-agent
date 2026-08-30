@@ -292,6 +292,13 @@ export const evaluations = sqliteTable(
     fitInputFingerprint: text('fit_input_fingerprint'),
     fitSummary: text('fit_summary'),
     qualityLevel: text('quality_level', { enum: QUALITY_LEVELS }),
+    qualityEngineVersion: text('quality_engine_version'),
+    qualityInputFingerprint: text('quality_input_fingerprint'),
+    qualitySummary: text('quality_summary'),
+    qualityEvaluatedAt: integer('quality_evaluated_at', {
+      mode: 'timestamp_ms',
+    }),
+    qualityFreshnessBucket: text('quality_freshness_bucket'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (table) => [

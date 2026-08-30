@@ -31,6 +31,11 @@ export class EvaluationRepository {
       fitInputFingerprint?: string | null;
       fitSummary?: string | null;
       qualityLevel?: 'strong' | 'moderate' | 'weak' | 'risk' | null;
+      qualityEngineVersion?: string | null;
+      qualityInputFingerprint?: string | null;
+      qualitySummary?: string | null;
+      qualityEvaluatedAt?: Date | null;
+      qualityFreshnessBucket?: string | null;
     },
     timestamp: number = Date.now(),
   ): void {
@@ -47,6 +52,11 @@ export class EvaluationRepository {
         fitInputFingerprint: evaluation.fitInputFingerprint ?? null,
         fitSummary: evaluation.fitSummary ?? null,
         qualityLevel: evaluation.qualityLevel ?? null,
+        qualityEngineVersion: evaluation.qualityEngineVersion ?? null,
+        qualityInputFingerprint: evaluation.qualityInputFingerprint ?? null,
+        qualitySummary: evaluation.qualitySummary ?? null,
+        qualityEvaluatedAt: evaluation.qualityEvaluatedAt ?? null,
+        qualityFreshnessBucket: evaluation.qualityFreshnessBucket ?? null,
         createdAt: new Date(timestamp),
       })
       .run();
@@ -245,6 +255,180 @@ export class EvaluationRepository {
     );
   }
 
+  public persistQualityResult(input: {
+    evaluationId: EvaluationId;
+    quality: {
+      level: 'strong' | 'moderate' | 'weak' | 'risk';
+      engineVersion: string;
+      inputFingerprint: string;
+      summary: string;
+      evaluatedAt: Date;
+      freshnessBucket: string;
+    };
+    findings: readonly {
+      id: FindingId;
+      dimensionKey: string;
+      label: string;
+      state: string;
+      summary: string;
+      confidence?: string;
+      explanation?: string;
+      evidence: readonly {
+        id: EvidenceId;
+        evidenceType: string;
+        sourceReference: string;
+        excerpt: string;
+        state:
+          'source-verified' | 'candidate-confirmed' | 'unreviewed' | 'disputed';
+      }[];
+    }[];
+  }): boolean {
+    return this.db.db.transaction((transaction) => {
+      const existing = transaction
+        .select()
+        .from(evaluations)
+        .where(eq(evaluations.id, input.evaluationId))
+        .get();
+
+      if (!existing) return false;
+
+      if (
+        existing.qualityEvaluatedAt &&
+        existing.qualityEvaluatedAt.getTime() >
+          input.quality.evaluatedAt.getTime()
+      ) {
+        return false;
+      }
+
+      if (
+        existing.qualityInputFingerprint === input.quality.inputFingerprint &&
+        existing.qualityLevel === input.quality.level
+      ) {
+        return true;
+      }
+
+      transaction
+        .update(evaluations)
+        .set({
+          qualityLevel: input.quality.level,
+          qualityEngineVersion: input.quality.engineVersion,
+          qualityInputFingerprint: input.quality.inputFingerprint,
+          qualitySummary: input.quality.summary,
+          qualityEvaluatedAt: input.quality.evaluatedAt,
+          qualityFreshnessBucket: input.quality.freshnessBucket,
+        })
+        .where(eq(evaluations.id, input.evaluationId))
+        .run();
+
+      const previousFindings = transaction
+        .select({ id: evaluationFindings.id })
+        .from(evaluationFindings)
+        .where(
+          and(
+            eq(evaluationFindings.evaluationId, input.evaluationId),
+            eq(evaluationFindings.category, 'quality'),
+          ),
+        )
+        .all();
+
+      for (const prev of previousFindings) {
+        transaction
+          .delete(evaluationFindingEvidence)
+          .where(eq(evaluationFindingEvidence.findingId, prev.id))
+          .run();
+      }
+
+      transaction
+        .delete(evaluationFindings)
+        .where(
+          and(
+            eq(evaluationFindings.evaluationId, input.evaluationId),
+            eq(evaluationFindings.category, 'quality'),
+          ),
+        )
+        .run();
+
+      for (const finding of input.findings) {
+        transaction
+          .insert(evaluationFindings)
+          .values({
+            id: finding.id,
+            evaluationId: input.evaluationId,
+            category: 'quality',
+            dimensionKey: finding.dimensionKey,
+            label: finding.label,
+            state: finding.state,
+            summary: finding.summary,
+            confidence: finding.confidence,
+            explanation: finding.explanation ?? finding.summary,
+          })
+          .run();
+
+        for (const ev of finding.evidence) {
+          transaction
+            .insert(evidence)
+            .values({
+              id: ev.id,
+              evidenceType: ev.evidenceType,
+              sourceReference: ev.sourceReference,
+              excerpt: ev.excerpt,
+              state: ev.state,
+              createdAt: new Date(),
+            })
+            .onConflictDoNothing()
+            .run();
+
+          transaction
+            .insert(evaluationFindingEvidence)
+            .values({
+              findingId: finding.id,
+              evidenceId: ev.id,
+            })
+            .onConflictDoNothing()
+            .run();
+        }
+      }
+
+      return true;
+    });
+  }
+
+  public findQualityEvaluation(input: {
+    snapshotId: SnapshotId;
+    engineVersion: string;
+    inputFingerprint: string;
+  }) {
+    return (
+      this.db.db
+        .select()
+        .from(evaluations)
+        .where(
+          and(
+            eq(evaluations.snapshotId, input.snapshotId),
+            eq(evaluations.qualityEngineVersion, input.engineVersion),
+            eq(evaluations.qualityInputFingerprint, input.inputFingerprint),
+          ),
+        )
+        .get() ?? null
+    );
+  }
+
+  public getLatestQualityForSnapshot(snapshotId: SnapshotId) {
+    return (
+      this.db.db
+        .select()
+        .from(evaluations)
+        .where(
+          and(
+            eq(evaluations.snapshotId, snapshotId),
+            isNotNull(evaluations.qualityLevel),
+          ),
+        )
+        .orderBy(desc(evaluations.createdAt))
+        .get() ?? null
+    );
+  }
+
   public getFitFindings(evaluationId: EvaluationId) {
     return this.db.db
       .select()
@@ -253,6 +437,19 @@ export class EvaluationRepository {
         and(
           eq(evaluationFindings.evaluationId, evaluationId),
           eq(evaluationFindings.category, 'fit'),
+        ),
+      )
+      .all();
+  }
+
+  public getQualityFindings(evaluationId: EvaluationId) {
+    return this.db.db
+      .select()
+      .from(evaluationFindings)
+      .where(
+        and(
+          eq(evaluationFindings.evaluationId, evaluationId),
+          eq(evaluationFindings.category, 'quality'),
         ),
       )
       .all();

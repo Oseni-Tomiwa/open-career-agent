@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import {
+  BackgroundTaskLedger,
   CandidateRepository,
   EvaluationRepository,
   EvidenceRepository,
@@ -85,6 +86,7 @@ export function createFitHandlers(deps: {
   const candidateRepository = new CandidateRepository(deps.db);
   const evaluationRepository = new EvaluationRepository(deps.db);
   const evidenceRepository = new EvidenceRepository(deps.db);
+  const taskLedger = new BackgroundTaskLedger(deps.db);
   const engine = new FitEngine();
 
   return {
@@ -152,7 +154,18 @@ export function createFitHandlers(deps: {
         engineVersion: engine.version,
         inputFingerprint,
       });
-      if (existing) return;
+      if (existing) {
+        taskLedger.enqueue({
+          taskType: 'quality.evaluate',
+          payload: {
+            evaluationId,
+            snapshotId,
+            candidateId,
+          },
+          idempotencyKey: `quality-${evaluationId}`,
+        });
+        return;
+      }
 
       const result = engine.evaluate(snapshot, claims);
 
@@ -192,6 +205,16 @@ export function createFitHandlers(deps: {
             },
           ),
         })),
+      });
+
+      taskLedger.enqueue({
+        taskType: 'quality.evaluate',
+        payload: {
+          evaluationId,
+          snapshotId,
+          candidateId,
+        },
+        idempotencyKey: `quality-${evaluationId}`,
       });
     },
   };
