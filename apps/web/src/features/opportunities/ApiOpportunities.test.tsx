@@ -10,6 +10,8 @@ import type {
   ProductRepository,
   ProductSnapshot,
   SearchPreferences,
+  SearchTarget,
+  DiscoveryRun,
 } from '../../data/types.js';
 import { renderProduct } from '../../test/render.js';
 import { OpportunitiesPage } from './OpportunitiesPage.js';
@@ -60,6 +62,30 @@ class ApiFixtureRepository implements ProductRepository {
 
   public attachClaimEvidence(): Promise<CareerMemoryProfile> {
     return Promise.resolve(emptyCareerMemory());
+  }
+
+  public getSearchTargets(): Promise<readonly SearchTarget[]> {
+    return Promise.resolve([]);
+  }
+
+  public createSearchTarget(): Promise<SearchTarget> {
+    throw new Error('Not implemented');
+  }
+
+  public updateSearchTarget(): Promise<SearchTarget> {
+    throw new Error('Not implemented');
+  }
+
+  public deleteSearchTarget(): Promise<boolean> {
+    return Promise.resolve(true);
+  }
+
+  public runDiscovery(): Promise<{ run: DiscoveryRun; taskEnqueued: boolean }> {
+    throw new Error('Not implemented');
+  }
+
+  public getDiscoveryRuns(): Promise<readonly DiscoveryRun[]> {
+    return Promise.resolve([]);
   }
 }
 
@@ -242,6 +268,12 @@ describe('API-mode Opportunities UI', () => {
       createCandidateClaim: () => Promise.reject(new Error('unsupported')),
       updateCandidateClaim: () => Promise.reject(new Error('unsupported')),
       attachClaimEvidence: () => Promise.reject(new Error('unsupported')),
+      getSearchTargets: () => Promise.reject(new Error('unsupported')),
+      createSearchTarget: () => Promise.reject(new Error('unsupported')),
+      updateSearchTarget: () => Promise.reject(new Error('unsupported')),
+      deleteSearchTarget: () => Promise.reject(new Error('unsupported')),
+      runDiscovery: () => Promise.reject(new Error('unsupported')),
+      getDiscoveryRuns: () => Promise.reject(new Error('unsupported')),
     };
     renderProduct(<OpportunitiesPage />, ['/opportunities'], failing);
     expect(await screen.findByRole('alert')).toHaveTextContent(

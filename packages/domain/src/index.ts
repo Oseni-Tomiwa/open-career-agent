@@ -10,6 +10,9 @@ export type {
   EventId,
   SourceRecordId,
   FindingId,
+  SearchTargetId,
+  DiscoveryRunId,
+  DiscoveryMatchId,
 } from './identifiers.js';
 export {
   applicationId,
@@ -23,6 +26,9 @@ export {
   eventId,
   sourceRecordId,
   findingId,
+  searchTargetId,
+  discoveryRunId,
+  discoveryMatchId,
 } from './identifiers.js';
 export type { OpportunityType } from './opportunity.js';
 export { OPPORTUNITY_TYPES } from './opportunity.js';
@@ -32,3 +38,16 @@ export {
   claimStateTransitionRequiresEvidence,
   type CareerMemoryClaimState,
 } from './career-memory.js';
+export {
+  SEARCH_WORK_MODELS,
+  SEARCH_SENIORITY_LEVELS,
+  SEARCH_EMPLOYMENT_TYPES,
+  evaluateDiscoveryMatch,
+  type SearchWorkModel,
+  type SearchSeniorityLevel,
+  type SearchEmploymentType,
+  type SearchSourceConfig,
+  type SearchTarget,
+  type OpportunitySnapshotTargetView,
+  type DiscoveryMatchResult,
+} from './search.js';

@@ -1,0 +1,397 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import {
+  applyMigrations,
+  BackgroundTaskLedger,
+  CandidateRepository,
+  CareerMemoryRepository,
+  EvaluationRepository,
+  openDatabase,
+  OpportunityRepository,
+  SearchTargetRepository,
+  type DatabaseHandle,
+} from '@oca/database';
+import {
+  candidateId,
+  discoveryRunId,
+  evaluationId,
+  searchTargetId,
+  snapshotId,
+} from '@oca/domain';
+import pino from 'pino';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { createDecisionHandlers } from '../decision/workflow.js';
+import { createEligibilityHandlers } from '../eligibility/workflow.js';
+import { createFitHandlers } from '../fit/workflow.js';
+import { createQualityHandlers } from '../quality/workflow.js';
+import { BackgroundWorker } from '../worker.js';
+import { createDiscoveryHandlers } from './workflow.js';
+
+describe('Discovery Worker Workflow & E2E Scenarios', () => {
+  let directory: string;
+  let db: DatabaseHandle;
+  let ledger: BackgroundTaskLedger;
+  let worker: BackgroundWorker;
+  let targetRepo: SearchTargetRepository;
+  let candRepo: CandidateRepository;
+  let oppRepo: OpportunityRepository;
+  let evalRepo: EvaluationRepository;
+
+  const candidateA = candidateId('cand-disc-a');
+  const candidateB = candidateId('cand-disc-b');
+
+  beforeEach(() => {
+    directory = mkdtempSync(join(tmpdir(), 'oca-disc-worker-test-'));
+    db = openDatabase(join(directory, 'test.sqlite'));
+    applyMigrations(db);
+
+    ledger = new BackgroundTaskLedger(db);
+    targetRepo = new SearchTargetRepository(db);
+    candRepo = new CandidateRepository(db);
+    oppRepo = new OpportunityRepository(db);
+    evalRepo = new EvaluationRepository(db);
+
+    candRepo.createCandidate(candidateA);
+    candRepo.createCandidate(candidateB);
+
+    worker = new BackgroundWorker({
+      ledger,
+      handlers: {
+        ...createDiscoveryHandlers({ db }),
+        ...createEligibilityHandlers({ db }),
+        ...createFitHandlers({ db }),
+        ...createQualityHandlers({ db }),
+        ...createDecisionHandlers(db),
+      },
+      logger: pino({ level: 'silent' }),
+      workerId: 'test-worker-1',
+      pollIntervalMs: 50,
+      leaseDurationMs: 5000,
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    db.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  it('runs E2E discovery scenario with 4 discovered, 2 accepted, 2 rejected, cascading accepted into intelligence pipeline', async () => {
+    // 1. Setup Search Target for Candidate A
+    const targetA = targetRepo.createSearchTarget(candidateA, {
+      name: 'Backend Target',
+      targetRoles: ['Backend Engineer'],
+      locations: ['Germany'],
+      locationIsHardFilter: true,
+      workModels: ['remote'],
+      workModelIsHardFilter: false, // Remote is preferred, not hard
+      requiredTerms: ['TypeScript'],
+      excludedTerms: ['Senior'],
+      sources: [{ sourceSystem: 'greenhouse', boardId: 'testboard' }],
+    });
+
+    // 2. Mock Greenhouse API response fixture
+    const greenhouseFixture = {
+      jobs: [
+        {
+          id: 101,
+          absolute_url: 'https://boards.greenhouse.io/testboard/jobs/101',
+          title: 'Backend Engineer',
+          location: { name: 'Germany (Remote)' },
+          content: '&lt;p&gt;TypeScript experience required.&lt;/p&gt;',
+        },
+        {
+          id: 102,
+          absolute_url: 'https://boards.greenhouse.io/testboard/jobs/102',
+          title: 'Senior Backend Engineer',
+          location: { name: 'Germany' },
+          content: '&lt;p&gt;TypeScript experience required.&lt;/p&gt;',
+        },
+        {
+          id: 103,
+          absolute_url: 'https://boards.greenhouse.io/testboard/jobs/103',
+          title: 'Backend Engineer',
+          location: { name: 'United States' },
+          content: '&lt;p&gt;TypeScript experience required.&lt;/p&gt;',
+        },
+        {
+          id: 104,
+          absolute_url: 'https://boards.greenhouse.io/testboard/jobs/104',
+          title: 'Backend Engineer',
+          location: { name: 'Germany (Hybrid)' },
+          content: '&lt;p&gt;TypeScript experience required.&lt;/p&gt;',
+        },
+      ],
+    };
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(greenhouseFixture), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    );
+
+    // 3. Enqueue discovery run task
+    const runId = discoveryRunId('dr-test-e2e-1');
+    targetRepo.createDiscoveryRun(
+      runId,
+      candidateA,
+      searchTargetId(targetA.id),
+      'greenhouse',
+    );
+
+    ledger.enqueue({
+      taskType: 'discovery.run',
+      payload: {
+        candidateId: candidateA,
+        searchTargetId: targetA.id,
+        discoveryRunId: runId,
+      },
+      idempotencyKey: 'disc-task-1',
+    });
+
+    // Process tasks until queue drains (discovery + cascading eligibility/fit/quality/decision)
+    while (await worker.runOnce(new Date())) {
+      // Drain background worker task ledger
+    }
+
+    // 4. Verify DiscoveryRun statistics
+    const completedRun = targetRepo.getDiscoveryRun(runId);
+    expect(completedRun).not.toBeNull();
+    expect(completedRun?.status).toBe('COMPLETED');
+    expect(completedRun?.discoveredCount).toBe(4);
+    expect(completedRun?.acceptedCount).toBe(2);
+    expect(completedRun?.rejectedCount).toBe(2);
+    expect(completedRun?.rejectedByReason).toMatchObject({
+      'EXCLUDED_TERM: Senior': 1,
+      'LOCATION_HARD_REJECT: United States': 1,
+    });
+
+    // 5. Verify Candidate Matches
+    const matches = targetRepo.listDiscoveryMatches(candidateA);
+    expect(matches).toHaveLength(2);
+
+    // 6. Verify accepted opportunity progressed into full intelligence pipeline
+    const matchedOppIds = targetRepo.getMatchedOpportunityIds(candidateA);
+    expect(matchedOppIds.length).toBe(2);
+
+    const firstOppId = matchedOppIds[0];
+    expect(firstOppId).toBeDefined();
+    const latestSnapshot = oppRepo.getLatestSnapshot(firstOppId!);
+    expect(latestSnapshot).not.toBeNull();
+
+    const evaluation = evalRepo.getCurrentEvaluation(
+      candidateA,
+      snapshotId(latestSnapshot!.id),
+    );
+    expect(evaluation).not.toBeNull();
+    expect(evaluation?.eligibilityState).toBeDefined();
+
+    const decision = evalRepo.getCurrentDecisionForEvaluation(
+      evaluationId(evaluation!.id),
+    );
+    expect(decision).not.toBeNull();
+    expect(decision?.priority).toBeDefined();
+  });
+
+  it('supports multi-candidate discovery of the same canonical opportunity with isolated candidate matches and decisions', async () => {
+    const targetA = targetRepo.createSearchTarget(candidateA, {
+      name: 'Target A',
+      targetRoles: ['Full Stack'],
+    });
+
+    const targetB = targetRepo.createSearchTarget(candidateB, {
+      name: 'Target B',
+      targetRoles: ['Full Stack'],
+    });
+
+    const sharedJobFixture = {
+      jobs: [
+        {
+          id: 505,
+          absolute_url: 'https://boards.greenhouse.io/testboard/jobs/505',
+          title: 'Full Stack Engineer',
+          location: { name: 'Germany' },
+          content: 'Node.js and React.',
+        },
+      ],
+    };
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(sharedJobFixture), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    );
+
+    // Run discovery for Candidate A
+    const runA = discoveryRunId('dr-shared-a');
+    targetRepo.createDiscoveryRun(runA, candidateA, searchTargetId(targetA.id));
+    ledger.enqueue({
+      taskType: 'discovery.run',
+      payload: {
+        candidateId: candidateA,
+        searchTargetId: targetA.id,
+        discoveryRunId: runA,
+      },
+      idempotencyKey: 'disc-task-a',
+    });
+
+    while (await worker.runOnce(new Date())) {
+      // Drain background worker task ledger
+    }
+
+    // Run discovery for Candidate B
+    const runB = discoveryRunId('dr-shared-b');
+    targetRepo.createDiscoveryRun(runB, candidateB, searchTargetId(targetB.id));
+    ledger.enqueue({
+      taskType: 'discovery.run',
+      payload: {
+        candidateId: candidateB,
+        searchTargetId: targetB.id,
+        discoveryRunId: runB,
+      },
+      idempotencyKey: 'disc-task-b',
+    });
+
+    while (await worker.runOnce(new Date())) {
+      // Drain background worker task ledger
+    }
+
+    // Verify ONE canonical Opportunity created
+    const summaries = oppRepo.getOpportunitySummaries();
+    expect(summaries).toHaveLength(1);
+
+    // Verify separate Candidate-scoped DiscoveryMatches
+    const matchesA = targetRepo.listDiscoveryMatches(candidateA);
+    const matchesB = targetRepo.listDiscoveryMatches(candidateB);
+    expect(matchesA).toHaveLength(1);
+    expect(matchesB).toHaveLength(1);
+    expect(matchesA[0]?.opportunityId).toBe(matchesB[0]?.opportunityId);
+  });
+
+  it('proves Discovery metadata and preferences strictly DO NOT alter Fit, Eligibility, Quality, or Decision evaluations', async () => {
+    // 1. Setup two different Search Targets for Candidate A: Target 1 prefers remote & required term TypeScript; Target 2 prefers on-site & no keywords
+    const target1 = targetRepo.createSearchTarget(candidateA, {
+      name: 'Target 1 Remote Pref',
+      targetRoles: ['Backend Engineer'],
+      locations: ['Germany'],
+      locationIsHardFilter: false,
+      workModels: ['remote'],
+      workModelIsHardFilter: false,
+      requiredTerms: ['TypeScript'],
+    });
+
+    const target2 = targetRepo.createSearchTarget(candidateA, {
+      name: 'Target 2 Onsite Pref',
+      targetRoles: ['Backend Engineer'],
+      locations: ['France'],
+      locationIsHardFilter: false,
+      workModels: ['onsite'],
+      workModelIsHardFilter: false,
+      requiredTerms: [],
+    });
+
+    const jobFixture = {
+      jobs: [
+        {
+          id: 707,
+          absolute_url: 'https://boards.greenhouse.io/testboard/jobs/707',
+          title: 'Backend Engineer',
+          location: { name: 'Germany (Remote)' },
+          content: 'TypeScript and Node.js developer.',
+        },
+      ],
+    };
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(jobFixture), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    );
+
+    // Run discovery under Target 1
+    const run1 = discoveryRunId('dr-iso-1');
+    targetRepo.createDiscoveryRun(run1, candidateA, searchTargetId(target1.id));
+    ledger.enqueue({
+      taskType: 'discovery.run',
+      payload: {
+        candidateId: candidateA,
+        searchTargetId: target1.id,
+        discoveryRunId: run1,
+      },
+      idempotencyKey: 'disc-iso-1',
+    });
+
+    while (await worker.runOnce(new Date())) {
+      // Drain worker queue
+    }
+
+    const matchedOppId = targetRepo.getMatchedOpportunityIds(candidateA)[0]!;
+    const snapshot1 = oppRepo.getLatestSnapshot(matchedOppId)!;
+    const eval1 = evalRepo.getCurrentEvaluation(
+      candidateA,
+      snapshotId(snapshot1.id),
+    )!;
+    const dec1 = evalRepo.getCurrentDecisionForEvaluation(
+      evaluationId(eval1.id),
+    )!;
+
+    // Run discovery for SAME candidate under Target 2 for same opportunity
+    const run2 = discoveryRunId('dr-iso-2');
+    targetRepo.createDiscoveryRun(run2, candidateA, searchTargetId(target2.id));
+    ledger.enqueue({
+      taskType: 'discovery.run',
+      payload: {
+        candidateId: candidateA,
+        searchTargetId: target2.id,
+        discoveryRunId: run2,
+      },
+      idempotencyKey: 'disc-iso-2',
+    });
+
+    while (await worker.runOnce(new Date())) {
+      // Drain worker queue
+    }
+
+    const eval2 = evalRepo.getCurrentEvaluation(
+      candidateA,
+      snapshotId(snapshot1.id),
+    )!;
+    const dec2 = evalRepo.getCurrentDecisionForEvaluation(
+      evaluationId(eval2.id),
+    )!;
+
+    // INVARIANT ASSERTIONS:
+    // 1. Remote preference or location preference does NOT alter Fit level
+    expect(eval1.fitLevel).toBe(eval2.fitLevel);
+
+    // 2. Required terms in SearchTarget do NOT create CandidateClaims or Evidence
+    const memoryRepo = new CareerMemoryRepository(db);
+    const profile = memoryRepo.getProfile(candidateA);
+    expect(profile?.claims).toHaveLength(0);
+
+    // 3. DiscoveryMatch reasons do NOT alter Eligibility, Quality, or Decision
+    expect(eval1.eligibilityState).toBe(eval2.eligibilityState);
+    expect(eval1.qualityLevel).toBe(eval2.qualityLevel);
+    expect(dec1.priority).toBe(dec2.priority);
+    expect(dec1.action).toBe(dec2.action);
+
+    // 4. Same Candidate + Opportunity intelligence inputs produce identical evaluation outcomes regardless of Search Target
+    expect(eval1.fitInputFingerprint).toBe(eval2.fitInputFingerprint);
+    expect(eval1.eligibilityInputFingerprint).toBe(
+      eval2.eligibilityInputFingerprint,
+    );
+    expect(dec1.inputFingerprint).toBe(dec2.inputFingerprint);
+  });
+});

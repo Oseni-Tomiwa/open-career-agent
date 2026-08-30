@@ -16,6 +16,7 @@ import { createEligibilityHandlers } from './eligibility/workflow.js';
 import { createFitHandlers } from './fit/workflow.js';
 import { createQualityHandlers } from './quality/workflow.js';
 import { createDecisionHandlers } from './decision/workflow.js';
+import { createDiscoveryHandlers } from './discovery/workflow.js';
 
 async function main(): Promise<void> {
   const config = parseWorkerConfig(process.env);
@@ -29,6 +30,7 @@ async function main(): Promise<void> {
       ledger: new BackgroundTaskLedger(database),
       handlers: {
         ...createTaskHandlers({ db: database, config }),
+        ...createDiscoveryHandlers({ db: database, config }),
         ...createEligibilityHandlers({ db: database }),
         ...createFitHandlers({ db: database }),
         ...createQualityHandlers({ db: database }),

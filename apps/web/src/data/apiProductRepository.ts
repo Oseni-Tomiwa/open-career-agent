@@ -6,6 +6,12 @@ import {
   OpportunityDetailResponseSchema,
   OpportunityListResponseSchema,
   UpdateCandidateClaimInputSchema,
+  SearchTargetSchema,
+  CreateSearchTargetInputSchema,
+  UpdateSearchTargetInputSchema,
+  SearchTargetListResponseSchema,
+  DiscoveryRunListResponseSchema,
+  TriggerDiscoveryRunResponseSchema,
 } from '@oca/schemas';
 import type { Static, TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
@@ -28,6 +34,10 @@ import type {
   SearchPreferences,
   ManualEvidenceInput,
   UpdateCandidateClaimInput,
+  SearchTarget,
+  CreateSearchTargetInput,
+  UpdateSearchTargetInput,
+  DiscoveryRun,
 } from './types.js';
 
 type ListResponse = Static<typeof OpportunityListResponseSchema>;
@@ -171,6 +181,90 @@ export class ApiProductRepository implements ProductRepository {
       'POST',
       input,
     );
+  }
+
+  public async getSearchTargets(): Promise<readonly SearchTarget[]> {
+    const res = await this.getValidated(
+      `/candidates/${encodeURIComponent(this.candidateId!)}/search-targets`,
+      SearchTargetListResponseSchema,
+    );
+    return res.data;
+  }
+
+  public async createSearchTarget(
+    input: CreateSearchTargetInput,
+  ): Promise<SearchTarget> {
+    if (!Value.Check(CreateSearchTargetInputSchema, input)) {
+      throw new ApiProductRepositoryError('The Search Target input is invalid.');
+    }
+    return this.getValidated(
+      `/candidates/${encodeURIComponent(this.candidateId!)}/search-targets`,
+      SearchTargetSchema,
+      undefined,
+      {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(input),
+      },
+    );
+  }
+
+  public async updateSearchTarget(
+    targetId: string,
+    input: UpdateSearchTargetInput,
+  ): Promise<SearchTarget> {
+    if (!Value.Check(UpdateSearchTargetInputSchema, input)) {
+      throw new ApiProductRepositoryError('The Search Target update is invalid.');
+    }
+    return this.getValidated(
+      `/candidates/${encodeURIComponent(this.candidateId!)}/search-targets/${encodeURIComponent(targetId)}`,
+      SearchTargetSchema,
+      undefined,
+      {
+        method: 'PATCH',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(input),
+      },
+    );
+  }
+
+  public async deleteSearchTarget(targetId: string): Promise<boolean> {
+    const response = await this.fetcher(
+      `${this.baseUrl}/candidates/${encodeURIComponent(this.candidateId!)}/search-targets/${encodeURIComponent(targetId)}`,
+      { method: 'DELETE', headers: { accept: 'application/json' } },
+    );
+    return response.ok;
+  }
+
+  public async runDiscovery(
+    targetId: string,
+  ): Promise<{ run: DiscoveryRun; taskEnqueued: boolean }> {
+    return this.getValidated(
+      `/candidates/${encodeURIComponent(this.candidateId!)}/search-targets/${encodeURIComponent(targetId)}/run`,
+      TriggerDiscoveryRunResponseSchema,
+      undefined,
+      {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+      },
+    );
+  }
+
+  public async getDiscoveryRuns(): Promise<readonly DiscoveryRun[]> {
+    const res = await this.getValidated(
+      `/candidates/${encodeURIComponent(this.candidateId!)}/discovery-runs`,
+      DiscoveryRunListResponseSchema,
+    );
+    return res.data;
   }
 
   private async mutateCareerMemory(

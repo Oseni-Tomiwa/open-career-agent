@@ -12,3 +12,4 @@ export type {
 } from './service.js';
 export * from './opportunity.js';
 export * from './career-memory.js';
+export * from './search.js';

@@ -9,6 +9,9 @@ declare const decisionIdBrand: unique symbol;
 declare const eventIdBrand: unique symbol;
 declare const sourceRecordIdBrand: unique symbol;
 declare const findingIdBrand: unique symbol;
+declare const searchTargetIdBrand: unique symbol;
+declare const discoveryRunIdBrand: unique symbol;
+declare const discoveryMatchIdBrand: unique symbol;
 
 export type ApplicationId = string & { readonly [applicationIdBrand]: true };
 export type CandidateId = string & { readonly [candidateIdBrand]: true };
@@ -21,6 +24,11 @@ export type DecisionId = string & { readonly [decisionIdBrand]: true };
 export type EventId = string & { readonly [eventIdBrand]: true };
 export type SourceRecordId = string & { readonly [sourceRecordIdBrand]: true };
 export type FindingId = string & { readonly [findingIdBrand]: true };
+export type SearchTargetId = string & { readonly [searchTargetIdBrand]: true };
+export type DiscoveryRunId = string & { readonly [discoveryRunIdBrand]: true };
+export type DiscoveryMatchId = string & {
+  readonly [discoveryMatchIdBrand]: true;
+};
 
 function requireIdentifier(value: string, name: string): string {
   const normalized = value.trim();
@@ -74,4 +82,16 @@ export function sourceRecordId(value: string): SourceRecordId {
 
 export function findingId(value: string): FindingId {
   return requireIdentifier(value, 'FindingId') as FindingId;
+}
+
+export function searchTargetId(value: string): SearchTargetId {
+  return requireIdentifier(value, 'SearchTargetId') as SearchTargetId;
+}
+
+export function discoveryRunId(value: string): DiscoveryRunId {
+  return requireIdentifier(value, 'DiscoveryRunId') as DiscoveryRunId;
+}
+
+export function discoveryMatchId(value: string): DiscoveryMatchId {
+  return requireIdentifier(value, 'DiscoveryMatchId') as DiscoveryMatchId;
 }

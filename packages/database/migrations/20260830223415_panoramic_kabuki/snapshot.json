@@ -1,0 +1,3209 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "a558759a-3ebe-4a96-9ec5-030fcd3ba0ce",
+  "prevIds": [
+    "7da415b3-4477-42a7-b11f-ad0b4816558a"
+  ],
+  "ddl": [
+    {
+      "name": "application_events",
+      "entityType": "tables"
+    },
+    {
+      "name": "applications",
+      "entityType": "tables"
+    },
+    {
+      "name": "background_task_events",
+      "entityType": "tables"
+    },
+    {
+      "name": "background_tasks",
+      "entityType": "tables"
+    },
+    {
+      "name": "candidate_claim_evidence",
+      "entityType": "tables"
+    },
+    {
+      "name": "candidate_claims",
+      "entityType": "tables"
+    },
+    {
+      "name": "candidates",
+      "entityType": "tables"
+    },
+    {
+      "name": "decision_reasons",
+      "entityType": "tables"
+    },
+    {
+      "name": "decisions",
+      "entityType": "tables"
+    },
+    {
+      "name": "discovery_matches",
+      "entityType": "tables"
+    },
+    {
+      "name": "discovery_runs",
+      "entityType": "tables"
+    },
+    {
+      "name": "evaluation_evidence",
+      "entityType": "tables"
+    },
+    {
+      "name": "evaluation_finding_evidence",
+      "entityType": "tables"
+    },
+    {
+      "name": "evaluation_findings",
+      "entityType": "tables"
+    },
+    {
+      "name": "evaluations",
+      "entityType": "tables"
+    },
+    {
+      "name": "evidence",
+      "entityType": "tables"
+    },
+    {
+      "name": "opportunities",
+      "entityType": "tables"
+    },
+    {
+      "name": "opportunity_snapshot_evidence",
+      "entityType": "tables"
+    },
+    {
+      "name": "opportunity_snapshot_sources",
+      "entityType": "tables"
+    },
+    {
+      "name": "opportunity_snapshots",
+      "entityType": "tables"
+    },
+    {
+      "name": "search_targets",
+      "entityType": "tables"
+    },
+    {
+      "name": "source_listings",
+      "entityType": "tables"
+    },
+    {
+      "name": "source_observations",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "application_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "application_id",
+      "entityType": "columns",
+      "table": "application_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "event_type",
+      "entityType": "columns",
+      "table": "application_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "detail",
+      "entityType": "columns",
+      "table": "application_events"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "occurred_at",
+      "entityType": "columns",
+      "table": "application_events"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "applications"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "candidate_id",
+      "entityType": "columns",
+      "table": "applications"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "opportunity_id",
+      "entityType": "columns",
+      "table": "applications"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "applications"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "applications"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "applications"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "background_task_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "task_id",
+      "entityType": "columns",
+      "table": "background_task_events"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "from_state",
+      "entityType": "columns",
+      "table": "background_task_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "to_state",
+      "entityType": "columns",
+      "table": "background_task_events"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "detail",
+      "entityType": "columns",
+      "table": "background_task_events"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "occurred_at",
+      "entityType": "columns",
+      "table": "background_task_events"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "background_tasks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "task_type",
+      "entityType": "columns",
+      "table": "background_tasks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "payload",
+      "entityType": "columns",
+      "table": "background_tasks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'PENDING'",
+      "generated": null,
+      "name": "state",
+      "entityType": "columns",
+      "table": "background_tasks"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "attempts",
+      "entityType": "columns",
+      "table": "background_tasks"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "3",
+      "generated": null,
+      "name": "max_attempts",
+      "entityType": "columns",
+      "table": "background_tasks"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "available_at",
+      "entityType": "columns",
+      "table": "background_tasks"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "lease_owner",
+      "entityType": "columns",
+      "table": "background_tasks"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "lease_expires_at",
+      "entityType": "columns",
+      "table": "background_tasks"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "idempotency_key",
+      "entityType": "columns",
+      "table": "background_tasks"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_error",
+      "entityType": "columns",
+      "table": "background_tasks"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "background_tasks"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "background_tasks"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "claim_id",
+      "entityType": "columns",
+      "table": "candidate_claim_evidence"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "evidence_id",
+      "entityType": "columns",
+      "table": "candidate_claim_evidence"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "candidate_claims"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "candidate_id",
+      "entityType": "columns",
+      "table": "candidate_claims"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "candidate_claims"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "entityType": "columns",
+      "table": "candidate_claims"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "scope",
+      "entityType": "columns",
+      "table": "candidate_claims"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "state",
+      "entityType": "columns",
+      "table": "candidate_claims"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "confidence",
+      "entityType": "columns",
+      "table": "candidate_claims"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "candidate_claims"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "candidate_claims"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "candidates"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "candidates"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "candidates"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "decision_reasons"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "decision_id",
+      "entityType": "columns",
+      "table": "decision_reasons"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "reason_code",
+      "entityType": "columns",
+      "table": "decision_reasons"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "finding_id",
+      "entityType": "columns",
+      "table": "decision_reasons"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "decisions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "evaluation_id",
+      "entityType": "columns",
+      "table": "decisions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "candidate_id",
+      "entityType": "columns",
+      "table": "decisions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "snapshot_id",
+      "entityType": "columns",
+      "table": "decisions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "priority",
+      "entityType": "columns",
+      "table": "decisions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "action",
+      "entityType": "columns",
+      "table": "decisions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "explanation",
+      "entityType": "columns",
+      "table": "decisions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "engine_version",
+      "entityType": "columns",
+      "table": "decisions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "input_fingerprint",
+      "entityType": "columns",
+      "table": "decisions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "eligibility_input_fingerprint",
+      "entityType": "columns",
+      "table": "decisions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "fit_input_fingerprint",
+      "entityType": "columns",
+      "table": "decisions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "quality_input_fingerprint",
+      "entityType": "columns",
+      "table": "decisions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "reason_codes",
+      "entityType": "columns",
+      "table": "decisions"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "evaluated_at",
+      "entityType": "columns",
+      "table": "decisions"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "decisions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "discovery_matches"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "candidate_id",
+      "entityType": "columns",
+      "table": "discovery_matches"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "search_target_id",
+      "entityType": "columns",
+      "table": "discovery_matches"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "discovery_run_id",
+      "entityType": "columns",
+      "table": "discovery_matches"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "opportunity_id",
+      "entityType": "columns",
+      "table": "discovery_matches"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_listing_id",
+      "entityType": "columns",
+      "table": "discovery_matches"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "matched_at",
+      "entityType": "columns",
+      "table": "discovery_matches"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'[]'",
+      "generated": null,
+      "name": "match_reasons_json",
+      "entityType": "columns",
+      "table": "discovery_matches"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'[]'",
+      "generated": null,
+      "name": "retained_unresolved_json",
+      "entityType": "columns",
+      "table": "discovery_matches"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "discovery_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "candidate_id",
+      "entityType": "columns",
+      "table": "discovery_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "search_target_id",
+      "entityType": "columns",
+      "table": "discovery_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_system",
+      "entityType": "columns",
+      "table": "discovery_runs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "started_at",
+      "entityType": "columns",
+      "table": "discovery_runs"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "completed_at",
+      "entityType": "columns",
+      "table": "discovery_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "discovery_runs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "discovered_count",
+      "entityType": "columns",
+      "table": "discovery_runs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "accepted_count",
+      "entityType": "columns",
+      "table": "discovery_runs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "rejected_count",
+      "entityType": "columns",
+      "table": "discovery_runs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "rejected_by_reason_json",
+      "entityType": "columns",
+      "table": "discovery_runs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "error_summary",
+      "entityType": "columns",
+      "table": "discovery_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "evaluation_id",
+      "entityType": "columns",
+      "table": "evaluation_evidence"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "evidence_id",
+      "entityType": "columns",
+      "table": "evaluation_evidence"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "dimension",
+      "entityType": "columns",
+      "table": "evaluation_evidence"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "finding_id",
+      "entityType": "columns",
+      "table": "evaluation_finding_evidence"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "evidence_id",
+      "entityType": "columns",
+      "table": "evaluation_finding_evidence"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "evaluation_findings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "evaluation_id",
+      "entityType": "columns",
+      "table": "evaluation_findings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "category",
+      "entityType": "columns",
+      "table": "evaluation_findings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "dimension_key",
+      "entityType": "columns",
+      "table": "evaluation_findings"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "label",
+      "entityType": "columns",
+      "table": "evaluation_findings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "state",
+      "entityType": "columns",
+      "table": "evaluation_findings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "summary",
+      "entityType": "columns",
+      "table": "evaluation_findings"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "confidence",
+      "entityType": "columns",
+      "table": "evaluation_findings"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "modality",
+      "entityType": "columns",
+      "table": "evaluation_findings"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requirement_text",
+      "entityType": "columns",
+      "table": "evaluation_findings"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "explanation",
+      "entityType": "columns",
+      "table": "evaluation_findings"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "candidate_id",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "snapshot_id",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "eligibility_state",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "eligibility_engine_version",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "eligibility_input_fingerprint",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "fit_level",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "fit_engine_version",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "fit_input_fingerprint",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "fit_summary",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "quality_level",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "quality_engine_version",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "quality_input_fingerprint",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "quality_summary",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "quality_evaluated_at",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "quality_freshness_bucket",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "supersedes_evaluation_id",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "superseded_at",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "evaluations"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "evidence"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "evidence_type",
+      "entityType": "columns",
+      "table": "evidence"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_reference",
+      "entityType": "columns",
+      "table": "evidence"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "excerpt",
+      "entityType": "columns",
+      "table": "evidence"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'unreviewed'",
+      "generated": null,
+      "name": "state",
+      "entityType": "columns",
+      "table": "evidence"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "evidence"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "opportunities"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "opportunities"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "snapshot_id",
+      "entityType": "columns",
+      "table": "opportunity_snapshot_evidence"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "evidence_id",
+      "entityType": "columns",
+      "table": "opportunity_snapshot_evidence"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "snapshot_id",
+      "entityType": "columns",
+      "table": "opportunity_snapshot_sources"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_observation_id",
+      "entityType": "columns",
+      "table": "opportunity_snapshot_sources"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "opportunity_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "opportunity_id",
+      "entityType": "columns",
+      "table": "opportunity_snapshots"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "observed_at",
+      "entityType": "columns",
+      "table": "opportunity_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "title",
+      "entityType": "columns",
+      "table": "opportunity_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "organization",
+      "entityType": "columns",
+      "table": "opportunity_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "location",
+      "entityType": "columns",
+      "table": "opportunity_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "work_model",
+      "entityType": "columns",
+      "table": "opportunity_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "employment_type",
+      "entityType": "columns",
+      "table": "opportunity_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "compensation",
+      "entityType": "columns",
+      "table": "opportunity_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "content",
+      "entityType": "columns",
+      "table": "opportunity_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "fingerprint",
+      "entityType": "columns",
+      "table": "opportunity_snapshots"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "opportunity_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "candidate_id",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "enabled",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'[]'",
+      "generated": null,
+      "name": "target_roles_json",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'[]'",
+      "generated": null,
+      "name": "skills_json",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'[]'",
+      "generated": null,
+      "name": "locations_json",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "location_is_hard_filter",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'[]'",
+      "generated": null,
+      "name": "work_models_json",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "work_model_is_hard_filter",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'[]'",
+      "generated": null,
+      "name": "seniority_levels_json",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "seniority_is_hard_filter",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'[]'",
+      "generated": null,
+      "name": "employment_types_json",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "employment_type_is_hard_filter",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requires_sponsorship",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "willing_to_relocate",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "min_salary",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "currency",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "freshness_days",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'[]'",
+      "generated": null,
+      "name": "required_terms_json",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'[]'",
+      "generated": null,
+      "name": "excluded_terms_json",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'[]'",
+      "generated": null,
+      "name": "sources_json",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "search_targets"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "source_listings"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "opportunity_id",
+      "entityType": "columns",
+      "table": "source_listings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_system",
+      "entityType": "columns",
+      "table": "source_listings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_external_id",
+      "entityType": "columns",
+      "table": "source_listings"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_url",
+      "entityType": "columns",
+      "table": "source_listings"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "source_listings"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "source_listings"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "source_observations"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_listing_id",
+      "entityType": "columns",
+      "table": "source_observations"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "raw_payload",
+      "entityType": "columns",
+      "table": "source_observations"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "fingerprint",
+      "entityType": "columns",
+      "table": "source_observations"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "observed_at",
+      "entityType": "columns",
+      "table": "source_observations"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_updated_at",
+      "entityType": "columns",
+      "table": "source_observations"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "source_observations"
+    },
+    {
+      "columns": [
+        "application_id"
+      ],
+      "tableTo": "applications",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_application_events_application_id_applications_id_fk",
+      "entityType": "fks",
+      "table": "application_events"
+    },
+    {
+      "columns": [
+        "candidate_id"
+      ],
+      "tableTo": "candidates",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_applications_candidate_id_candidates_id_fk",
+      "entityType": "fks",
+      "table": "applications"
+    },
+    {
+      "columns": [
+        "opportunity_id"
+      ],
+      "tableTo": "opportunities",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_applications_opportunity_id_opportunities_id_fk",
+      "entityType": "fks",
+      "table": "applications"
+    },
+    {
+      "columns": [
+        "task_id"
+      ],
+      "tableTo": "background_tasks",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "background_task_events_task_id_background_tasks_id_fk",
+      "entityType": "fks",
+      "table": "background_task_events"
+    },
+    {
+      "columns": [
+        "claim_id"
+      ],
+      "tableTo": "candidate_claims",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_candidate_claim_evidence_claim_id_candidate_claims_id_fk",
+      "entityType": "fks",
+      "table": "candidate_claim_evidence"
+    },
+    {
+      "columns": [
+        "evidence_id"
+      ],
+      "tableTo": "evidence",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_candidate_claim_evidence_evidence_id_evidence_id_fk",
+      "entityType": "fks",
+      "table": "candidate_claim_evidence"
+    },
+    {
+      "columns": [
+        "candidate_id"
+      ],
+      "tableTo": "candidates",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_candidate_claims_candidate_id_candidates_id_fk",
+      "entityType": "fks",
+      "table": "candidate_claims"
+    },
+    {
+      "columns": [
+        "decision_id"
+      ],
+      "tableTo": "decisions",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_decision_reasons_decision_id_decisions_id_fk",
+      "entityType": "fks",
+      "table": "decision_reasons"
+    },
+    {
+      "columns": [
+        "finding_id"
+      ],
+      "tableTo": "evaluation_findings",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_decision_reasons_finding_id_evaluation_findings_id_fk",
+      "entityType": "fks",
+      "table": "decision_reasons"
+    },
+    {
+      "columns": [
+        "evaluation_id"
+      ],
+      "tableTo": "evaluations",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_decisions_evaluation_id_evaluations_id_fk",
+      "entityType": "fks",
+      "table": "decisions"
+    },
+    {
+      "columns": [
+        "candidate_id"
+      ],
+      "tableTo": "candidates",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_decisions_candidate_id_candidates_id_fk",
+      "entityType": "fks",
+      "table": "decisions"
+    },
+    {
+      "columns": [
+        "snapshot_id"
+      ],
+      "tableTo": "opportunity_snapshots",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_decisions_snapshot_id_opportunity_snapshots_id_fk",
+      "entityType": "fks",
+      "table": "decisions"
+    },
+    {
+      "columns": [
+        "candidate_id"
+      ],
+      "tableTo": "candidates",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_discovery_matches_candidate_id_candidates_id_fk",
+      "entityType": "fks",
+      "table": "discovery_matches"
+    },
+    {
+      "columns": [
+        "search_target_id"
+      ],
+      "tableTo": "search_targets",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_discovery_matches_search_target_id_search_targets_id_fk",
+      "entityType": "fks",
+      "table": "discovery_matches"
+    },
+    {
+      "columns": [
+        "discovery_run_id"
+      ],
+      "tableTo": "discovery_runs",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_discovery_matches_discovery_run_id_discovery_runs_id_fk",
+      "entityType": "fks",
+      "table": "discovery_matches"
+    },
+    {
+      "columns": [
+        "opportunity_id"
+      ],
+      "tableTo": "opportunities",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_discovery_matches_opportunity_id_opportunities_id_fk",
+      "entityType": "fks",
+      "table": "discovery_matches"
+    },
+    {
+      "columns": [
+        "source_listing_id"
+      ],
+      "tableTo": "source_listings",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_discovery_matches_source_listing_id_source_listings_id_fk",
+      "entityType": "fks",
+      "table": "discovery_matches"
+    },
+    {
+      "columns": [
+        "candidate_id"
+      ],
+      "tableTo": "candidates",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_discovery_runs_candidate_id_candidates_id_fk",
+      "entityType": "fks",
+      "table": "discovery_runs"
+    },
+    {
+      "columns": [
+        "search_target_id"
+      ],
+      "tableTo": "search_targets",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_discovery_runs_search_target_id_search_targets_id_fk",
+      "entityType": "fks",
+      "table": "discovery_runs"
+    },
+    {
+      "columns": [
+        "evaluation_id"
+      ],
+      "tableTo": "evaluations",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_evaluation_evidence_evaluation_id_evaluations_id_fk",
+      "entityType": "fks",
+      "table": "evaluation_evidence"
+    },
+    {
+      "columns": [
+        "evidence_id"
+      ],
+      "tableTo": "evidence",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_evaluation_evidence_evidence_id_evidence_id_fk",
+      "entityType": "fks",
+      "table": "evaluation_evidence"
+    },
+    {
+      "columns": [
+        "finding_id"
+      ],
+      "tableTo": "evaluation_findings",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_evaluation_finding_evidence_finding_id_evaluation_findings_id_fk",
+      "entityType": "fks",
+      "table": "evaluation_finding_evidence"
+    },
+    {
+      "columns": [
+        "evidence_id"
+      ],
+      "tableTo": "evidence",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_evaluation_finding_evidence_evidence_id_evidence_id_fk",
+      "entityType": "fks",
+      "table": "evaluation_finding_evidence"
+    },
+    {
+      "columns": [
+        "evaluation_id"
+      ],
+      "tableTo": "evaluations",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_evaluation_findings_evaluation_id_evaluations_id_fk",
+      "entityType": "fks",
+      "table": "evaluation_findings"
+    },
+    {
+      "columns": [
+        "candidate_id"
+      ],
+      "tableTo": "candidates",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_evaluations_candidate_id_candidates_id_fk",
+      "entityType": "fks",
+      "table": "evaluations"
+    },
+    {
+      "columns": [
+        "snapshot_id"
+      ],
+      "tableTo": "opportunity_snapshots",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_evaluations_snapshot_id_opportunity_snapshots_id_fk",
+      "entityType": "fks",
+      "table": "evaluations"
+    },
+    {
+      "columns": [
+        "snapshot_id"
+      ],
+      "tableTo": "opportunity_snapshots",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_opportunity_snapshot_evidence_snapshot_id_opportunity_snapshots_id_fk",
+      "entityType": "fks",
+      "table": "opportunity_snapshot_evidence"
+    },
+    {
+      "columns": [
+        "evidence_id"
+      ],
+      "tableTo": "evidence",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_opportunity_snapshot_evidence_evidence_id_evidence_id_fk",
+      "entityType": "fks",
+      "table": "opportunity_snapshot_evidence"
+    },
+    {
+      "columns": [
+        "snapshot_id"
+      ],
+      "tableTo": "opportunity_snapshots",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_opportunity_snapshot_sources_snapshot_id_opportunity_snapshots_id_fk",
+      "entityType": "fks",
+      "table": "opportunity_snapshot_sources"
+    },
+    {
+      "columns": [
+        "source_observation_id"
+      ],
+      "tableTo": "source_observations",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_opportunity_snapshot_sources_source_observation_id_source_observations_id_fk",
+      "entityType": "fks",
+      "table": "opportunity_snapshot_sources"
+    },
+    {
+      "columns": [
+        "opportunity_id"
+      ],
+      "tableTo": "opportunities",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_opportunity_snapshots_opportunity_id_opportunities_id_fk",
+      "entityType": "fks",
+      "table": "opportunity_snapshots"
+    },
+    {
+      "columns": [
+        "candidate_id"
+      ],
+      "tableTo": "candidates",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_search_targets_candidate_id_candidates_id_fk",
+      "entityType": "fks",
+      "table": "search_targets"
+    },
+    {
+      "columns": [
+        "opportunity_id"
+      ],
+      "tableTo": "opportunities",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_source_listings_opportunity_id_opportunities_id_fk",
+      "entityType": "fks",
+      "table": "source_listings"
+    },
+    {
+      "columns": [
+        "source_listing_id"
+      ],
+      "tableTo": "source_listings",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_source_observations_source_listing_id_source_listings_id_fk",
+      "entityType": "fks",
+      "table": "source_observations"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "application_events_pk",
+      "table": "application_events",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "applications_pk",
+      "table": "applications",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "background_task_events_pk",
+      "table": "background_task_events",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "background_tasks_pk",
+      "table": "background_tasks",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "candidate_claims_pk",
+      "table": "candidate_claims",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "candidates_pk",
+      "table": "candidates",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "decision_reasons_pk",
+      "table": "decision_reasons",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "decisions_pk",
+      "table": "decisions",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "discovery_matches_pk",
+      "table": "discovery_matches",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "discovery_runs_pk",
+      "table": "discovery_runs",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "evaluation_findings_pk",
+      "table": "evaluation_findings",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "evaluations_pk",
+      "table": "evaluations",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "evidence_pk",
+      "table": "evidence",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "opportunities_pk",
+      "table": "opportunities",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "opportunity_snapshots_pk",
+      "table": "opportunity_snapshots",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "search_targets_pk",
+      "table": "search_targets",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "source_listings_pk",
+      "table": "source_listings",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "source_observations_pk",
+      "table": "source_observations",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "application_id",
+          "isExpression": false
+        },
+        {
+          "value": "occurred_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "app_events_app_time_idx",
+      "entityType": "indexes",
+      "table": "application_events"
+    },
+    {
+      "columns": [
+        {
+          "value": "candidate_id",
+          "isExpression": false
+        },
+        {
+          "value": "opportunity_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "applications_candidate_opportunity_idx",
+      "entityType": "indexes",
+      "table": "applications"
+    },
+    {
+      "columns": [
+        {
+          "value": "task_id",
+          "isExpression": false
+        },
+        {
+          "value": "occurred_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "background_task_events_task_time_idx",
+      "entityType": "indexes",
+      "table": "background_task_events"
+    },
+    {
+      "columns": [
+        {
+          "value": "idempotency_key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "background_tasks_idempotency_key_unique",
+      "entityType": "indexes",
+      "table": "background_tasks"
+    },
+    {
+      "columns": [
+        {
+          "value": "state",
+          "isExpression": false
+        },
+        {
+          "value": "available_at",
+          "isExpression": false
+        },
+        {
+          "value": "created_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "background_tasks_claimable_idx",
+      "entityType": "indexes",
+      "table": "background_tasks"
+    },
+    {
+      "columns": [
+        {
+          "value": "state",
+          "isExpression": false
+        },
+        {
+          "value": "lease_expires_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "background_tasks_expired_lease_idx",
+      "entityType": "indexes",
+      "table": "background_tasks"
+    },
+    {
+      "columns": [
+        {
+          "value": "claim_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "cce_claim_idx",
+      "entityType": "indexes",
+      "table": "candidate_claim_evidence"
+    },
+    {
+      "columns": [
+        {
+          "value": "evidence_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "cce_evidence_idx",
+      "entityType": "indexes",
+      "table": "candidate_claim_evidence"
+    },
+    {
+      "columns": [
+        {
+          "value": "claim_id",
+          "isExpression": false
+        },
+        {
+          "value": "evidence_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "cce_unique_idx",
+      "entityType": "indexes",
+      "table": "candidate_claim_evidence"
+    },
+    {
+      "columns": [
+        {
+          "value": "decision_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "decision_reason_decision_idx",
+      "entityType": "indexes",
+      "table": "decision_reasons"
+    },
+    {
+      "columns": [
+        {
+          "value": "decision_id",
+          "isExpression": false
+        },
+        {
+          "value": "reason_code",
+          "isExpression": false
+        },
+        {
+          "value": "finding_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "decision_reason_unique",
+      "entityType": "indexes",
+      "table": "decision_reasons"
+    },
+    {
+      "columns": [
+        {
+          "value": "evaluation_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "decisions_eval_idx",
+      "entityType": "indexes",
+      "table": "decisions"
+    },
+    {
+      "columns": [
+        {
+          "value": "candidate_id",
+          "isExpression": false
+        },
+        {
+          "value": "snapshot_id",
+          "isExpression": false
+        },
+        {
+          "value": "engine_version",
+          "isExpression": false
+        },
+        {
+          "value": "input_fingerprint",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "decisions_input_idx",
+      "entityType": "indexes",
+      "table": "decisions"
+    },
+    {
+      "columns": [
+        {
+          "value": "candidate_id",
+          "isExpression": false
+        },
+        {
+          "value": "snapshot_id",
+          "isExpression": false
+        },
+        {
+          "value": "engine_version",
+          "isExpression": false
+        },
+        {
+          "value": "input_fingerprint",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "decisions_semantic_input_unique",
+      "entityType": "indexes",
+      "table": "decisions"
+    },
+    {
+      "columns": [
+        {
+          "value": "candidate_id",
+          "isExpression": false
+        },
+        {
+          "value": "search_target_id",
+          "isExpression": false
+        },
+        {
+          "value": "opportunity_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "discovery_matches_cand_target_opp_idx",
+      "entityType": "indexes",
+      "table": "discovery_matches"
+    },
+    {
+      "columns": [
+        {
+          "value": "candidate_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "discovery_matches_candidate_idx",
+      "entityType": "indexes",
+      "table": "discovery_matches"
+    },
+    {
+      "columns": [
+        {
+          "value": "search_target_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "discovery_runs_target_idx",
+      "entityType": "indexes",
+      "table": "discovery_runs"
+    },
+    {
+      "columns": [
+        {
+          "value": "candidate_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "discovery_runs_candidate_idx",
+      "entityType": "indexes",
+      "table": "discovery_runs"
+    },
+    {
+      "columns": [
+        {
+          "value": "evaluation_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "eval_ev_eval_idx",
+      "entityType": "indexes",
+      "table": "evaluation_evidence"
+    },
+    {
+      "columns": [
+        {
+          "value": "evaluation_id",
+          "isExpression": false
+        },
+        {
+          "value": "evidence_id",
+          "isExpression": false
+        },
+        {
+          "value": "dimension",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "eval_ev_unique_idx",
+      "entityType": "indexes",
+      "table": "evaluation_evidence"
+    },
+    {
+      "columns": [
+        {
+          "value": "finding_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "efe_finding_idx",
+      "entityType": "indexes",
+      "table": "evaluation_finding_evidence"
+    },
+    {
+      "columns": [
+        {
+          "value": "finding_id",
+          "isExpression": false
+        },
+        {
+          "value": "evidence_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "efe_unique_idx",
+      "entityType": "indexes",
+      "table": "evaluation_finding_evidence"
+    },
+    {
+      "columns": [
+        {
+          "value": "evaluation_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "eval_finding_eval_idx",
+      "entityType": "indexes",
+      "table": "evaluation_findings"
+    },
+    {
+      "columns": [
+        {
+          "value": "evaluation_id",
+          "isExpression": false
+        },
+        {
+          "value": "category",
+          "isExpression": false
+        },
+        {
+          "value": "dimension_key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "eval_finding_unique_idx",
+      "entityType": "indexes",
+      "table": "evaluation_findings"
+    },
+    {
+      "columns": [
+        {
+          "value": "candidate_id",
+          "isExpression": false
+        },
+        {
+          "value": "snapshot_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "evaluations_candidate_snapshot_idx",
+      "entityType": "indexes",
+      "table": "evaluations"
+    },
+    {
+      "columns": [
+        {
+          "value": "snapshot_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "ose_snapshot_idx",
+      "entityType": "indexes",
+      "table": "opportunity_snapshot_evidence"
+    },
+    {
+      "columns": [
+        {
+          "value": "evidence_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "ose_evidence_idx",
+      "entityType": "indexes",
+      "table": "opportunity_snapshot_evidence"
+    },
+    {
+      "columns": [
+        {
+          "value": "snapshot_id",
+          "isExpression": false
+        },
+        {
+          "value": "evidence_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "ose_unique_idx",
+      "entityType": "indexes",
+      "table": "opportunity_snapshot_evidence"
+    },
+    {
+      "columns": [
+        {
+          "value": "snapshot_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "oss_snapshot_idx",
+      "entityType": "indexes",
+      "table": "opportunity_snapshot_sources"
+    },
+    {
+      "columns": [
+        {
+          "value": "snapshot_id",
+          "isExpression": false
+        },
+        {
+          "value": "source_observation_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "oss_unique_idx",
+      "entityType": "indexes",
+      "table": "opportunity_snapshot_sources"
+    },
+    {
+      "columns": [
+        {
+          "value": "opportunity_id",
+          "isExpression": false
+        },
+        {
+          "value": "observed_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "opportunity_snapshots_opp_time_idx",
+      "entityType": "indexes",
+      "table": "opportunity_snapshots"
+    },
+    {
+      "columns": [
+        {
+          "value": "candidate_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "search_targets_candidate_idx",
+      "entityType": "indexes",
+      "table": "search_targets"
+    },
+    {
+      "columns": [
+        {
+          "value": "source_system",
+          "isExpression": false
+        },
+        {
+          "value": "source_external_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "source_listings_system_ext_idx",
+      "entityType": "indexes",
+      "table": "source_listings"
+    },
+    {
+      "columns": [
+        {
+          "value": "source_listing_id",
+          "isExpression": false
+        },
+        {
+          "value": "observed_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "source_observations_listing_time_idx",
+      "entityType": "indexes",
+      "table": "source_observations"
+    },
+    {
+      "columns": [
+        {
+          "value": "source_listing_id",
+          "isExpression": false
+        },
+        {
+          "value": "fingerprint",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "source_observations_listing_fingerprint_idx",
+      "entityType": "indexes",
+      "table": "source_observations"
+    },
+    {
+      "value": "\"state\" in ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED')",
+      "name": "background_tasks_state_check",
+      "entityType": "checks",
+      "table": "background_tasks"
+    },
+    {
+      "value": "\"attempts\" >= 0",
+      "name": "background_tasks_attempts_check",
+      "entityType": "checks",
+      "table": "background_tasks"
+    },
+    {
+      "value": "\"max_attempts\" > 0",
+      "name": "background_tasks_max_attempts_check",
+      "entityType": "checks",
+      "table": "background_tasks"
+    }
+  ],
+  "renames": []
+}

@@ -374,4 +374,77 @@ describe('ApiProductRepository', () => {
       expect.objectContaining({ method: 'POST' }),
     );
   });
+
+  it('reads and mutates Search Targets and triggers discovery runs through API contracts', async () => {
+    const searchTarget = {
+      id: 'st-1',
+      candidateId: 'candidate-1',
+      name: 'Backend Engineer Target',
+      enabled: true,
+      targetRoles: ['Backend Engineer'],
+      skills: ['TypeScript'],
+      locations: ['Germany'],
+      locationIsHardFilter: true,
+      workModels: ['remote'],
+      workModelIsHardFilter: false,
+      seniorityLevels: ['mid', 'senior'],
+      seniorityIsHardFilter: false,
+      employmentTypes: ['full-time'],
+      employmentTypeIsHardFilter: false,
+      requiresSponsorship: null,
+      willingToRelocate: null,
+      minSalary: 90000,
+      currency: 'EUR',
+      freshnessDays: 30,
+      requiredTerms: ['TypeScript'],
+      excludedTerms: [],
+      sources: [{ sourceSystem: 'greenhouse', boardId: 'figma' }],
+      createdAt: observedAt,
+      updatedAt: observedAt,
+    };
+
+    const discoveryRun = {
+      id: 'dr-1',
+      candidateId: 'candidate-1',
+      searchTargetId: 'st-1',
+      sourceSystem: 'greenhouse',
+      startedAt: observedAt,
+      completedAt: observedAt,
+      status: 'COMPLETED',
+      discoveredCount: 4,
+      acceptedCount: 2,
+      rejectedCount: 2,
+      rejectedByReason: null,
+      errorSummary: null,
+    };
+
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response({ data: [searchTarget] }))
+      .mockResolvedValueOnce(response(searchTarget, 201))
+      .mockResolvedValueOnce(response({ run: discoveryRun, taskEnqueued: true }, 202))
+      .mockResolvedValueOnce(response({ data: [discoveryRun] }));
+
+    const repository = new ApiProductRepository(
+      'http://api.test',
+      'candidate-1',
+      fetcher,
+    );
+
+    const targets = await repository.getSearchTargets();
+    expect(targets).toHaveLength(1);
+    expect(targets[0]?.name).toBe('Backend Engineer Target');
+
+    const created = await repository.createSearchTarget({
+      name: 'Backend Engineer Target',
+      targetRoles: ['Backend Engineer'],
+    });
+    expect(created.id).toBe('st-1');
+
+    const runResult = await repository.runDiscovery('st-1');
+    expect(runResult.taskEnqueued).toBe(true);
+
+    const runs = await repository.getDiscoveryRuns();
+    expect(runs).toHaveLength(1);
+  });
 });

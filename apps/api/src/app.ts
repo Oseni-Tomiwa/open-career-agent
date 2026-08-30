@@ -6,9 +6,11 @@ import type { ApiConfig } from '@oca/config/server';
 import {
   CareerMemoryError,
   CareerMemoryRepository,
+  SearchTargetRepository,
   databaseIsReady,
   EvaluationRepository,
   EvidenceRepository,
+  BackgroundTaskLedger,
   type DatabaseHandle,
 } from '@oca/database';
 import { Type, type Static } from '@sinclair/typebox';
@@ -21,6 +23,8 @@ import {
   decisionId,
   opportunityId,
   snapshotId,
+  searchTargetId,
+  discoveryRunId,
 } from '@oca/domain';
 import {
   ApiErrorEnvelopeSchema,
@@ -33,6 +37,12 @@ import {
   UpdateCandidateClaimInputSchema,
   AttachClaimEvidenceInputSchema,
   CareerMemoryMutationResponseSchema,
+  SearchTargetSchema,
+  CreateSearchTargetInputSchema,
+  UpdateSearchTargetInputSchema,
+  SearchTargetListResponseSchema,
+  DiscoveryRunListResponseSchema,
+  TriggerDiscoveryRunResponseSchema,
 } from '@oca/schemas';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 
@@ -321,6 +331,243 @@ export async function createApiApp(
     },
   );
 
+  // SEARCH & DISCOVERY ENDPOINTS
+
+  const targetParams = Type.Object({
+    candidateId: Type.String(),
+    targetId: Type.String(),
+  });
+
+  app.get(
+    '/candidates/:candidateId/search-targets',
+    {
+      schema: {
+        tags: ['discovery'],
+        summary: 'List candidate search targets',
+        params: profileParams,
+        response: {
+          200: SearchTargetListResponseSchema,
+        },
+      },
+    },
+    (request) => {
+      const repo = new SearchTargetRepository(options.database);
+      const targets = repo.listSearchTargets(
+        candidateId(request.params.candidateId),
+      );
+      return { data: targets };
+    },
+  );
+
+  app.post(
+    '/candidates/:candidateId/search-targets',
+    {
+      schema: {
+        tags: ['discovery'],
+        summary: 'Create a candidate search target',
+        params: profileParams,
+        body: CreateSearchTargetInputSchema,
+        response: {
+          201: SearchTargetSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const repo = new SearchTargetRepository(options.database);
+      const created = repo.createSearchTarget(
+        candidateId(request.params.candidateId),
+        request.body,
+      );
+      return await reply.status(201).send(created);
+    },
+  );
+
+  app.get(
+    '/candidates/:candidateId/search-targets/:targetId',
+    {
+      schema: {
+        tags: ['discovery'],
+        summary: 'Get a candidate search target',
+        params: targetParams,
+        response: {
+          200: SearchTargetSchema,
+          404: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const repo = new SearchTargetRepository(options.database);
+      const target = repo.getSearchTarget(
+        candidateId(request.params.candidateId),
+        searchTargetId(request.params.targetId),
+      );
+      if (!target) {
+        await reply.status(404).send({
+          error: {
+            code: 'TARGET_NOT_FOUND',
+            message: 'Search target not found',
+            requestId: request.id,
+          },
+        });
+        return;
+      }
+      return target;
+    },
+  );
+
+  app.patch(
+    '/candidates/:candidateId/search-targets/:targetId',
+    {
+      schema: {
+        tags: ['discovery'],
+        summary: 'Update a candidate search target',
+        params: targetParams,
+        body: UpdateSearchTargetInputSchema,
+        response: {
+          200: SearchTargetSchema,
+          404: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const repo = new SearchTargetRepository(options.database);
+      const updated = repo.updateSearchTarget(
+        candidateId(request.params.candidateId),
+        searchTargetId(request.params.targetId),
+        request.body,
+      );
+      if (!updated) {
+        await reply.status(404).send({
+          error: {
+            code: 'TARGET_NOT_FOUND',
+            message: 'Search target not found',
+            requestId: request.id,
+          },
+        });
+        return;
+      }
+      return updated;
+    },
+  );
+
+  app.delete(
+    '/candidates/:candidateId/search-targets/:targetId',
+    {
+      schema: {
+        tags: ['discovery'],
+        summary: 'Delete a candidate search target',
+        params: targetParams,
+        response: {
+          204: Type.Null(),
+          404: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const repo = new SearchTargetRepository(options.database);
+      const deleted = repo.deleteSearchTarget(
+        candidateId(request.params.candidateId),
+        searchTargetId(request.params.targetId),
+      );
+      if (!deleted) {
+        await reply.status(404).send({
+          error: {
+            code: 'TARGET_NOT_FOUND',
+            message: 'Search target not found',
+            requestId: request.id,
+          },
+        });
+        return;
+      }
+      return reply.status(204).send(null);
+    },
+  );
+
+  app.post(
+    '/candidates/:candidateId/search-targets/:targetId/run',
+    {
+      schema: {
+        tags: ['discovery'],
+        summary: 'Trigger a manual discovery run for a search target',
+        params: targetParams,
+        response: {
+          202: TriggerDiscoveryRunResponseSchema,
+          404: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const repo = new SearchTargetRepository(options.database);
+      const cId = candidateId(request.params.candidateId);
+      const tId = searchTargetId(request.params.targetId);
+
+      const target = repo.getSearchTarget(cId, tId);
+      if (!target) {
+        await reply.status(404).send({
+          error: {
+            code: 'TARGET_NOT_FOUND',
+            message: 'Search target not found',
+            requestId: request.id,
+          },
+        });
+        return;
+      }
+
+      const runId = discoveryRunId(`dr_${crypto.randomUUID()}`);
+      const runRecord = repo.createDiscoveryRun(
+        runId,
+        cId,
+        tId,
+        target.sources[0]?.sourceSystem ?? 'greenhouse',
+      );
+
+      const taskLedger = new BackgroundTaskLedger(options.database);
+      taskLedger.enqueue({
+        taskType: 'discovery.run',
+        payload: {
+          candidateId: cId,
+          searchTargetId: tId,
+          discoveryRunId: runId,
+        },
+        idempotencyKey: `discovery-run-${tId}-${Date.now()}`,
+      });
+
+      return await reply.status(202).send({
+        run: {
+          ...runRecord,
+          rejectedByReason: runRecord.rejectedByReason ?? null,
+        },
+        taskEnqueued: true,
+      });
+    },
+  );
+
+  app.get(
+    '/candidates/:candidateId/discovery-runs',
+    {
+      schema: {
+        tags: ['discovery'],
+        summary: 'List candidate discovery runs',
+        params: profileParams,
+        response: {
+          200: DiscoveryRunListResponseSchema,
+        },
+      },
+    },
+    (request) => {
+      const repo = new SearchTargetRepository(options.database);
+      const runs = repo.listDiscoveryRuns(
+        candidateId(request.params.candidateId),
+      );
+      return {
+        data: runs.map((r) => ({
+          ...r,
+          rejectedByReason: r.rejectedByReason ?? null,
+        })),
+      };
+    },
+  );
+
   app.get(
     '/opportunities',
     {
@@ -334,7 +581,20 @@ export async function createApiApp(
     (request) => {
       const repo = new OpportunityRepository(options.database);
       const evaluationRepository = new EvaluationRepository(options.database);
-      const data = repo.getOpportunitySummaries().map((item) => {
+      const searchTargetRepo = new SearchTargetRepository(options.database);
+
+      let summaries = repo.getOpportunitySummaries();
+
+      if (request.query.candidateId) {
+        const cId = candidateId(request.query.candidateId);
+        const matchedOppIds = searchTargetRepo.getMatchedOpportunityIds(cId);
+        const matchedSet = new Set(matchedOppIds);
+        summaries = summaries.filter((item) =>
+          matchedSet.has(opportunityId(item.id)),
+        );
+      }
+
+      const data = summaries.map((item) => {
         if (!item.latestSnapshotId) return item;
         const sId = snapshotId(item.latestSnapshotId);
         const evaluation = request.query.candidateId

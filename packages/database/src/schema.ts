@@ -506,3 +506,127 @@ export const applicationEvents = sqliteTable(
     index('app_events_app_time_idx').on(table.applicationId, table.occurredAt),
   ],
 );
+
+// ==========================================
+// SEARCH & DISCOVERY CONFIGURATION
+// ==========================================
+
+export const DISCOVERY_RUN_STATUSES = [
+  'PENDING',
+  'RUNNING',
+  'COMPLETED',
+  'FAILED',
+] as const;
+
+export type DiscoveryRunStatus = (typeof DISCOVERY_RUN_STATUSES)[number];
+
+export const searchTargets = sqliteTable(
+  'search_targets',
+  {
+    id: text('id').primaryKey(),
+    candidateId: text('candidate_id')
+      .notNull()
+      .references(() => candidates.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    targetRolesJson: text('target_roles_json').notNull().default('[]'),
+    skillsJson: text('skills_json').notNull().default('[]'),
+    locationsJson: text('locations_json').notNull().default('[]'),
+    locationIsHardFilter: integer('location_is_hard_filter', {
+      mode: 'boolean',
+    })
+      .notNull()
+      .default(false),
+    workModelsJson: text('work_models_json').notNull().default('[]'),
+    workModelIsHardFilter: integer('work_model_is_hard_filter', {
+      mode: 'boolean',
+    })
+      .notNull()
+      .default(false),
+    seniorityLevelsJson: text('seniority_levels_json').notNull().default('[]'),
+    seniorityIsHardFilter: integer('seniority_is_hard_filter', {
+      mode: 'boolean',
+    })
+      .notNull()
+      .default(false),
+    employmentTypesJson: text('employment_types_json').notNull().default('[]'),
+    employmentTypeIsHardFilter: integer('employment_type_is_hard_filter', {
+      mode: 'boolean',
+    })
+      .notNull()
+      .default(false),
+    requiresSponsorship: integer('requires_sponsorship', { mode: 'boolean' }),
+    willingToRelocate: integer('willing_to_relocate', { mode: 'boolean' }),
+    minSalary: integer('min_salary'),
+    currency: text('currency'),
+    freshnessDays: integer('freshness_days'),
+    requiredTermsJson: text('required_terms_json').notNull().default('[]'),
+    excludedTermsJson: text('excluded_terms_json').notNull().default('[]'),
+    sourcesJson: text('sources_json').notNull().default('[]'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+    archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [index('search_targets_candidate_idx').on(table.candidateId)],
+);
+
+export const discoveryRuns = sqliteTable(
+  'discovery_runs',
+  {
+    id: text('id').primaryKey(),
+    candidateId: text('candidate_id')
+      .notNull()
+      .references(() => candidates.id, { onDelete: 'cascade' }),
+    searchTargetId: text('search_target_id')
+      .notNull()
+      .references(() => searchTargets.id, { onDelete: 'restrict' }),
+    sourceSystem: text('source_system').notNull(),
+    startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull(),
+    completedAt: integer('completed_at', { mode: 'timestamp_ms' }),
+    status: text('status', { enum: DISCOVERY_RUN_STATUSES }).notNull(),
+    discoveredCount: integer('discovered_count').notNull().default(0),
+    acceptedCount: integer('accepted_count').notNull().default(0),
+    rejectedCount: integer('rejected_count').notNull().default(0),
+    rejectedByReasonJson: text('rejected_by_reason_json'),
+    errorSummary: text('error_summary'),
+  },
+  (table) => [
+    index('discovery_runs_target_idx').on(table.searchTargetId),
+    index('discovery_runs_candidate_idx').on(table.candidateId),
+  ],
+);
+
+export const discoveryMatches = sqliteTable(
+  'discovery_matches',
+  {
+    id: text('id').primaryKey(),
+    candidateId: text('candidate_id')
+      .notNull()
+      .references(() => candidates.id, { onDelete: 'cascade' }),
+    searchTargetId: text('search_target_id')
+      .notNull()
+      .references(() => searchTargets.id, { onDelete: 'restrict' }),
+    discoveryRunId: text('discovery_run_id')
+      .notNull()
+      .references(() => discoveryRuns.id, { onDelete: 'cascade' }),
+    opportunityId: text('opportunity_id')
+      .notNull()
+      .references(() => opportunities.id, { onDelete: 'cascade' }),
+    sourceListingId: text('source_listing_id')
+      .notNull()
+      .references(() => sourceListings.id, { onDelete: 'cascade' }),
+    matchedAt: integer('matched_at', { mode: 'timestamp_ms' }).notNull(),
+    matchReasonsJson: text('match_reasons_json').notNull().default('[]'),
+    retainedUnresolvedJson: text('retained_unresolved_json')
+      .notNull()
+      .default('[]'),
+  },
+  (table) => [
+    uniqueIndex('discovery_matches_cand_target_opp_idx').on(
+      table.candidateId,
+      table.searchTargetId,
+      table.opportunityId,
+    ),
+    index('discovery_matches_candidate_idx').on(table.candidateId),
+  ],
+);

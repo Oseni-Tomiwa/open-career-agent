@@ -22,12 +22,17 @@ import type {
   ProductRepository,
   ProductSnapshot,
   SearchPreferences,
+  CreateSearchTargetInput,
+  UpdateSearchTargetInput,
+  SearchTarget,
+  DiscoveryRun,
   UpdateCandidateClaimInput,
 } from '../data/types.js';
 
 interface ProductDataContextValue {
   readonly snapshot: ProductSnapshot;
   readonly dataSource: 'seed' | 'api';
+  readonly repository: ProductRepository;
   readonly loadOpportunity: (
     opportunityId: string,
     signal?: AbortSignal,
@@ -52,6 +57,19 @@ interface ProductDataContextValue {
     evidence: ManualEvidenceInput,
     transitionTo?: CandidateClaimState,
   ) => Promise<CareerMemoryProfile>;
+  readonly getSearchTargets: () => Promise<readonly SearchTarget[]>;
+  readonly createSearchTarget: (
+    input: CreateSearchTargetInput,
+  ) => Promise<SearchTarget>;
+  readonly updateSearchTarget: (
+    targetId: string,
+    input: UpdateSearchTargetInput,
+  ) => Promise<SearchTarget>;
+  readonly deleteSearchTarget: (targetId: string) => Promise<boolean>;
+  readonly runDiscovery: (
+    targetId: string,
+  ) => Promise<{ run: DiscoveryRun; taskEnqueued: boolean }>;
+  readonly getDiscoveryRuns: () => Promise<readonly DiscoveryRun[]>;
 }
 
 const ProductDataContext = createContext<ProductDataContextValue | null>(null);
@@ -167,12 +185,44 @@ export function ProductDataProvider({
     [repository],
   );
 
+  const getSearchTargets = useCallback(
+    () => repository.getSearchTargets(),
+    [repository],
+  );
+
+  const createSearchTarget = useCallback(
+    (input: CreateSearchTargetInput) => repository.createSearchTarget(input),
+    [repository],
+  );
+
+  const updateSearchTarget = useCallback(
+    (targetId: string, input: UpdateSearchTargetInput) =>
+      repository.updateSearchTarget(targetId, input),
+    [repository],
+  );
+
+  const deleteSearchTarget = useCallback(
+    (targetId: string) => repository.deleteSearchTarget(targetId),
+    [repository],
+  );
+
+  const runDiscovery = useCallback(
+    (targetId: string) => repository.runDiscovery(targetId),
+    [repository],
+  );
+
+  const getDiscoveryRuns = useCallback(
+    () => repository.getDiscoveryRuns(),
+    [repository],
+  );
+
   const value = useMemo<ProductDataContextValue | null>(
     () =>
       snapshot
         ? {
             snapshot,
             dataSource: repository.dataSource,
+            repository,
             loadOpportunity,
             updateDecision,
             saveSearchPreferences,
@@ -180,6 +230,12 @@ export function ProductDataProvider({
             createCandidateClaim,
             updateCandidateClaim,
             attachClaimEvidence,
+            getSearchTargets,
+            createSearchTarget,
+            updateSearchTarget,
+            deleteSearchTarget,
+            runDiscovery,
+            getDiscoveryRuns,
           }
         : null,
     [
@@ -187,11 +243,17 @@ export function ProductDataProvider({
       attachClaimEvidence,
       createCandidateClaim,
       getCareerMemory,
-      repository.dataSource,
+      repository,
       snapshot,
       updateDecision,
       updateCandidateClaim,
       saveSearchPreferences,
+      getSearchTargets,
+      createSearchTarget,
+      updateSearchTarget,
+      deleteSearchTarget,
+      runDiscovery,
+      getDiscoveryRuns,
     ],
   );
 

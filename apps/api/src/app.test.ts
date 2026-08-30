@@ -8,6 +8,8 @@ import {
   EvaluationRepository,
   openDatabase,
   OpportunityRepository,
+  SearchTargetRepository,
+  SourceListingRepository,
   type DatabaseHandle,
 } from '@oca/database';
 import {
@@ -19,10 +21,13 @@ import {
 import {
   candidateId,
   decisionId,
+  discoveryMatchId,
+  discoveryRunId,
   evaluationId,
   evidenceId,
   findingId,
   opportunityId,
+  searchTargetId,
   snapshotId,
 } from '@oca/domain';
 import { Value } from '@sinclair/typebox/value';
@@ -54,8 +59,42 @@ describe('API application', () => {
 
   afterEach(async () => {
     await app.close();
+    database.close();
     rmSync(directory, { recursive: true, force: true });
   });
+
+  function recordTestDiscoveryMatch(
+    cId: ReturnType<typeof candidateId>,
+    oppId: ReturnType<typeof opportunityId>,
+    suffix: string,
+  ) {
+    const sourceRepo = new SourceListingRepository(database);
+    sourceRepo.persistListing(
+      `sl-test-${suffix}`,
+      { sourceSystem: 'greenhouse', sourceExternalId: `ext-${suffix}` },
+      oppId,
+      Date.now(),
+    );
+    const searchRepo = new SearchTargetRepository(database);
+    const target = searchRepo.createSearchTarget(cId, {
+      name: `Target ${suffix}`,
+    });
+    const run = searchRepo.createDiscoveryRun(
+      discoveryRunId(`run-test-${suffix}`),
+      cId,
+      searchTargetId(target.id),
+    );
+    searchRepo.recordDiscoveryMatch({
+      id: discoveryMatchId(`dm-test-${suffix}`),
+      candidateId: cId,
+      searchTargetId: searchTargetId(target.id),
+      discoveryRunId: discoveryRunId(run.id),
+      opportunityId: oppId,
+      sourceListingId: `sl-test-${suffix}`,
+      matchReasons: ['Test match'],
+      retainedUnresolved: [],
+    });
+  }
 
   it('reports process health', async () => {
     const response = await app.inject({ method: 'GET', url: '/health' });
@@ -110,6 +149,7 @@ describe('API application', () => {
     const snapshot = snapshotId('snapshot-api-fit');
     const opportunityRepository = new OpportunityRepository(database);
     opportunityRepository.createOpportunity(opportunity);
+    recordTestDiscoveryMatch(candidate, opportunity, 'fit');
     opportunityRepository.appendSnapshot({
       id: snapshot,
       opportunityId: opportunity,
@@ -206,6 +246,7 @@ describe('API application', () => {
     const snapshot = snapshotId('snapshot-api-qual');
     const opportunityRepository = new OpportunityRepository(database);
     opportunityRepository.createOpportunity(opportunity);
+    recordTestDiscoveryMatch(candidate, opportunity, 'qual');
     opportunityRepository.appendSnapshot({
       id: snapshot,
       opportunityId: opportunity,
@@ -303,6 +344,7 @@ describe('API application', () => {
     const snapshot = snapshotId('snapshot-api-dec');
     const opportunityRepository = new OpportunityRepository(database);
     opportunityRepository.createOpportunity(opportunity);
+    recordTestDiscoveryMatch(candidate, opportunity, 'dec');
     opportunityRepository.appendSnapshot({
       id: snapshot,
       opportunityId: opportunity,
@@ -387,6 +429,7 @@ describe('API application', () => {
 
     const opportunityRepository = new OpportunityRepository(database);
     opportunityRepository.createOpportunity(opportunity);
+    recordTestDiscoveryMatch(candidate, opportunity, 'multirev');
     opportunityRepository.appendSnapshot({
       id: snap1,
       opportunityId: opportunity,
@@ -660,5 +703,143 @@ describe('API application', () => {
         })
       ).statusCode,
     ).toBe(400);
+  });
+
+  it('supports search target CRUD, candidate isolation, and manual discovery run triggering', async () => {
+    const candidateA = candidateId('cand-api-search-a');
+    const candidateB = candidateId('cand-api-search-b');
+    const candidateRepo = new CandidateRepository(database);
+    candidateRepo.createCandidate(candidateA);
+    candidateRepo.createCandidate(candidateB);
+
+    // 1. Create target for candidate A
+    const createRes = await app.inject({
+      method: 'POST',
+      url: `/candidates/${candidateA}/search-targets`,
+      payload: {
+        name: 'Backend Target A',
+        targetRoles: ['Backend Engineer'],
+        locations: ['Germany'],
+        locationIsHardFilter: true,
+      },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const createdTarget = createRes.json<{ id: string; name: string }>();
+    expect(createdTarget).toMatchObject({
+      name: 'Backend Target A',
+      locationIsHardFilter: true,
+    });
+
+    // 2. List targets for Candidate A and B (Candidate isolation)
+    const listARes = await app.inject({
+      method: 'GET',
+      url: `/candidates/${candidateA}/search-targets`,
+    });
+    expect(listARes.statusCode).toBe(200);
+    expect(listARes.json<{ data: unknown[] }>().data).toHaveLength(1);
+
+    const listBRes = await app.inject({
+      method: 'GET',
+      url: `/candidates/${candidateB}/search-targets`,
+    });
+    expect(listBRes.statusCode).toBe(200);
+    expect(listBRes.json<{ data: unknown[] }>().data).toHaveLength(0);
+
+    // 3. Update search target
+    const targetIdStr = (createdTarget as { id: string }).id;
+    const patchRes = await app.inject({
+      method: 'PATCH',
+      url: `/candidates/${candidateA}/search-targets/${targetIdStr}`,
+      payload: {
+        skills: ['TypeScript'],
+        enabled: false,
+      },
+    });
+    expect(patchRes.statusCode).toBe(200);
+    expect(patchRes.json()).toMatchObject({
+      skills: ['TypeScript'],
+      enabled: false,
+    });
+
+    // 4. Trigger discovery run
+    const runRes = await app.inject({
+      method: 'POST',
+      url: `/candidates/${candidateA}/search-targets/${targetIdStr}/run`,
+    });
+    expect(runRes.statusCode).toBe(202);
+    expect(runRes.json()).toMatchObject({
+      taskEnqueued: true,
+      run: {
+        candidateId: candidateA,
+        searchTargetId: targetIdStr,
+        status: 'PENDING',
+      },
+    });
+
+    // 5. List discovery runs
+    const runsListRes = await app.inject({
+      method: 'GET',
+      url: `/candidates/${candidateA}/discovery-runs`,
+    });
+    expect(runsListRes.statusCode).toBe(200);
+    expect(runsListRes.json<{ data: unknown[] }>().data).toHaveLength(1);
+  });
+
+  it('proves Candidate B discovery matches never leak into Candidate A opportunity list', async () => {
+    const candidateA = candidateId('cand-leak-a');
+    const candidateB = candidateId('cand-leak-b');
+    const candRepo = new CandidateRepository(database);
+    candRepo.createCandidate(candidateA);
+    candRepo.createCandidate(candidateB);
+
+    const oppIdB = opportunityId('opp-b-only');
+    const oppRepo = new OpportunityRepository(database);
+    oppRepo.createOpportunity(oppIdB);
+    const sourceRepo = new SourceListingRepository(database);
+    sourceRepo.persistListing(
+      'sl-leak-b',
+      { sourceSystem: 'greenhouse', sourceExternalId: 'b-999' },
+      oppIdB,
+      Date.now(),
+    );
+
+    const searchRepo = new SearchTargetRepository(database);
+    const targetB = searchRepo.createSearchTarget(candidateB, {
+      name: 'Target B',
+    });
+    const runB = searchRepo.createDiscoveryRun(
+      discoveryRunId('run-leak-b'),
+      candidateB,
+      searchTargetId(targetB.id),
+    );
+
+    searchRepo.recordDiscoveryMatch({
+      id: discoveryMatchId('dm-leak-b'),
+      candidateId: candidateB,
+      searchTargetId: searchTargetId(targetB.id),
+      discoveryRunId: discoveryRunId(runB.id),
+      opportunityId: oppIdB,
+      sourceListingId: 'sl-leak-b',
+      matchReasons: ['Matched Candidate B target'],
+      retainedUnresolved: [],
+    });
+
+    // Query candidate A opportunities -> Must return 0 items (never Candidate B's match)
+    const oppsARes = await app.inject({
+      method: 'GET',
+      url: `/opportunities?candidateId=${candidateA}`,
+    });
+    expect(oppsARes.statusCode).toBe(200);
+    expect(oppsARes.json<{ data: unknown[] }>().data).toHaveLength(0);
+
+    // Query candidate B opportunities -> Returns candidate B's matched opportunity
+    const oppsBRes = await app.inject({
+      method: 'GET',
+      url: `/opportunities?candidateId=${candidateB}`,
+    });
+    expect(oppsBRes.statusCode).toBe(200);
+    const oppsBData = oppsBRes.json<{ data: Array<{ id: string }> }>().data;
+    expect(oppsBData).toHaveLength(1);
+    expect(oppsBData[0]?.id).toBe(oppIdB);
   });
 });

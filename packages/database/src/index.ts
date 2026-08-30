@@ -31,3 +31,10 @@ export { EvaluationRepository } from './repositories/evaluation-repository.js';
 export { EvidenceRepository } from './repositories/evidence-repository.js';
 export { ApplicationRepository } from './repositories/application-repository.js';
 export { SourceListingRepository } from './repositories/source-listing-repository.js';
+export {
+  SearchTargetRepository,
+  type CreateSearchTargetInput,
+  type UpdateSearchTargetInput,
+  type DiscoveryRunRecord,
+  type DiscoveryMatchRecord,
+} from './repositories/search-target-repository.js';

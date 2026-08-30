@@ -245,6 +245,78 @@ export interface UpdateCandidateClaimInput {
   readonly confidence?: CandidateClaimConfidence | null;
 }
 
+export interface SearchTargetSource {
+  readonly sourceSystem: string;
+  readonly boardId: string;
+}
+
+export interface SearchTarget {
+  readonly id: string;
+  readonly candidateId: string;
+  readonly name: string;
+  readonly enabled: boolean;
+  readonly targetRoles: readonly string[];
+  readonly skills: readonly string[];
+  readonly locations: readonly string[];
+  readonly locationIsHardFilter: boolean;
+  readonly workModels: readonly ('remote' | 'hybrid' | 'onsite')[];
+  readonly workModelIsHardFilter: boolean;
+  readonly seniorityLevels: readonly ('internship' | 'entry' | 'junior' | 'mid' | 'senior')[];
+  readonly seniorityIsHardFilter: boolean;
+  readonly employmentTypes: readonly ('full-time' | 'contract' | 'internship')[];
+  readonly employmentTypeIsHardFilter: boolean;
+  readonly requiresSponsorship: boolean | null;
+  readonly willingToRelocate: boolean | null;
+  readonly minSalary: number | null;
+  readonly currency: string | null;
+  readonly freshnessDays: number | null;
+  readonly requiredTerms: readonly string[];
+  readonly excludedTerms: readonly string[];
+  readonly sources: readonly SearchTargetSource[];
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface CreateSearchTargetInput {
+  readonly name: string;
+  readonly enabled?: boolean;
+  readonly targetRoles?: readonly string[];
+  readonly skills?: readonly string[];
+  readonly locations?: readonly string[];
+  readonly locationIsHardFilter?: boolean;
+  readonly workModels?: readonly ('remote' | 'hybrid' | 'onsite')[];
+  readonly workModelIsHardFilter?: boolean;
+  readonly seniorityLevels?: readonly ('internship' | 'entry' | 'junior' | 'mid' | 'senior')[];
+  readonly seniorityIsHardFilter?: boolean;
+  readonly employmentTypes?: readonly ('full-time' | 'contract' | 'internship')[];
+  readonly employmentTypeIsHardFilter?: boolean;
+  readonly requiresSponsorship?: boolean | null;
+  readonly willingToRelocate?: boolean | null;
+  readonly minSalary?: number | null;
+  readonly currency?: string | null;
+  readonly freshnessDays?: number | null;
+  readonly requiredTerms?: readonly string[];
+  readonly excludedTerms?: readonly string[];
+  readonly sources?: readonly SearchTargetSource[];
+}
+
+export type UpdateSearchTargetInput = Partial<CreateSearchTargetInput>;
+
+export interface DiscoveryRun {
+  readonly id: string;
+  readonly candidateId: string;
+  readonly searchTargetId: string;
+  readonly sourceSystem: string;
+  readonly startedAt: string;
+  readonly completedAt: string | null;
+  readonly status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  readonly discoveredCount: number;
+  readonly acceptedCount: number;
+  readonly rejectedCount: number;
+  readonly rejectedByReason?: Record<string, number> | null;
+  readonly errorSummary: string | null;
+}
+
 export interface SearchPreferences {
   readonly targetRoles: readonly string[];
   readonly locations: readonly string[];
@@ -300,4 +372,15 @@ export interface ProductRepository {
     evidence: ManualEvidenceInput,
     transitionTo?: CandidateClaimState,
   ): Promise<CareerMemoryProfile>;
+  getSearchTargets(): Promise<readonly SearchTarget[]>;
+  createSearchTarget(input: CreateSearchTargetInput): Promise<SearchTarget>;
+  updateSearchTarget(
+    targetId: string,
+    input: UpdateSearchTargetInput,
+  ): Promise<SearchTarget>;
+  deleteSearchTarget(targetId: string): Promise<boolean>;
+  runDiscovery(
+    targetId: string,
+  ): Promise<{ run: DiscoveryRun; taskEnqueued: boolean }>;
+  getDiscoveryRuns(): Promise<readonly DiscoveryRun[]>;
 }
