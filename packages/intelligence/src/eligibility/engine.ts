@@ -77,7 +77,7 @@ export class EligibilityEngine {
     let overallState: EligibilityState = 'eligible';
 
     if (findings.length === 0) {
-      overallState = 'eligible'; // No requirements to block eligibility to determine conclusively
+      overallState = 'investigate'; // No eligibility constraints discovered, but cannot positively establish eligibility
     } else if (findings.some((f) => f.state === 'ineligible')) {
       overallState = 'ineligible'; // Any CONFIRMED HARD BLOCKER -> INELIGIBLE / BLOCKED
     } else if (findings.some((f) => f.state === 'investigate')) {
@@ -151,18 +151,31 @@ export class EligibilityEngine {
       }
     }
 
-    
     if (dimension === 'work_authorization') {
       const req = constraints.find((c) => c.modality === 'mandatory');
       const candAuth = claims.find((c) => c.state === 'supported');
-      const activeReject = claims.find((c) => c.state === 'conflict' && c.scope === req?.scope);
+      const activeReject = claims.find(
+        (c) => c.state === 'conflict' && c.scope === req?.scope,
+      );
 
       if (req) {
         if (candAuth && activeReject) {
-          return { dimension, state: 'investigate', summary: 'Contradictory claims regarding work authorization', confidence: 'high', evidenceReferences: [] };
+          return {
+            dimension,
+            state: 'investigate',
+            summary: 'Contradictory claims regarding work authorization',
+            confidence: 'high',
+            evidenceReferences: [],
+          };
         }
         if (activeReject) {
-           return { dimension, state: 'ineligible', summary: 'Candidate explicitly lacks required work authorization', confidence: 'high', evidenceReferences: [] };
+          return {
+            dimension,
+            state: 'ineligible',
+            summary: 'Candidate explicitly lacks required work authorization',
+            confidence: 'high',
+            evidenceReferences: [],
+          };
         }
         if (!candAuth) {
           return {
@@ -174,11 +187,11 @@ export class EligibilityEngine {
           };
         }
         if (candAuth && candAuth.scope !== req.scope) {
-          // e.g. Germany authorization for US requirement
           return {
             dimension,
-            state: 'ineligible',
-            summary: 'Candidate lacks required work authorization scope.',
+            state: 'investigate',
+            summary:
+              'Candidate has other work authorization, but required scope is unknown.',
             confidence: 'high',
             evidenceReferences: [],
           };
@@ -201,10 +214,29 @@ export class EligibilityEngine {
 
       if (req) {
         if (candLoc && candLoc.value !== req.scope) {
+          const text = req.sourceText.toLowerCase();
+          const hasStrictRequirement =
+            /(must (currently )?(reside|be based) in|remote (within|in) .* only|outside .* (are )?not eligible)/.test(
+              text,
+            );
+          const hasNoRelocation =
+            /(no relocation|relocation is not available)/.test(text);
+          const hasRelocationAllowance =
+            /(relocation support|relocation assistance|relocation available)/.test(
+              text,
+            );
+          const hasFutureAllowance = /by start date/.test(text);
+          const isStrictLocation =
+            (hasStrictRequirement || hasNoRelocation) &&
+            !hasRelocationAllowance &&
+            !hasFutureAllowance;
+
           return {
             dimension,
-            state: 'ineligible',
-            summary: 'Location required does not match candidate location.',
+            state: isStrictLocation ? 'ineligible' : 'investigate',
+            summary: isStrictLocation
+              ? 'Candidate location directly conflicts with strict geographic requirement.'
+              : 'Location required does not match known candidate location.',
             confidence: 'high',
             evidenceReferences: [],
           };
@@ -212,33 +244,66 @@ export class EligibilityEngine {
       }
     }
 
-    
-    
     if (dimension === 'citizenship') {
       const req = constraints.find((c) => c.modality === 'mandatory');
       const candCit = claims.find(
-        (c) => c.kind === 'citizenship' && c.state === 'supported'
+        (c) => c.kind === 'citizenship' && c.state === 'supported',
       );
       const activeReject = claims.find(
-        (c) => c.kind === 'citizenship' && c.state === 'conflict' && c.scope === req?.scope,
+        (c) =>
+          c.kind === 'citizenship' &&
+          c.state === 'conflict' &&
+          c.scope === req?.scope,
       );
       if (req) {
         if (candCit && candCit.scope === req.scope && activeReject) {
-           return { dimension, state: 'investigate', summary: 'Contradictory claims regarding citizenship', confidence: 'high', evidenceReferences: [] };
+          return {
+            dimension,
+            state: 'investigate',
+            summary: 'Contradictory claims regarding citizenship',
+            confidence: 'high',
+            evidenceReferences: [],
+          };
         }
-        if (activeReject || (candCit && candCit.value !== req.scope && candCit.scope !== req.scope)) {
+        if (
+          candCit &&
+          candCit.value !== req.scope &&
+          candCit.scope !== req.scope
+        ) {
+          return {
+            dimension,
+            state: 'investigate',
+            summary:
+              'Citizenship required does not match known candidate citizenship.',
+            confidence: 'high',
+            evidenceReferences: [],
+          };
+        }
+        if (activeReject) {
           return {
             dimension,
             state: 'ineligible',
-            summary: 'Citizenship required does not match candidate citizenship.',
+            summary: 'Candidate explicitly lacks required citizenship.',
             confidence: 'high',
             evidenceReferences: [],
           };
         }
         if (candCit && candCit.scope === req.scope) {
-           return { dimension, state: 'eligible', summary: 'Candidate has required citizenship', confidence: 'high', evidenceReferences: [] };
+          return {
+            dimension,
+            state: 'eligible',
+            summary: 'Candidate has required citizenship',
+            confidence: 'high',
+            evidenceReferences: [],
+          };
         }
-        return { dimension, state: 'investigate', summary: 'Requires citizenship but candidate citizenship unknown', confidence: 'high', evidenceReferences: [] };
+        return {
+          dimension,
+          state: 'investigate',
+          summary: 'Requires citizenship but candidate citizenship unknown',
+          confidence: 'high',
+          evidenceReferences: [],
+        };
       }
     }
 
@@ -261,35 +326,126 @@ export class EligibilityEngine {
       }
     }
 
-    
     if (dimension === 'clearance') {
       const req = constraints.find((c) => c.modality === 'mandatory');
       if (req) {
-        const hasClearance = claims.find((c) => c.kind === 'clearance' && c.state === 'supported' && c.scope === req.scope);
-        const activeReject = claims.find((c) => c.kind === 'clearance' && c.state === 'conflict' && c.scope === req.scope);
-        if (hasClearance && activeReject) return { dimension, state: 'investigate', summary: 'Contradictory claims regarding clearance', confidence: 'high', evidenceReferences: [] };
-        if (hasClearance) return { dimension, state: 'eligible', summary: `Candidate has required ${req.scope} clearance`, confidence: 'high', evidenceReferences: [] };
-        if (activeReject) return { dimension, state: 'ineligible', summary: `Candidate explicitly lacks required ${req.scope} clearance`, confidence: 'high', evidenceReferences: [] };
-        return { dimension, state: 'investigate', summary: `Requires ${req.scope} clearance but candidate clearance status unknown`, confidence: 'high', evidenceReferences: [] };
+        const hasClearance = claims.find(
+          (c) =>
+            c.kind === 'clearance' &&
+            c.state === 'supported' &&
+            c.scope === req.scope,
+        );
+        const activeReject = claims.find(
+          (c) =>
+            c.kind === 'clearance' &&
+            c.state === 'conflict' &&
+            c.scope === req.scope,
+        );
+        if (hasClearance && activeReject)
+          return {
+            dimension,
+            state: 'investigate',
+            summary: 'Contradictory claims regarding clearance',
+            confidence: 'high',
+            evidenceReferences: [],
+          };
+        if (hasClearance)
+          return {
+            dimension,
+            state: 'eligible',
+            summary: `Candidate has required ${req.scope} clearance`,
+            confidence: 'high',
+            evidenceReferences: [],
+          };
+        if (activeReject)
+          return {
+            dimension,
+            state: 'ineligible',
+            summary: `Candidate explicitly lacks required ${req.scope} clearance`,
+            confidence: 'high',
+            evidenceReferences: [],
+          };
+        return {
+          dimension,
+          state: 'investigate',
+          summary: `Requires ${req.scope} clearance but candidate clearance status unknown`,
+          confidence: 'high',
+          evidenceReferences: [],
+        };
       }
-      return { dimension, state: 'eligible', summary: 'No clearance requirements found', confidence: 'high', evidenceReferences: [] };
+      return {
+        dimension,
+        state: 'eligible',
+        summary: 'No clearance requirements found',
+        confidence: 'high',
+        evidenceReferences: [],
+      };
     }
 
     if (dimension === 'language') {
       const mandatoryReq = constraints.find((c) => c.modality === 'mandatory');
       const preferredReq = constraints.find((c) => c.modality === 'preferred');
       if (mandatoryReq) {
-        const hasLang = claims.find((c) => c.kind === 'language' && c.state === 'supported' && c.scope === mandatoryReq.scope);
-        const conflictLang = claims.find((c) => c.kind === 'language' && c.state === 'conflict' && c.scope === mandatoryReq.scope);
-        if (hasLang && conflictLang) return { dimension, state: 'investigate', summary: 'Contradictory claims regarding language fluency', confidence: 'high', evidenceReferences: [] };
-        if (hasLang) return { dimension, state: 'eligible', summary: `Candidate is fluent in ${mandatoryReq.scope}`, confidence: 'high', evidenceReferences: [] };
-        if (conflictLang) return { dimension, state: 'ineligible', summary: `Candidate explicitly not fluent in ${mandatoryReq.scope}`, confidence: 'high', evidenceReferences: [] };
-        return { dimension, state: 'investigate', summary: `Requires ${mandatoryReq.scope} fluency but candidate language status unknown`, confidence: 'high', evidenceReferences: [] };
+        const hasLang = claims.find(
+          (c) =>
+            c.kind === 'language' &&
+            c.state === 'supported' &&
+            c.scope === mandatoryReq.scope,
+        );
+        const conflictLang = claims.find(
+          (c) =>
+            c.kind === 'language' &&
+            c.state === 'conflict' &&
+            c.scope === mandatoryReq.scope,
+        );
+        if (hasLang && conflictLang)
+          return {
+            dimension,
+            state: 'investigate',
+            summary: 'Contradictory claims regarding language fluency',
+            confidence: 'high',
+            evidenceReferences: [],
+          };
+        if (hasLang)
+          return {
+            dimension,
+            state: 'eligible',
+            summary: `Candidate is fluent in ${mandatoryReq.scope}`,
+            confidence: 'high',
+            evidenceReferences: [],
+          };
+        if (conflictLang)
+          return {
+            dimension,
+            state: 'ineligible',
+            summary: `Candidate explicitly not fluent in ${mandatoryReq.scope}`,
+            confidence: 'high',
+            evidenceReferences: [],
+          };
+        return {
+          dimension,
+          state: 'investigate',
+          summary: `Requires ${mandatoryReq.scope} fluency but candidate language status unknown`,
+          confidence: 'high',
+          evidenceReferences: [],
+        };
       }
       if (preferredReq) {
-         return { dimension, state: 'eligible', summary: `${preferredReq.scope} is preferred but not mandatory for eligibility`, confidence: 'high', evidenceReferences: [] };
+        return {
+          dimension,
+          state: 'eligible',
+          summary: `${preferredReq.scope} is preferred but not mandatory for eligibility`,
+          confidence: 'high',
+          evidenceReferences: [],
+        };
       }
-      return { dimension, state: 'eligible', summary: 'No language requirements found', confidence: 'high', evidenceReferences: [] };
+      return {
+        dimension,
+        state: 'eligible',
+        summary: 'No language requirements found',
+        confidence: 'high',
+        evidenceReferences: [],
+      };
     }
 
     if (constraints.length === 0) {

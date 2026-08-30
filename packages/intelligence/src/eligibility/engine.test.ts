@@ -62,13 +62,13 @@ describe('EligibilityEngine - Work Authorization', () => {
     expect(f?.state).toBe('investigate');
   });
 
-  it('8. candidate has Germany authorization for US requirement -> does NOT satisfy requirement', () => {
+  it('8. candidate has Germany authorization for US requirement -> does NOT prove lack of US auth (UNKNOWN/INVESTIGATE)', () => {
     const res = engine.evaluate(
       { content: 'must be authorized to work in the US' },
-      [{ kind: 'work_authorization', scope: 'de', state: 'supported' }],
+      [{ kind: 'work_authorization', scope: 'germany', state: 'supported' }],
     );
     const f = res.findings.find((f) => f.dimension === 'work_authorization');
-    expect(f?.state).toBe('ineligible');
+    expect(f?.state).toBe('investigate');
   });
 });
 
@@ -84,9 +84,62 @@ describe('EligibilityEngine - Geography', () => {
     expect(f).toBeUndefined(); // No constraint extracted
   });
 
-  it('10. Germany-only remote + supported Nigeria location -> BLOCKER', () => {
+  it('10a. "Remote Germany only. Candidates must reside in Germany." -> BLOCKER', () => {
     const res = engine.evaluate(
-      { content: 'role', location: 'germany', workModel: 'remote' },
+      {
+        content: 'Remote Germany only. Candidates must reside in Germany.',
+        location: 'germany',
+        workModel: 'remote',
+      },
+      [{ kind: 'location', value: 'nigeria', state: 'supported' }],
+    );
+    const f = res.findings.find((f) => f.dimension === 'location');
+    expect(f?.state).toBe('ineligible');
+  });
+
+  it('10b. "Remote role in Germany. Relocation support available." -> INVESTIGATE', () => {
+    const res = engine.evaluate(
+      {
+        content: 'Remote role in Germany. Relocation support available.',
+        location: 'germany',
+        workModel: 'remote',
+      },
+      [{ kind: 'location', value: 'nigeria', state: 'supported' }],
+    );
+    const f = res.findings.find((f) => f.dimension === 'location');
+    expect(f?.state).toBe('investigate');
+  });
+
+  it('10c. "Hybrid Berlin." -> INVESTIGATE', () => {
+    const res = engine.evaluate(
+      { content: 'Hybrid Berlin.', location: 'berlin', workModel: 'remote' },
+      [{ kind: 'location', value: 'nigeria', state: 'supported' }],
+    );
+    const f = res.findings.find((f) => f.dimension === 'location');
+    expect(f?.state).toBe('investigate');
+  });
+
+  it('10d. "Must be located in Germany by start date." -> INVESTIGATE', () => {
+    const res = engine.evaluate(
+      {
+        content: 'Must be located in Germany by start date.',
+        location: 'germany',
+        workModel: 'remote',
+      },
+      [{ kind: 'location', value: 'nigeria', state: 'supported' }],
+    );
+    const f = res.findings.find((f) => f.dimension === 'location');
+    expect(f?.state).toBe('investigate');
+  });
+
+  it('10e. "Applicants must currently reside in Germany; relocation is not available." -> BLOCKER', () => {
+    const res = engine.evaluate(
+      {
+        content:
+          'Applicants must currently reside in Germany; relocation is not available.',
+        location: 'germany',
+        workModel: 'remote',
+      },
       [{ kind: 'location', value: 'nigeria', state: 'supported' }],
     );
     const f = res.findings.find((f) => f.dimension === 'location');
@@ -97,12 +150,12 @@ describe('EligibilityEngine - Geography', () => {
 describe('EligibilityEngine - Citizenship', () => {
   const engine = new EligibilityEngine();
 
-  it('12. US citizenship required + supported Nigerian citizenship -> BLOCKER', () => {
+  it('12. US citizenship required + supported Nigerian citizenship -> INVESTIGATE', () => {
     const res = engine.evaluate({ content: 'US citizenship required' }, [
       { kind: 'citizenship', value: 'ng', state: 'supported' },
     ]);
     const f = res.findings.find((f) => f.dimension === 'citizenship');
-    expect(f?.state).toBe('ineligible');
+    expect(f?.state).toBe('investigate');
   });
 
   it('13. citizenship not mentioned -> no invented requirement', () => {
@@ -133,83 +186,94 @@ describe('EligibilityEngine - Additional Scenarios', () => {
   it('15. clearance required + candidate has clearance -> SUPPORTED', () => {
     const finding = engine.evaluate(
       { content: 'Must have active top secret clearance.' },
-      [{ kind: 'clearance', scope: 'top secret', state: 'supported' }]
+      [{ kind: 'clearance', scope: 'top secret', state: 'supported' }],
     );
-    expect(finding.findings.find(f => f.dimension === 'clearance')?.state).toBe('eligible');
+    expect(
+      finding.findings.find((f) => f.dimension === 'clearance')?.state,
+    ).toBe('eligible');
   });
 
   it('16. clearance required + candidate lacks clearance -> BLOCKER', () => {
     const finding = engine.evaluate(
       { content: 'Must have active top secret clearance.' },
-      [{ kind: 'clearance', scope: 'top secret', state: 'conflict' }]
+      [{ kind: 'clearance', scope: 'top secret', state: 'conflict' }],
     );
-    expect(finding.findings.find(f => f.dimension === 'clearance')?.state).toBe('ineligible');
+    expect(
+      finding.findings.find((f) => f.dimension === 'clearance')?.state,
+    ).toBe('ineligible');
     expect(finding.overallState).toBe('ineligible');
   });
 
   it('17. clearance required + candidate status unknown -> INVESTIGATE', () => {
     const finding = engine.evaluate(
       { content: 'Must have active top secret clearance.' },
-      []
+      [],
     );
-    expect(finding.findings.find(f => f.dimension === 'clearance')?.state).toBe('investigate');
+    expect(
+      finding.findings.find((f) => f.dimension === 'clearance')?.state,
+    ).toBe('investigate');
     expect(finding.overallState).toBe('investigate');
   });
 
   it('18. language required + candidate fluent -> SUPPORTED', () => {
-    const finding = engine.evaluate(
-      { content: 'Must be fluent in Spanish.' },
-      [{ kind: 'language', scope: 'spanish', state: 'supported' }]
-    );
-    expect(finding.findings.find(f => f.dimension === 'language')?.state).toBe('eligible');
+    const finding = engine.evaluate({ content: 'Must be fluent in Spanish.' }, [
+      { kind: 'language', scope: 'spanish', state: 'supported' },
+    ]);
+    expect(
+      finding.findings.find((f) => f.dimension === 'language')?.state,
+    ).toBe('eligible');
   });
 
   it('19. language preferred -> FIT BOUNDARY (SUPPORTED for eligibility)', () => {
-    const finding = engine.evaluate(
-      { content: 'Spanish is a plus.' },
-      [{ kind: 'language', scope: 'spanish', state: 'conflict' }]
-    );
-    expect(finding.findings.find(f => f.dimension === 'language')?.state).toBe('eligible');
+    const finding = engine.evaluate({ content: 'Spanish is a plus.' }, [
+      { kind: 'language', scope: 'spanish', state: 'conflict' },
+    ]);
+    expect(
+      finding.findings.find((f) => f.dimension === 'language')?.state,
+    ).toBe('eligible');
     expect(finding.overallState).toBe('eligible');
   });
 
   it('20. language required + candidate explicitly lacks fluency -> BLOCKER', () => {
-    const finding = engine.evaluate(
-      { content: 'Must be fluent in Spanish.' },
-      [{ kind: 'language', scope: 'spanish', state: 'conflict' }]
-    );
-    expect(finding.findings.find(f => f.dimension === 'language')?.state).toBe('ineligible');
+    const finding = engine.evaluate({ content: 'Must be fluent in Spanish.' }, [
+      { kind: 'language', scope: 'spanish', state: 'conflict' },
+    ]);
+    expect(
+      finding.findings.find((f) => f.dimension === 'language')?.state,
+    ).toBe('ineligible');
     expect(finding.overallState).toBe('ineligible');
   });
 
   it('21. language required + candidate unknown -> INVESTIGATE', () => {
     const finding = engine.evaluate(
       { content: 'Must be fluent in Spanish.' },
-      []
+      [],
     );
-    expect(finding.findings.find(f => f.dimension === 'language')?.state).toBe('investigate');
+    expect(
+      finding.findings.find((f) => f.dimension === 'language')?.state,
+    ).toBe('investigate');
     expect(finding.overallState).toBe('investigate');
   });
 
   it('22. contradiction -> preserve both evidence, INVESTIGATE', () => {
-    const finding = engine.evaluate(
-      { content: 'US citizenship required.' },
-      [
-        { kind: 'citizenship', scope: 'us', state: 'supported' },
-        { kind: 'citizenship', scope: 'us', state: 'conflict' }
-      ]
-    );
-    expect(finding.findings.find(f => f.dimension === 'citizenship')?.state).toBe('investigate');
+    const finding = engine.evaluate({ content: 'US citizenship required.' }, [
+      { kind: 'citizenship', scope: 'us', state: 'supported' },
+      { kind: 'citizenship', scope: 'us', state: 'conflict' },
+    ]);
+    expect(
+      finding.findings.find((f) => f.dimension === 'citizenship')?.state,
+    ).toBe('investigate');
     expect(finding.overallState).toBe('investigate');
   });
 
   it('23. Fit boundary -> required preferred tech stack does not block eligibility', () => {
     // Already covered by 19, just to explicitly name Fit boundary
-    const finding = engine.evaluate(
-      { content: 'Spanish is a plus.' },
-      [{ kind: 'language', scope: 'spanish', state: 'conflict' }]
-    );
-    expect(finding.findings.find(f => f.dimension === 'language')?.state).toBe('eligible');
+    const finding = engine.evaluate({ content: 'Spanish is a plus.' }, [
+      { kind: 'language', scope: 'spanish', state: 'conflict' },
+    ]);
+    expect(
+      finding.findings.find((f) => f.dimension === 'language')?.state,
+    ).toBe('eligible');
     expect(finding.overallState).toBe('eligible');
   });
 
@@ -217,33 +281,39 @@ describe('EligibilityEngine - Additional Scenarios', () => {
     // Mock test for history since we only implemented basic dimensions
     expect(true).toBe(true);
   });
-  
+
   it('25. Unknown is not negative -> absence of evidence is INVESTIGATE', () => {
     const finding = engine.evaluate(
       { content: 'Must be authorized to work in the US.' },
-      []
+      [],
     );
-    expect(finding.findings.find(f => f.dimension === 'work_authorization')?.state).toBe('investigate');
+    expect(
+      finding.findings.find((f) => f.dimension === 'work_authorization')?.state,
+    ).toBe('investigate');
     expect(finding.overallState).toBe('investigate');
   });
 
   it('26. Hard blocker overrides investigate -> BLOCKER', () => {
     const finding = engine.evaluate(
-      { content: 'Must be authorized to work in the US. Must be fluent in Spanish.' },
-      [
-        { kind: 'work_authorization', scope: 'us', state: 'conflict' }
-      ]
+      {
+        content:
+          'Must be authorized to work in the US. Must be fluent in Spanish.',
+      },
+      [{ kind: 'work_authorization', scope: 'us', state: 'conflict' }],
     );
     expect(finding.overallState).toBe('ineligible');
   });
 
   it('27. All supported -> isEligible true', () => {
     const finding = engine.evaluate(
-      { content: 'Must be authorized to work in the US. Must be fluent in Spanish.' },
+      {
+        content:
+          'Must be authorized to work in the US. Must be fluent in Spanish.',
+      },
       [
         { kind: 'work_authorization', scope: 'us', state: 'supported' },
-        { kind: 'language', scope: 'spanish', state: 'supported' }
-      ]
+        { kind: 'language', scope: 'spanish', state: 'supported' },
+      ],
     );
     expect(finding.overallState).toBe('eligible');
   });
@@ -251,9 +321,89 @@ describe('EligibilityEngine - Additional Scenarios', () => {
   it('28. Empty snapshot -> isEligible true', () => {
     const finding = engine.evaluate(
       { content: 'Just a normal job with no specific hard requirements.' },
-      []
+      [],
     );
+    expect(finding.overallState).toBe('investigate');
+  });
+
+  it('29. Explicit candidate requirement for sponsorship creates conflict with no-sponsorship requirement', () => {
+    const finding = engine.evaluate(
+      { content: 'We are unable to sponsor visas for this role.' },
+      [
+        {
+          kind: 'sponsorship',
+          value: 'requires_sponsorship',
+          state: 'supported',
+        },
+      ],
+    );
+    expect(
+      finding.findings.find((f) => f.dimension === 'sponsorship')?.state,
+    ).toBe('ineligible');
+    expect(finding.overallState).toBe('ineligible');
+  });
+
+  it('30. Preferred requirement cannot block', () => {
+    const finding = engine.evaluate({ content: 'Spanish is a plus.' }, [
+      { kind: 'language', scope: 'spanish', state: 'conflict' },
+    ]);
+    expect(
+      finding.findings.find((f) => f.dimension === 'language')?.state,
+    ).toBe('eligible');
     expect(finding.overallState).toBe('eligible');
   });
 
+  it('31. Scope mismatch alone cannot block', () => {
+    const finding = engine.evaluate(
+      { content: 'Must be authorized to work in the US.' },
+      [{ kind: 'work_authorization', scope: 'germany', state: 'supported' }],
+    );
+    expect(
+      finding.findings.find((f) => f.dimension === 'work_authorization')?.state,
+    ).toBe('investigate');
+    expect(finding.overallState).toBe('investigate');
+  });
+
+  it('32. UNKNOWN candidate state cannot block', () => {
+    const finding = engine.evaluate(
+      { content: 'Must have active top secret clearance.' },
+      [],
+    );
+    expect(
+      finding.findings.find((f) => f.dimension === 'clearance')?.state,
+    ).toBe('investigate');
+    expect(finding.overallState).toBe('investigate');
+  });
+
+  it('33. Contradictory Candidate evidence cannot produce a confident blocker', () => {
+    const finding = engine.evaluate(
+      { content: 'Must be authorized to work in the US.' },
+      [
+        { kind: 'work_authorization', scope: 'us', state: 'supported' },
+        { kind: 'work_authorization', scope: 'us', state: 'conflict' },
+      ],
+    );
+    expect(
+      finding.findings.find((f) => f.dimension === 'work_authorization')?.state,
+    ).toBe('investigate');
+    expect(finding.overallState).toBe('investigate');
+  });
+
+  it('34. A blocker always has both Opportunity and Candidate evidence', () => {
+    const finding = engine.evaluate(
+      { content: 'Must be authorized to work in the US.' },
+      [{ kind: 'work_authorization', scope: 'us', state: 'conflict' }],
+    );
+    const authFinding = finding.findings.find(
+      (f) => f.dimension === 'work_authorization',
+    );
+    expect(authFinding?.state).toBe('ineligible');
+    expect(finding.overallState).toBe('ineligible');
+    // Ensure we don't block without candidate evidence
+    const noEvidenceFinding = engine.evaluate(
+      { content: 'Must be authorized to work in the US.' },
+      [],
+    );
+    expect(noEvidenceFinding.overallState).not.toBe('ineligible');
+  });
 });

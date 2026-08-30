@@ -97,33 +97,80 @@ export class EligibilityConstraintExtractor {
           requirement: `Must be located in ${snapshot.location}`,
           modality: 'mandatory',
           scope: snapshot.location,
-          sourceText: `Remote within ${snapshot.location}`,
+          sourceText: snapshot.content
+            ? snapshot.content
+            : `Remote within ${snapshot.location}`,
           extractionMethod: 'structured_field',
         });
       }
     }
 
-    
     if (/active (top secret|ts\/sci|secret|q|l) clearance/i.test(content)) {
       constraints.push({
         dimension: 'clearance',
         modality: 'mandatory',
-        scope: (content.match(/active (top secret|ts\/sci|secret|q|l) clearance/i)?.[1]?.toLowerCase().replace('/', '') ?? ''), requirement: 'active clearance', sourceText: content.match(/active (top secret|ts\/sci|secret|q|l) clearance/i)?.[0] ?? '', extractionMethod: 'regex',
+        scope:
+          content
+            .match(/active (top secret|ts\/sci|secret|q|l) clearance/i)?.[1]
+            ?.toLowerCase()
+            .replace('/', '') ?? '',
+        requirement: 'active clearance',
+        sourceText:
+          content.match(
+            /active (top secret|ts\/sci|secret|q|l) clearance/i,
+          )?.[0] ?? '',
+        extractionMethod: 'regex',
       });
     }
 
-    if (/(must be fluent in|fluency in) (spanish|french|german|mandarin|japanese)/i.test(content)) {
+    if (
+      /(must be fluent in|fluency in) (spanish|french|german|mandarin|japanese)/i.test(
+        content,
+      )
+    ) {
       constraints.push({
         dimension: 'language',
         modality: 'mandatory',
-        scope: content.match(/(must be fluent in|fluency in) (spanish|french|german|mandarin|japanese)/i)?.[2]?.toLowerCase() ?? '', requirement: 'language fluency', sourceText: content.match(/(must be fluent in|fluency in) (spanish|french|german|mandarin|japanese)/i)?.[0] ?? '', extractionMethod: 'regex',
+        scope:
+          content
+            .match(
+              /(must be fluent in|fluency in) (spanish|french|german|mandarin|japanese)/i,
+            )?.[2]
+            ?.toLowerCase() ?? '',
+        requirement: 'language fluency',
+        sourceText:
+          content.match(
+            /(must be fluent in|fluency in) (spanish|french|german|mandarin|japanese)/i,
+          )?.[0] ?? '',
+        extractionMethod: 'regex',
       });
     }
-    if (/(spanish|french|german|mandarin|japanese) is a plus|(spanish|french|german|mandarin|japanese) preferred/i.test(content)) {
+    if (
+      /(spanish|french|german|mandarin|japanese) is a plus|(spanish|french|german|mandarin|japanese) preferred/i.test(
+        content,
+      )
+    ) {
       constraints.push({
         dimension: 'language',
         modality: 'preferred',
-        scope: content.match(/(spanish|french|german|mandarin|japanese) is a plus|(spanish|french|german|mandarin|japanese) preferred/i)?.[1]?.toLowerCase() ?? content.match(/(spanish|french|german|mandarin|japanese) is a plus|(spanish|french|german|mandarin|japanese) preferred/i)?.[2]?.toLowerCase() ?? '', requirement: 'preferred language', sourceText: content.match(/(spanish|french|german|mandarin|japanese) is a plus|(spanish|french|german|mandarin|japanese) preferred/i)?.[0] ?? '', extractionMethod: 'regex',
+        scope:
+          content
+            .match(
+              /(spanish|french|german|mandarin|japanese) is a plus|(spanish|french|german|mandarin|japanese) preferred/i,
+            )?.[1]
+            ?.toLowerCase() ??
+          content
+            .match(
+              /(spanish|french|german|mandarin|japanese) is a plus|(spanish|french|german|mandarin|japanese) preferred/i,
+            )?.[2]
+            ?.toLowerCase() ??
+          '',
+        requirement: 'preferred language',
+        sourceText:
+          content.match(
+            /(spanish|french|german|mandarin|japanese) is a plus|(spanish|french|german|mandarin|japanese) preferred/i,
+          )?.[0] ?? '',
+        extractionMethod: 'regex',
       });
     }
     return constraints;

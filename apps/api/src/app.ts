@@ -4,7 +4,7 @@ import swagger from '@fastify/swagger';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { ApiConfig } from '@oca/config/server';
 import { databaseIsReady, type DatabaseHandle } from '@oca/database';
-import { Type } from '@sinclair/typebox';
+import { Type, type Static } from '@sinclair/typebox';
 import { OpportunityRepository } from '@oca/database';
 import { opportunityId } from '@oca/domain';
 import {
@@ -162,7 +162,9 @@ export async function createApiApp(
       const repo = new OpportunityRepository(options.database);
       const data = repo.getOpportunitySummaries();
       return {
-        data: data as any,
+        data: data as unknown as Static<
+          typeof OpportunityListResponseSchema
+        >['data'],
       };
     },
   );
@@ -187,15 +189,13 @@ export async function createApiApp(
       const opportunity = repo.getOpportunity(id);
 
       if (!opportunity) {
-        await reply
-          .status(404)
-          .send({
-            error: {
-              code: 'NOT_FOUND',
-              message: 'Opportunity not found',
-              requestId: request.id,
-            },
-          });
+        await reply.status(404).send({
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Opportunity not found',
+            requestId: request.id,
+          },
+        });
         return;
       }
 
@@ -206,7 +206,9 @@ export async function createApiApp(
           id: opportunity.id,
           createdAt: new Date(opportunity.createdAt).toISOString(),
         },
-        snapshots: snapshots as any,
+        snapshots: snapshots as unknown as Static<
+          typeof OpportunityDetailResponseSchema
+        >['snapshots'],
       };
     },
   );
