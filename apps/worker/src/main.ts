@@ -13,6 +13,7 @@ import pino from 'pino';
 import { BackgroundWorker } from './worker.js';
 import { createTaskHandlers } from './ingestion/workflow.js';
 import { createEligibilityHandlers } from './eligibility/workflow.js';
+import { createFitHandlers } from './fit/workflow.js';
 
 async function main(): Promise<void> {
   const config = parseWorkerConfig(process.env);
@@ -27,6 +28,7 @@ async function main(): Promise<void> {
       handlers: {
         ...createTaskHandlers({ db: database, config }),
         ...createEligibilityHandlers({ db: database }),
+        ...createFitHandlers({ db: database }),
       },
       logger,
       workerId: randomUUID(),

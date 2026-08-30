@@ -171,6 +171,7 @@ describe('Domain Persistence Foundation', () => {
         candidateId: cId,
         kind: 'skill',
         value: 'React',
+        scope: 'professional',
         state: 'SUPPORTED',
         confidence: 'HIGH',
       });
@@ -199,6 +200,9 @@ describe('Domain Persistence Foundation', () => {
 
       const claims = candidateRepo.getClaims(cId);
       expect(claims).toHaveLength(4);
+      expect(claims.find((claim) => claim.value === 'React')?.scope).toBe(
+        'professional',
+      );
       const unknownClaim = claims.find((c) => c.state === 'UNKNOWN');
       expect(unknownClaim).toBeDefined();
       expect(unknownClaim?.value).toBe('Degree');

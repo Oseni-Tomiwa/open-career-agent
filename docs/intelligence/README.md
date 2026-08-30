@@ -9,6 +9,7 @@ These Phase 0 specifications define the conceptual behavior of the platform's in
 - [Eligibility](eligibility.md): whether a Candidate can realistically pursue an Opportunity.
 - [Evidence](evidence.md): how Candidate and Opportunity Claims acquire provenance and how generated claims remain truthful.
 - [Evaluation](evaluation.md): separate Eligibility, Fit, and Opportunity Quality analyses.
+- [Deterministic Fit V1](fit-v1.md): implemented Fit dimensions, extraction, finding states, aggregation, provenance, and limitations.
 - [Decision model](decision-model.md): how analyses constrain user-facing recommendations and ranking.
 - [Scenarios](scenarios.md): behavioral examples suitable as future acceptance-test inputs.
 
@@ -100,7 +101,7 @@ Eligibility, Fit, and Opportunity Quality are peers in the Evaluation record but
 - What final labels and transitions should represent Eligibility and Decisions?
 - How should confidence be represented without implying false precision?
 - What source-authority policy should apply within each Claim domain and region?
-- Which Fit and Quality dimensions belong in v0.1, and how should they be weighted?
+- Which additional Fit dimensions should follow V1, and which Quality dimensions belong in v0.1?
 - What ranking formula, if any, should follow the behavioral constraints?
 - Which judgments should be deterministic rules and which may use model reasoning?
 - What semantic matching strategy should identify related skills and transferable Evidence?

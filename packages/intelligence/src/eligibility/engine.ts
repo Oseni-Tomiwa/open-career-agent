@@ -34,7 +34,7 @@ export class EligibilityEngine {
       kind: string;
       value?: string;
       state: string;
-      scope?: string;
+      scope?: string | null;
     }>,
   ): EligibilityEvaluationResult {
     const constraints = this.extractor.extract(snapshot);
@@ -100,7 +100,7 @@ export class EligibilityEngine {
       kind: string;
       value?: string;
       state: string;
-      scope?: string;
+      scope?: string | null;
     }>,
   ): EligibilityFinding {
     if (dimension === 'sponsorship') {

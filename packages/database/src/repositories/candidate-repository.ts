@@ -35,6 +35,7 @@ export class CandidateRepository {
       candidateId: CandidateId;
       kind: string;
       value: string;
+      scope?: string;
       state:
         'SUPPORTED' | 'INFERRED' | 'UNKNOWN' | 'CONFLICTING' | 'UNSUPPORTED';
       confidence?: 'HIGH' | 'MODERATE' | 'LOW';
@@ -48,6 +49,7 @@ export class CandidateRepository {
         candidateId: claim.candidateId,
         kind: claim.kind,
         value: claim.value,
+        scope: claim.scope,
         state: claim.state,
         confidence: claim.confidence,
         createdAt: new Date(timestamp),

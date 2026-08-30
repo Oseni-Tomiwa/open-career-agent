@@ -30,7 +30,7 @@ A task may contain more than one classification at different stages.
 | Eligibility Hard Blocker decision | Deterministic over validated Claims | Apply mandatory + Candidate conflict + materiality + scope + no unresolved override; a model cannot bypass the test |
 | Exact skill matching | Deterministic | Match normalized supported Candidate Claims to explicit Requirements |
 | Semantic skill matching | Model-optional | Propose uncertain/related matches with provenance; never turn absence into a Candidate fact |
-| Transferable-skill reasoning | Model-assisted or human-reviewed | Explain the relationship and retain Candidate Evidence; never present as exact experience |
+| Transferable-skill reasoning | Deterministic for approved V1 mappings; otherwise model-assisted or human-reviewed | Explain the relationship and retain Candidate Evidence; an unapproved relationship remains unresolved and is never presented as exact experience |
 | Observable Quality signals | Deterministic first | Freshness, source provenance, redirects, duplicates, and inconsistencies are computed from Evidence |
 | Quality interpretation | Model-assisted where useful | Summarize observable risk without declaring employer intent or definitive “ghost jobs” |
 | Explanation assembly | Deterministic essential; model-optional prose | A structured explanation is always available; model rewriting cannot change Claims, certainty, or Decision |

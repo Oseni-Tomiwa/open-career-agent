@@ -3,10 +3,20 @@ import helmet from '@fastify/helmet';
 import swagger from '@fastify/swagger';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { ApiConfig } from '@oca/config/server';
-import { databaseIsReady, type DatabaseHandle } from '@oca/database';
+import {
+  databaseIsReady,
+  EvaluationRepository,
+  EvidenceRepository,
+  type DatabaseHandle,
+} from '@oca/database';
 import { Type, type Static } from '@sinclair/typebox';
 import { OpportunityRepository } from '@oca/database';
-import { opportunityId } from '@oca/domain';
+import {
+  evaluationId,
+  findingId,
+  opportunityId,
+  snapshotId,
+} from '@oca/domain';
 import {
   ApiErrorEnvelopeSchema,
   HealthResponseSchema,
@@ -160,7 +170,14 @@ export async function createApiApp(
     },
     () => {
       const repo = new OpportunityRepository(options.database);
-      const data = repo.getOpportunitySummaries();
+      const evaluationRepository = new EvaluationRepository(options.database);
+      const data = repo.getOpportunitySummaries().map((item) => {
+        if (!item.latestSnapshotId) return item;
+        const fit = evaluationRepository.getLatestFitForSnapshot(
+          snapshotId(item.latestSnapshotId),
+        );
+        return fit?.fitLevel ? { ...item, fitLevel: fit.fitLevel } : item;
+      });
       return {
         data: data as unknown as Static<
           typeof OpportunityListResponseSchema
@@ -200,13 +217,54 @@ export async function createApiApp(
       }
 
       const snapshots = repo.getSnapshots(id);
+      const evaluationRepository = new EvaluationRepository(options.database);
+      const evidenceRepository = new EvidenceRepository(options.database);
+
+      const snapshotsWithFit = snapshots.map((snapshot) => {
+        const fit = evaluationRepository.getLatestFitForSnapshot(
+          snapshotId(snapshot.id),
+        );
+        if (!fit?.fitLevel || !fit.fitEngineVersion || !fit.fitSummary) {
+          return snapshot;
+        }
+        const findings = evaluationRepository
+          .getFitFindings(evaluationId(fit.id))
+          .map((item) => ({
+            id: item.id,
+            dimension: item.dimensionKey.split(':')[0] ?? item.dimensionKey,
+            label: item.label ?? item.dimensionKey,
+            state: item.state,
+            modality: item.modality,
+            requirement: item.requirementText,
+            explanation: item.explanation ?? item.summary,
+            confidence: item.confidence,
+            evidence: evidenceRepository
+              .getFindingEvidence(findingId(item.id))
+              .map((evidence) => ({
+                id: evidence.id,
+                evidenceType: evidence.evidenceType,
+                sourceReference: evidence.sourceReference,
+                excerpt: evidence.excerpt,
+                state: evidence.state,
+              })),
+          }));
+        return {
+          ...snapshot,
+          fit: {
+            level: fit.fitLevel,
+            summary: fit.fitSummary,
+            engineVersion: fit.fitEngineVersion,
+            findings,
+          },
+        };
+      });
 
       return {
         opportunity: {
           id: opportunity.id,
           createdAt: new Date(opportunity.createdAt).toISOString(),
         },
-        snapshots: snapshots as unknown as Static<
+        snapshots: snapshotsWithFit as unknown as Static<
           typeof OpportunityDetailResponseSchema
         >['snapshots'],
       };

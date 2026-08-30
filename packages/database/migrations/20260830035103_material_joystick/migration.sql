@@ -1,0 +1,1 @@
+ALTER TABLE `candidate_claims` ADD `scope` text;

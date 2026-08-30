@@ -23,8 +23,9 @@ Scheduler
   → Identity and deduplication
   → Opportunity + OpportunitySnapshot persistence
   → Evaluation scheduling
-  → Eligibility pre-processing
-  → Eligibility / Fit / Quality Evaluation
+  → Eligibility Evaluation
+  → deterministic Fit Evaluation (independent of the Eligibility result)
+  → future Quality Evaluation
   → Decision persistence
   → Ranking projection refresh
   → Dashboard/API visibility
@@ -57,6 +58,7 @@ At-least-once execution must be assumed. Every workflow requires a stable effect
 - normalization of the same Source Record produces the same source-neutral observation under the same normalization version;
 - duplicate-detection decisions are repeatable and uncertain candidates remain reviewable;
 - an Evaluation is keyed by Candidate, Opportunity, relevant input versions, and evaluation policy so identical retries do not duplicate results;
+- Fit V1 fingerprints the snapshot, engine version, Candidate Claims, and linked Evidence; identical input reuses the historical Fit result while changed knowledge may append a new Evaluation;
 - Application commands use client/request identity where duplicate user requests are plausible; and
 - ranking refresh is replaceable or rebuildable from canonical Decisions.
 

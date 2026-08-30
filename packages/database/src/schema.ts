@@ -108,6 +108,7 @@ export const candidateClaims = sqliteTable('candidate_claims', {
     .references(() => candidates.id, { onDelete: 'restrict' }),
   kind: text('kind').notNull(),
   value: text('value').notNull(),
+  scope: text('scope'),
   state: text('state', { enum: CLAIM_STATES }).notNull(),
   confidence: text('confidence', { enum: CLAIM_CONFIDENCE_LEVELS }),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
@@ -285,7 +286,11 @@ export const evaluations = sqliteTable(
     eligibilityState: text('eligibility_state', {
       enum: ELIGIBILITY_STATES,
     }).notNull(),
+    eligibilityEngineVersion: text('eligibility_engine_version'),
     fitLevel: text('fit_level', { enum: FIT_LEVELS }),
+    fitEngineVersion: text('fit_engine_version'),
+    fitInputFingerprint: text('fit_input_fingerprint'),
+    fitSummary: text('fit_summary'),
     qualityLevel: text('quality_level', { enum: QUALITY_LEVELS }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   },
@@ -293,6 +298,12 @@ export const evaluations = sqliteTable(
     index('evaluations_candidate_snapshot_idx').on(
       table.candidateId,
       table.snapshotId,
+    ),
+    uniqueIndex('evaluations_fit_input_unique').on(
+      table.candidateId,
+      table.snapshotId,
+      table.fitEngineVersion,
+      table.fitInputFingerprint,
     ),
   ],
 );
@@ -308,9 +319,13 @@ export const evaluationFindings = sqliteTable(
       .references(() => evaluations.id, { onDelete: 'cascade' }), // finding deletes if evaluation deletes
     category: text('category', { enum: EVALUATION_CATEGORY }).notNull(),
     dimensionKey: text('dimension_key').notNull(),
+    label: text('label'),
     state: text('state').notNull(),
     summary: text('summary').notNull(),
     confidence: text('confidence'),
+    modality: text('modality'),
+    requirementText: text('requirement_text'),
+    explanation: text('explanation'),
   },
   (table) => [
     index('eval_finding_eval_idx').on(table.evaluationId),

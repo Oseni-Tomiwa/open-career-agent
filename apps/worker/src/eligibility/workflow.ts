@@ -3,6 +3,7 @@ import {
   OpportunityRepository,
   CandidateRepository,
   EvaluationRepository,
+  BackgroundTaskLedger,
   candidates,
 } from '@oca/database';
 import type { BackgroundTaskHandler } from '../worker.js';
@@ -23,6 +24,7 @@ export function createEligibilityHandlers(deps: {
   const candidateRepo = new CandidateRepository(deps.db);
   const evalRepo = new EvaluationRepository(deps.db);
   const engine = new EligibilityEngine();
+  const ledger = new BackgroundTaskLedger(deps.db);
 
   return {
     'eligibility.evaluate': (task: BackgroundTask) => {
@@ -62,6 +64,7 @@ export function createEligibilityHandlers(deps: {
           candidateId: candId as unknown as CandidateId,
           snapshotId: snapId as unknown as SnapshotId,
           eligibilityState: result.overallState,
+          eligibilityEngineVersion: result.version,
           // fitLevel and qualityLevel are omitted/null for now
         });
 
@@ -76,6 +79,16 @@ export function createEligibilityHandlers(deps: {
             confidence: finding.confidence,
           });
         }
+      });
+
+      ledger.enqueue({
+        taskType: 'fit.evaluate',
+        payload: {
+          evaluationId: evalId,
+          snapshotId: snapId,
+          candidateId: candId,
+        },
+        idempotencyKey: `fit-${evalId}`,
       });
     },
   };
