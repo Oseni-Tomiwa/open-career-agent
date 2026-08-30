@@ -25,6 +25,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createQualityHandlers } from './workflow.js';
+import { createDecisionHandlers } from '../decision/workflow.js';
 import { createFitHandlers } from '../fit/workflow.js';
 import { createEligibilityHandlers } from '../eligibility/workflow.js';
 import { createTaskHandlers } from '../ingestion/workflow.js';
@@ -278,6 +279,13 @@ describe('quality.evaluate durable workflow', () => {
     );
 
     const ledger = new BackgroundTaskLedger(database);
+    const firstTask = ledger.claimNext({
+      leaseOwner: 'test-worker',
+      leaseDurationMs: 30_000,
+      now: new Date(baseTime.getTime() + 100 * DAY_MS),
+    });
+    expect(firstTask?.taskType).toBe('decision.evaluate');
+
     const scheduled = ledger.claimNext({
       leaseOwner: 'test-worker',
       leaseDurationMs: 30_000,
@@ -299,14 +307,118 @@ describe('quality.evaluate durable workflow', () => {
     );
 
     const repository = new EvaluationRepository(database);
-    const updatedEval = repository.getEvaluation(evaluation);
+    const updatedEval = repository.getCurrentEvaluation(candidate, snapshot);
     expect(updatedEval?.qualityFreshnessBucket).toBe('stale');
 
-    const findings = repository.getQualityFindings(evaluation);
+    expect(repository.getEvaluation(evaluation)?.qualityFreshnessBucket).toBe(
+      'recent',
+    );
+    expect(updatedEval?.supersedesEvaluationId).toBe(evaluation);
+    const findings = repository.getQualityFindings(
+      evaluationId(updatedEval!.id),
+    );
     const freshnessFinding = findings.find(
       (f) => f.dimensionKey === 'freshness',
     );
     expect(freshnessFinding?.state).toBe('WEAK');
+  });
+
+  it('propagates a freshness revision through the queued Decision workflow without duplicate current Decisions', async () => {
+    const repository = new EvaluationRepository(database);
+    const evaluation = evaluationId('eval-freshness-decision');
+    repository.persistEvaluation({
+      id: evaluation,
+      candidateId: candidate,
+      snapshotId: snapshot,
+      eligibilityState: 'eligible',
+      eligibilityEngineVersion: 'eligibility-v1',
+      eligibilityInputFingerprint: 'elig-freshness-decision',
+      fitLevel: 'strong',
+      fitEngineVersion: 'fit-v1',
+      fitInputFingerprint: 'fit-freshness-decision',
+      fitSummary: 'Strong TypeScript match',
+    });
+    const qualityHandlers = createQualityHandlers({ db: database });
+    const decisionHandlers = createDecisionHandlers(database);
+    const ledger = new BackgroundTaskLedger(database);
+    const baseTime = new Date(Date.now());
+
+    await qualityHandlers['quality.evaluate']!(
+      task('quality.evaluate', {
+        evaluationId: evaluation,
+        snapshotId: snapshot,
+        candidateId: candidate,
+        evaluatedAt: baseTime.toISOString(),
+      }),
+    );
+    const firstDecisionTask = ledger.claimNext({
+      leaseOwner: 'test-worker',
+      leaseDurationMs: 30_000,
+      now: new Date(Date.now() + 1),
+    });
+    expect(firstDecisionTask?.taskType).toBe('decision.evaluate');
+    await decisionHandlers['decision.evaluate']!(firstDecisionTask!);
+    ledger.markSucceeded(firstDecisionTask!.id, 'test-worker');
+    expect(
+      repository.getLatestDecisionForEvaluation(evaluation)?.priority,
+    ).toBe('high-priority');
+
+    const advancedTime = new Date(baseTime.getTime() + 100 * DAY_MS);
+    await qualityHandlers['quality.evaluate']!(
+      task('quality.evaluate', {
+        evaluationId: evaluation,
+        snapshotId: snapshot,
+        candidateId: candidate,
+        evaluatedAt: advancedTime.toISOString(),
+      }),
+    );
+    const current = repository.getCurrentEvaluation(candidate, snapshot)!;
+    expect(current.id).not.toBe(evaluation);
+    expect(current.supersedesEvaluationId).toBe(evaluation);
+    expect(repository.getEvaluation(evaluation)?.qualityFreshnessBucket).toBe(
+      'recent',
+    );
+
+    const secondDecisionTask = ledger.claimNext({
+      leaseOwner: 'test-worker',
+      leaseDurationMs: 30_000,
+      now: new Date(Date.now() + 1),
+    });
+    expect(secondDecisionTask?.taskType).toBe('decision.evaluate');
+    expect(
+      (secondDecisionTask?.payload as { evaluationId?: string }).evaluationId,
+    ).toBe(current.id);
+    // Quality's aggregate can remain strong; Decision V1 nevertheless treats
+    // a very-stale RISK finding as unresolved operational currency.
+    expect(current.qualityLevel).toBe('strong');
+    await decisionHandlers['decision.evaluate']!(secondDecisionTask!);
+    ledger.markSucceeded(secondDecisionTask!.id, 'test-worker');
+    expect(repository.getCurrentDecision(candidate, snapshot)).toMatchObject({
+      evaluationId: current.id,
+      priority: 'investigate',
+      action: 'investigate',
+    });
+    expect(
+      JSON.parse(
+        repository.getCurrentDecision(candidate, snapshot)?.reasonCodes ?? '[]',
+      ),
+    ).toEqual(['LISTING_STALE']);
+    expect(
+      repository.getLatestDecisionForEvaluation(evaluation)?.priority,
+    ).toBe('high-priority');
+
+    // Replaying the same scheduled quality task cannot create another current Decision.
+    await qualityHandlers['quality.evaluate']!(
+      task('quality.evaluate', {
+        evaluationId: current.id,
+        snapshotId: snapshot,
+        candidateId: candidate,
+        evaluatedAt: advancedTime.toISOString(),
+      }),
+    );
+    expect(
+      repository.getCurrentDecision(candidate, snapshot)?.evaluationId,
+    ).toBe(current.id);
   });
 
   it('automatically chains through eligibility -> fit -> quality in worker pipeline', async () => {

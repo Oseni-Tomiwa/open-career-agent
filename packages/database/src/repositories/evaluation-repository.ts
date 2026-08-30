@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { DatabaseHandle } from '../client.js';
 import {
@@ -6,6 +7,7 @@ import {
   evidence,
   evaluationFindings,
   evaluationFindingEvidence,
+  decisionReasons,
 } from '../schema.js';
 import type {
   CandidateId,
@@ -26,6 +28,7 @@ export class EvaluationRepository {
       snapshotId: SnapshotId;
       eligibilityState: 'eligible' | 'ineligible' | 'investigate' | 'unknown';
       eligibilityEngineVersion?: string | null;
+      eligibilityInputFingerprint?: string | null;
       fitLevel?: 'strong' | 'moderate' | 'weak' | null;
       fitEngineVersion?: string | null;
       fitInputFingerprint?: string | null;
@@ -36,6 +39,7 @@ export class EvaluationRepository {
       qualitySummary?: string | null;
       qualityEvaluatedAt?: Date | null;
       qualityFreshnessBucket?: string | null;
+      supersedesEvaluationId?: EvaluationId | null;
     },
     timestamp: number = Date.now(),
   ): void {
@@ -47,6 +51,8 @@ export class EvaluationRepository {
         snapshotId: evaluation.snapshotId,
         eligibilityState: evaluation.eligibilityState,
         eligibilityEngineVersion: evaluation.eligibilityEngineVersion ?? null,
+        eligibilityInputFingerprint:
+          evaluation.eligibilityInputFingerprint ?? null,
         fitLevel: evaluation.fitLevel ?? null,
         fitEngineVersion: evaluation.fitEngineVersion ?? null,
         fitInputFingerprint: evaluation.fitInputFingerprint ?? null,
@@ -57,9 +63,217 @@ export class EvaluationRepository {
         qualitySummary: evaluation.qualitySummary ?? null,
         qualityEvaluatedAt: evaluation.qualityEvaluatedAt ?? null,
         qualityFreshnessBucket: evaluation.qualityFreshnessBucket ?? null,
+        supersedesEvaluationId: evaluation.supersedesEvaluationId ?? null,
+        supersededAt: null,
         createdAt: new Date(timestamp),
       })
       .run();
+  }
+
+  /**
+   * Starts a new immutable Evaluation lineage from an earlier revision.  The
+   * selected assessments and their existing Evidence links are copied; the
+   * original row and findings are never changed.
+   */
+  public forkEvaluation(input: {
+    id: EvaluationId;
+    sourceEvaluationId: EvaluationId;
+    copy: readonly ('eligibility' | 'fit' | 'quality')[];
+  }): void {
+    this.db.db.transaction((transaction) => {
+      const source = transaction
+        .select()
+        .from(evaluations)
+        .where(eq(evaluations.id, input.sourceEvaluationId))
+        .get();
+      if (!source)
+        throw new Error(`Evaluation ${input.sourceEvaluationId} not found`);
+
+      const copyEligibility = input.copy.includes('eligibility');
+      const copyFit = input.copy.includes('fit');
+      const copyQuality = input.copy.includes('quality');
+      transaction
+        .insert(evaluations)
+        .values({
+          ...source,
+          id: input.id,
+          eligibilityState: source.eligibilityState,
+          eligibilityEngineVersion: copyEligibility
+            ? source.eligibilityEngineVersion
+            : null,
+          eligibilityInputFingerprint: copyEligibility
+            ? source.eligibilityInputFingerprint
+            : null,
+          fitLevel: copyFit ? source.fitLevel : null,
+          fitEngineVersion: copyFit ? source.fitEngineVersion : null,
+          fitInputFingerprint: copyFit ? source.fitInputFingerprint : null,
+          fitSummary: copyFit ? source.fitSummary : null,
+          qualityLevel: copyQuality ? source.qualityLevel : null,
+          qualityEngineVersion: copyQuality
+            ? source.qualityEngineVersion
+            : null,
+          qualityInputFingerprint: copyQuality
+            ? source.qualityInputFingerprint
+            : null,
+          qualitySummary: copyQuality ? source.qualitySummary : null,
+          qualityEvaluatedAt: copyQuality ? source.qualityEvaluatedAt : null,
+          qualityFreshnessBucket: copyQuality
+            ? source.qualityFreshnessBucket
+            : null,
+          supersedesEvaluationId: source.id,
+          supersededAt: null,
+          createdAt: new Date(),
+        })
+        .run();
+
+      transaction
+        .update(evaluations)
+        .set({ supersededAt: new Date() })
+        .where(
+          and(eq(evaluations.id, source.id), isNull(evaluations.supersededAt)),
+        )
+        .run();
+
+      const categories = input.copy;
+      const sourceFindings = transaction
+        .select()
+        .from(evaluationFindings)
+        .where(eq(evaluationFindings.evaluationId, source.id))
+        .all()
+        .filter((finding) => categories.includes(finding.category));
+      for (const finding of sourceFindings) {
+        const clonedId = randomUUID() as FindingId;
+        transaction
+          .insert(evaluationFindings)
+          .values({ ...finding, id: clonedId, evaluationId: input.id })
+          .run();
+        const links = transaction
+          .select()
+          .from(evaluationFindingEvidence)
+          .where(eq(evaluationFindingEvidence.findingId, finding.id))
+          .all();
+        for (const link of links) {
+          transaction
+            .insert(evaluationFindingEvidence)
+            .values({ findingId: clonedId, evidenceId: link.evidenceId })
+            .run();
+        }
+      }
+    });
+  }
+
+  /** Reuses an immutable historical assessment by copying its values and
+   * finding-to-Evidence links into a new Evaluation revision. */
+  public copyAssessment(input: {
+    sourceEvaluationId: EvaluationId;
+    targetEvaluationId: EvaluationId;
+    category: 'fit' | 'quality';
+  }): boolean {
+    return this.db.db.transaction((transaction) => {
+      const source = transaction
+        .select()
+        .from(evaluations)
+        .where(eq(evaluations.id, input.sourceEvaluationId))
+        .get();
+      const target = transaction
+        .select()
+        .from(evaluations)
+        .where(eq(evaluations.id, input.targetEvaluationId))
+        .get();
+      if (!source || !target) return false;
+      if (input.category === 'fit') {
+        if (!source.fitLevel || target.fitLevel) return false;
+        transaction
+          .update(evaluations)
+          .set({
+            fitLevel: source.fitLevel,
+            fitEngineVersion: source.fitEngineVersion,
+            fitInputFingerprint: source.fitInputFingerprint,
+            fitSummary: source.fitSummary,
+          })
+          .where(eq(evaluations.id, target.id))
+          .run();
+      } else {
+        if (!source.qualityLevel || target.qualityLevel) return false;
+        transaction
+          .update(evaluations)
+          .set({
+            qualityLevel: source.qualityLevel,
+            qualityEngineVersion: source.qualityEngineVersion,
+            qualityInputFingerprint: source.qualityInputFingerprint,
+            qualitySummary: source.qualitySummary,
+            qualityEvaluatedAt: source.qualityEvaluatedAt,
+            qualityFreshnessBucket: source.qualityFreshnessBucket,
+          })
+          .where(eq(evaluations.id, target.id))
+          .run();
+      }
+      const findings = transaction
+        .select()
+        .from(evaluationFindings)
+        .where(
+          and(
+            eq(evaluationFindings.evaluationId, source.id),
+            eq(evaluationFindings.category, input.category),
+          ),
+        )
+        .all();
+      for (const finding of findings) {
+        const clonedId = randomUUID() as FindingId;
+        transaction
+          .insert(evaluationFindings)
+          .values({ ...finding, id: clonedId, evaluationId: target.id })
+          .run();
+        for (const link of transaction
+          .select()
+          .from(evaluationFindingEvidence)
+          .where(eq(evaluationFindingEvidence.findingId, finding.id))
+          .all()) {
+          transaction
+            .insert(evaluationFindingEvidence)
+            .values({ findingId: clonedId, evidenceId: link.evidenceId })
+            .run();
+        }
+      }
+      return true;
+    });
+  }
+
+  public supersedeCurrentEvaluation(input: {
+    candidateId: CandidateId;
+    snapshotId: SnapshotId;
+  }): void {
+    this.db.db
+      .update(evaluations)
+      .set({ supersededAt: new Date() })
+      .where(
+        and(
+          eq(evaluations.candidateId, input.candidateId),
+          eq(evaluations.snapshotId, input.snapshotId),
+          isNull(evaluations.supersededAt),
+        ),
+      )
+      .run();
+  }
+
+  public getCurrentEvaluation(
+    candidateId: CandidateId,
+    snapshotId: SnapshotId,
+  ) {
+    return (
+      this.db.db
+        .select()
+        .from(evaluations)
+        .where(
+          and(
+            eq(evaluations.candidateId, candidateId),
+            eq(evaluations.snapshotId, snapshotId),
+            isNull(evaluations.supersededAt),
+          ),
+        )
+        .orderBy(desc(evaluations.createdAt))
+        .get() ?? null
+    );
   }
 
   public persistFinding(finding: {
@@ -292,19 +506,11 @@ export class EvaluationRepository {
 
       if (!existing) return false;
 
-      if (
-        existing.qualityEvaluatedAt &&
-        existing.qualityEvaluatedAt.getTime() >
-          input.quality.evaluatedAt.getTime()
-      ) {
-        return false;
-      }
-
-      if (
-        existing.qualityInputFingerprint === input.quality.inputFingerprint &&
-        existing.qualityLevel === input.quality.level
-      ) {
-        return true;
+      if (existing.qualityLevel || existing.qualityInputFingerprint) {
+        return (
+          existing.qualityInputFingerprint === input.quality.inputFingerprint &&
+          existing.qualityLevel === input.quality.level
+        );
       }
 
       transaction
@@ -318,34 +524,6 @@ export class EvaluationRepository {
           qualityFreshnessBucket: input.quality.freshnessBucket,
         })
         .where(eq(evaluations.id, input.evaluationId))
-        .run();
-
-      const previousFindings = transaction
-        .select({ id: evaluationFindings.id })
-        .from(evaluationFindings)
-        .where(
-          and(
-            eq(evaluationFindings.evaluationId, input.evaluationId),
-            eq(evaluationFindings.category, 'quality'),
-          ),
-        )
-        .all();
-
-      for (const prev of previousFindings) {
-        transaction
-          .delete(evaluationFindingEvidence)
-          .where(eq(evaluationFindingEvidence.findingId, prev.id))
-          .run();
-      }
-
-      transaction
-        .delete(evaluationFindings)
-        .where(
-          and(
-            eq(evaluationFindings.evaluationId, input.evaluationId),
-            eq(evaluationFindings.category, 'quality'),
-          ),
-        )
         .run();
 
       for (const finding of input.findings) {
@@ -429,6 +607,19 @@ export class EvaluationRepository {
     );
   }
 
+  public getEligibilityFindings(evaluationId: EvaluationId) {
+    return this.db.db
+      .select()
+      .from(evaluationFindings)
+      .where(
+        and(
+          eq(evaluationFindings.evaluationId, evaluationId),
+          eq(evaluationFindings.category, 'eligibility'),
+        ),
+      )
+      .all();
+  }
+
   public getFitFindings(evaluationId: EvaluationId) {
     return this.db.db
       .select()
@@ -464,21 +655,91 @@ export class EvaluationRepository {
         | 'consider'
         | 'investigate'
         | 'low-priority'
-        | 'ineligible';
+        | 'blocked';
+      candidateId: CandidateId;
+      snapshotId: SnapshotId;
+      action: 'apply' | 'review' | 'investigate' | 'do_not_apply';
       explanation: string;
+      engineVersion: string;
+      inputFingerprint: string;
+      eligibilityInputFingerprint: string;
+      fitInputFingerprint: string;
+      qualityInputFingerprint: string;
+      reasonCodes: readonly string[];
+      reasonFindingIds: readonly { reasonCode: string; findingId: FindingId }[];
+      evaluatedAt: Date;
     },
     timestamp: number = Date.now(),
-  ): void {
-    this.db.db
-      .insert(decisions)
-      .values({
-        id: decision.id,
-        evaluationId: decision.evaluationId,
-        priority: decision.priority,
-        explanation: decision.explanation,
-        createdAt: new Date(timestamp),
-      })
-      .run();
+  ): boolean {
+    return this.db.db.transaction((transaction) => {
+      const evaluation = transaction
+        .select()
+        .from(evaluations)
+        .where(eq(evaluations.id, decision.evaluationId))
+        .get();
+      if (
+        !evaluation ||
+        evaluation.candidateId !== decision.candidateId ||
+        evaluation.snapshotId !== decision.snapshotId ||
+        evaluation.supersededAt ||
+        evaluation.eligibilityInputFingerprint !==
+          decision.eligibilityInputFingerprint ||
+        evaluation.fitInputFingerprint !== decision.fitInputFingerprint ||
+        evaluation.qualityInputFingerprint !== decision.qualityInputFingerprint
+      ) {
+        return false;
+      }
+
+      const existing = transaction
+        .select()
+        .from(decisions)
+        .where(
+          and(
+            eq(decisions.evaluationId, decision.evaluationId),
+            eq(decisions.engineVersion, decision.engineVersion),
+            eq(decisions.inputFingerprint, decision.inputFingerprint),
+          ),
+        )
+        .get();
+
+      if (existing) return true;
+
+      transaction
+        .insert(decisions)
+        .values({
+          id: decision.id,
+          evaluationId: decision.evaluationId,
+          candidateId: decision.candidateId,
+          snapshotId: decision.snapshotId,
+          priority: decision.priority,
+          action: decision.action,
+          explanation: decision.explanation,
+          engineVersion: decision.engineVersion,
+          inputFingerprint: decision.inputFingerprint,
+          eligibilityInputFingerprint: decision.eligibilityInputFingerprint,
+          fitInputFingerprint: decision.fitInputFingerprint,
+          qualityInputFingerprint: decision.qualityInputFingerprint,
+          reasonCodes: JSON.stringify(decision.reasonCodes),
+          evaluatedAt: decision.evaluatedAt,
+          createdAt: new Date(timestamp),
+        })
+        .run();
+
+      for (const reason of decision.reasonFindingIds) {
+        transaction
+          .insert(decisionReasons)
+          .values({
+            id: randomUUID(),
+            decisionId: decision.id,
+            reasonCode: reason.reasonCode,
+            findingId: reason.findingId,
+          })
+          .onConflictDoNothing()
+          .run();
+      }
+
+      return true;
+    });
   }
 
   public getDecision(id: DecisionId) {
@@ -488,5 +749,100 @@ export class EvaluationRepository {
       .where(eq(decisions.id, id))
       .get();
     return result ?? null;
+  }
+
+  public getLatestDecisionForEvaluation(evaluationId: EvaluationId) {
+    return (
+      this.db.db
+        .select()
+        .from(decisions)
+        .where(eq(decisions.evaluationId, evaluationId))
+        .orderBy(desc(decisions.createdAt))
+        .get() ?? null
+    );
+  }
+
+  public getCurrentDecisionForEvaluation(evaluationId: EvaluationId) {
+    return (
+      this.db.db
+        .select({ decision: decisions })
+        .from(decisions)
+        .innerJoin(evaluations, eq(decisions.evaluationId, evaluations.id))
+        .where(
+          and(
+            eq(decisions.evaluationId, evaluationId),
+            isNull(evaluations.supersededAt),
+            eq(
+              decisions.eligibilityInputFingerprint,
+              evaluations.eligibilityInputFingerprint,
+            ),
+            eq(decisions.fitInputFingerprint, evaluations.fitInputFingerprint),
+            eq(
+              decisions.qualityInputFingerprint,
+              evaluations.qualityInputFingerprint,
+            ),
+          ),
+        )
+        .orderBy(desc(decisions.evaluatedAt))
+        .get()?.decision ?? null
+    );
+  }
+
+  public getLatestDecisionForSnapshot(snapshotId: SnapshotId) {
+    return (
+      this.db.db
+        .select({
+          id: decisions.id,
+          evaluationId: decisions.evaluationId,
+          priority: decisions.priority,
+          action: decisions.action,
+          explanation: decisions.explanation,
+          engineVersion: decisions.engineVersion,
+          inputFingerprint: decisions.inputFingerprint,
+          reasonCodes: decisions.reasonCodes,
+          evaluatedAt: decisions.evaluatedAt,
+          createdAt: decisions.createdAt,
+        })
+        .from(decisions)
+        .innerJoin(evaluations, eq(decisions.evaluationId, evaluations.id))
+        .where(eq(evaluations.snapshotId, snapshotId))
+        .orderBy(desc(decisions.createdAt))
+        .get() ?? null
+    );
+  }
+
+  public getCurrentDecision(candidateId: CandidateId, snapshotId: SnapshotId) {
+    return (
+      this.db.db
+        .select({ decision: decisions })
+        .from(decisions)
+        .innerJoin(evaluations, eq(decisions.evaluationId, evaluations.id))
+        .where(
+          and(
+            eq(decisions.candidateId, candidateId),
+            eq(decisions.snapshotId, snapshotId),
+            isNull(evaluations.supersededAt),
+            eq(
+              decisions.eligibilityInputFingerprint,
+              evaluations.eligibilityInputFingerprint,
+            ),
+            eq(decisions.fitInputFingerprint, evaluations.fitInputFingerprint),
+            eq(
+              decisions.qualityInputFingerprint,
+              evaluations.qualityInputFingerprint,
+            ),
+          ),
+        )
+        .orderBy(desc(decisions.evaluatedAt))
+        .get()?.decision ?? null
+    );
+  }
+
+  public getDecisionReasons(decisionId: DecisionId) {
+    return this.db.db
+      .select()
+      .from(decisionReasons)
+      .where(eq(decisionReasons.decisionId, decisionId))
+      .all();
   }
 }

@@ -118,11 +118,17 @@ export function createQualityHandlers(deps: {
       throw new Error('quality.evaluate requires evaluationId and snapshotId');
     }
 
-    const evaluationId = payload.evaluationId as EvaluationId;
+    let evaluationId = payload.evaluationId as EvaluationId;
     const snapshotId = payload.snapshotId as SnapshotId;
     const evaluation = evaluationRepository.getEvaluation(evaluationId);
     if (!evaluation) {
       throw new Error(`Evaluation not found: ${payload.evaluationId}`);
+    }
+    if (
+      evaluation.snapshotId !== snapshotId ||
+      (payload.candidateId && evaluation.candidateId !== payload.candidateId)
+    ) {
+      throw new Error('Quality task input does not match its Evaluation');
     }
 
     const snapshot = opportunityRepository.getSnapshot(snapshotId);
@@ -162,7 +168,28 @@ export function createQualityHandlers(deps: {
       inputFingerprint,
     });
 
-    if (!existing) {
+    // Freshness and source changes create a new Evaluation revision.  Never
+    // replace Quality findings that an existing Decision may reference.
+    if (
+      evaluation.qualityInputFingerprint &&
+      evaluation.qualityInputFingerprint !== inputFingerprint
+    ) {
+      const replacementId = randomUUID() as EvaluationId;
+      evaluationRepository.forkEvaluation({
+        id: replacementId,
+        sourceEvaluationId: evaluationId,
+        copy: ['eligibility', 'fit'],
+      });
+      evaluationId = replacementId;
+    }
+
+    if (existing && existing.id !== evaluationId) {
+      evaluationRepository.copyAssessment({
+        sourceEvaluationId: existing.id as EvaluationId,
+        targetEvaluationId: evaluationId,
+        category: 'quality',
+      });
+    } else if (!existing) {
       const result = engine.evaluate({
         snapshot: {
           id: snapshot.id,
@@ -208,6 +235,16 @@ export function createQualityHandlers(deps: {
         })),
       });
     }
+
+    taskLedger.enqueue({
+      taskType: 'decision.evaluate',
+      payload: {
+        evaluationId,
+        snapshotId,
+        candidateId: payload.candidateId,
+      },
+      idempotencyKey: `decision-${evaluationId}-${inputFingerprint}`,
+    });
 
     const nextBoundary = nextFreshnessBoundary(anchor, evalDate);
     if (nextBoundary && nextBoundary.getTime() > evalDate.getTime()) {

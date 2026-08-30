@@ -155,6 +155,13 @@ export function createFitHandlers(deps: {
         inputFingerprint,
       });
       if (existing) {
+        if (existing.id !== evaluationId) {
+          evaluationRepository.copyAssessment({
+            sourceEvaluationId: existing.id as EvaluationId,
+            targetEvaluationId: evaluationId,
+            category: 'fit',
+          });
+        }
         taskLedger.enqueue({
           taskType: 'quality.evaluate',
           payload: {

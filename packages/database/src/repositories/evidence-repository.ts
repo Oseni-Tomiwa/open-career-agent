@@ -5,7 +5,10 @@ import {
   candidateClaimEvidence,
   opportunitySnapshotEvidence,
   evaluationFindingEvidence,
+  candidateClaims,
+  opportunitySnapshots,
 } from '../schema.js';
+import { BackgroundTaskLedger } from '../task-ledger.js';
 import type { ClaimId, EvidenceId, SnapshotId, FindingId } from '@oca/domain';
 
 export class EvidenceRepository {
@@ -42,6 +45,25 @@ export class EvidenceRepository {
         })
         .run();
     });
+
+    const claim = this.db.db
+      .select({ candidateId: candidateClaims.candidateId })
+      .from(candidateClaims)
+      .where(eq(candidateClaims.id, claimId))
+      .get();
+    if (claim) {
+      const ledger = new BackgroundTaskLedger(this.db);
+      for (const snapshot of this.db.db
+        .select({ id: opportunitySnapshots.id })
+        .from(opportunitySnapshots)
+        .all()) {
+        ledger.enqueue({
+          taskType: 'eligibility.evaluate',
+          payload: { snapshotId: snapshot.id, candidateId: claim.candidateId },
+          idempotencyKey: `eligibility-evidence-${ev.id}-${snapshot.id}`,
+        });
+      }
+    }
   }
 
   public attachToSnapshot(

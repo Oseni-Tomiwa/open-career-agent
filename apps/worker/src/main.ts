@@ -15,6 +15,7 @@ import { createTaskHandlers } from './ingestion/workflow.js';
 import { createEligibilityHandlers } from './eligibility/workflow.js';
 import { createFitHandlers } from './fit/workflow.js';
 import { createQualityHandlers } from './quality/workflow.js';
+import { createDecisionHandlers } from './decision/workflow.js';
 
 async function main(): Promise<void> {
   const config = parseWorkerConfig(process.env);
@@ -31,6 +32,7 @@ async function main(): Promise<void> {
         ...createEligibilityHandlers({ db: database }),
         ...createFitHandlers({ db: database }),
         ...createQualityHandlers({ db: database }),
+        ...createDecisionHandlers(database),
       },
       logger,
       workerId: randomUUID(),

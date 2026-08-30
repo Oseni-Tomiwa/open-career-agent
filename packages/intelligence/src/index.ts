@@ -3,3 +3,4 @@ export * from './eligibility/extractor.js';
 export * from './fit/engine.js';
 export * from './fit/extractor.js';
 export * from './quality/engine.js';
+export * from './decision/engine.js';

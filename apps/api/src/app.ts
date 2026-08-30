@@ -14,6 +14,8 @@ import { OpportunityRepository } from '@oca/database';
 import {
   evaluationId,
   findingId,
+  candidateId,
+  decisionId,
   opportunityId,
   snapshotId,
 } from '@oca/domain';
@@ -166,22 +168,33 @@ export async function createApiApp(
         tags: ['opportunities'],
         summary: 'List opportunities',
         response: { 200: OpportunityListResponseSchema },
+        querystring: Type.Object({ candidateId: Type.Optional(Type.String()) }),
       },
     },
-    () => {
+    (request) => {
       const repo = new OpportunityRepository(options.database);
       const evaluationRepository = new EvaluationRepository(options.database);
       const data = repo.getOpportunitySummaries().map((item) => {
         if (!item.latestSnapshotId) return item;
         const sId = snapshotId(item.latestSnapshotId);
-        const fit = evaluationRepository.getLatestFitForSnapshot(sId);
-        const quality = evaluationRepository.getLatestQualityForSnapshot(sId);
+        const evaluation = request.query.candidateId
+          ? evaluationRepository.getCurrentEvaluation(
+              candidateId(request.query.candidateId),
+              sId,
+            )
+          : null;
+        const decision = evaluation
+          ? evaluationRepository.getCurrentDecisionForEvaluation(
+              evaluationId(evaluation.id),
+            )
+          : null;
         return {
           ...item,
-          ...(fit?.fitLevel ? { fitLevel: fit.fitLevel } : {}),
-          ...(quality?.qualityLevel
-            ? { qualityLevel: quality.qualityLevel }
+          ...(evaluation?.fitLevel ? { fitLevel: evaluation.fitLevel } : {}),
+          ...(evaluation?.qualityLevel
+            ? { qualityLevel: evaluation.qualityLevel }
             : {}),
+          ...(decision?.priority ? { decisionState: decision.priority } : {}),
         };
       });
       return {
@@ -199,6 +212,7 @@ export async function createApiApp(
         tags: ['opportunities'],
         summary: 'Get opportunity detail',
         params: Type.Object({ id: Type.String() }),
+        querystring: Type.Object({ candidateId: Type.Optional(Type.String()) }),
         response: {
           200: OpportunityDetailResponseSchema,
           404: ApiErrorEnvelopeSchema,
@@ -228,10 +242,49 @@ export async function createApiApp(
 
       const snapshotsWithEvaluations = snapshots.map((snapshot) => {
         const sId = snapshotId(snapshot.id);
-        const fit = evaluationRepository.getLatestFitForSnapshot(sId);
-        const quality = evaluationRepository.getLatestQualityForSnapshot(sId);
+        const evaluation = request.query.candidateId
+          ? evaluationRepository.getCurrentEvaluation(
+              candidateId(request.query.candidateId),
+              sId,
+            )
+          : null;
+        const fit = evaluation;
+        const quality = evaluation;
+        const decision = evaluation
+          ? evaluationRepository.getCurrentDecisionForEvaluation(
+              evaluationId(evaluation.id),
+            )
+          : null;
 
         let fitResult = undefined;
+        let eligibilityResult = undefined;
+        if (
+          evaluation?.eligibilityState &&
+          evaluation.eligibilityEngineVersion
+        ) {
+          eligibilityResult = {
+            state: evaluation.eligibilityState,
+            engineVersion: evaluation.eligibilityEngineVersion,
+            findings: evaluationRepository
+              .getEligibilityFindings(evaluationId(evaluation.id))
+              .map((item) => ({
+                id: item.id,
+                dimension: item.dimensionKey,
+                state: item.state,
+                summary: item.summary,
+                confidence: item.confidence ?? undefined,
+                evidence: evidenceRepository
+                  .getFindingEvidence(findingId(item.id))
+                  .map((evidence) => ({
+                    id: evidence.id,
+                    evidenceType: evidence.evidenceType,
+                    sourceReference: evidence.sourceReference,
+                    excerpt: evidence.excerpt,
+                    state: evidence.state,
+                  })),
+              })),
+          };
+        }
         if (fit?.fitLevel && fit.fitEngineVersion && fit.fitSummary) {
           const findings = evaluationRepository
             .getFitFindings(evaluationId(fit.id))
@@ -299,10 +352,42 @@ export async function createApiApp(
           };
         }
 
+        let decisionResult = undefined;
+        if (decision?.priority && decision.explanation) {
+          const reasonCodes = JSON.parse(
+            decision.reasonCodes ?? '[]',
+          ) as string[];
+          const reasons = evaluationRepository.getDecisionReasons(
+            decisionId(decision.id),
+          );
+          const reasonGroups = new Map<string, string[]>();
+          for (const reason of reasons) {
+            const ids = reasonGroups.get(reason.reasonCode) ?? [];
+            ids.push(reason.findingId);
+            reasonGroups.set(reason.reasonCode, ids);
+          }
+          decisionResult = {
+            id: decision.id,
+            state: decision.priority,
+            action: decision.action,
+            explanation: decision.explanation,
+            engineVersion: decision.engineVersion!,
+            inputFingerprint: decision.inputFingerprint!,
+            reasonCodes,
+            reasons: reasonCodes.map((code) => ({
+              code,
+              findingIds: reasonGroups.get(code) ?? [],
+            })),
+            evaluatedAt: new Date(decision.evaluatedAt!).toISOString(),
+          };
+        }
+
         return {
           ...snapshot,
+          ...(eligibilityResult ? { eligibility: eligibilityResult } : {}),
           ...(fitResult ? { fit: fitResult } : {}),
           ...(qualityResult ? { quality: qualityResult } : {}),
+          ...(decisionResult ? { decision: decisionResult } : {}),
         };
       });
 

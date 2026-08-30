@@ -220,8 +220,8 @@ describe('fit.evaluate durable workflow', () => {
 
     const repository = new EvaluationRepository(database);
     expect(repository.getEvaluation(first)?.fitEngineVersion).toBe('fit-v1');
-    expect(repository.getEvaluation(second)?.fitEngineVersion).toBeNull();
-    expect(repository.getFitFindings(second)).toHaveLength(0);
+    expect(repository.getEvaluation(second)?.fitEngineVersion).toBe('fit-v1');
+    expect(repository.getFitFindings(second)).not.toHaveLength(0);
   });
 
   it('permits a new historical Fit result after candidate evidence changes', async () => {

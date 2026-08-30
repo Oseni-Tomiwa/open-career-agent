@@ -15,7 +15,30 @@ import type {
   FindingId,
 } from '@oca/domain';
 import { EligibilityEngine } from '@oca/intelligence';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+
+function fingerprintEligibilityInputs(input: {
+  snapshotFingerprint: string;
+  claims: readonly {
+    kind: string;
+    value: string;
+    state: string;
+    scope: string | null;
+  }[];
+  engineVersion: string;
+}): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        engineVersion: input.engineVersion,
+        snapshotFingerprint: input.snapshotFingerprint,
+        claims: [...input.claims].sort((a, b) =>
+          JSON.stringify(a).localeCompare(JSON.stringify(b)),
+        ),
+      }),
+    )
+    .digest('hex');
+}
 
 export function createEligibilityHandlers(deps: {
   db: DatabaseHandle;
@@ -57,14 +80,29 @@ export function createEligibilityHandlers(deps: {
       const result = engine.evaluate(snapshot, claims);
 
       const evalId = randomUUID();
+      const inputFingerprint = fingerprintEligibilityInputs({
+        engineVersion: result.version,
+        snapshotFingerprint: snapshot.fingerprint,
+        claims: claims.map((claim) => ({
+          kind: claim.kind,
+          value: claim.value,
+          state: claim.state,
+          scope: claim.scope,
+        })),
+      });
 
       deps.db.db.transaction(() => {
+        evalRepo.supersedeCurrentEvaluation({
+          candidateId: candId as CandidateId,
+          snapshotId: snapId as SnapshotId,
+        });
         evalRepo.persistEvaluation({
           id: evalId as unknown as EvaluationId,
           candidateId: candId as unknown as CandidateId,
           snapshotId: snapId as unknown as SnapshotId,
           eligibilityState: result.overallState,
           eligibilityEngineVersion: result.version,
+          eligibilityInputFingerprint: inputFingerprint,
           // fitLevel and qualityLevel are omitted/null for now
         });
 

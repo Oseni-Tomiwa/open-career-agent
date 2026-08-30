@@ -287,6 +287,7 @@ export const evaluations = sqliteTable(
       enum: ELIGIBILITY_STATES,
     }).notNull(),
     eligibilityEngineVersion: text('eligibility_engine_version'),
+    eligibilityInputFingerprint: text('eligibility_input_fingerprint'),
     fitLevel: text('fit_level', { enum: FIT_LEVELS }),
     fitEngineVersion: text('fit_engine_version'),
     fitInputFingerprint: text('fit_input_fingerprint'),
@@ -299,18 +300,14 @@ export const evaluations = sqliteTable(
       mode: 'timestamp_ms',
     }),
     qualityFreshnessBucket: text('quality_freshness_bucket'),
+    supersedesEvaluationId: text('supersedes_evaluation_id'),
+    supersededAt: integer('superseded_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (table) => [
     index('evaluations_candidate_snapshot_idx').on(
       table.candidateId,
       table.snapshotId,
-    ),
-    uniqueIndex('evaluations_fit_input_unique').on(
-      table.candidateId,
-      table.snapshotId,
-      table.fitEngineVersion,
-      table.fitInputFingerprint,
     ),
   ],
 );
@@ -386,18 +383,81 @@ export const DECISION_STATES = [
   'consider',
   'investigate',
   'low-priority',
-  'ineligible',
+  'blocked',
 ] as const;
 
-export const decisions = sqliteTable('decisions', {
-  id: text('id').primaryKey(),
-  evaluationId: text('evaluation_id')
-    .notNull()
-    .references(() => evaluations.id, { onDelete: 'restrict' }),
-  priority: text('priority', { enum: DECISION_STATES }).notNull(),
-  explanation: text('explanation').notNull(),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-});
+export const DECISION_ACTIONS = [
+  'apply',
+  'review',
+  'investigate',
+  'do_not_apply',
+] as const;
+
+export const decisions = sqliteTable(
+  'decisions',
+  {
+    id: text('id').primaryKey(),
+    evaluationId: text('evaluation_id')
+      .notNull()
+      .references(() => evaluations.id, { onDelete: 'restrict' }),
+    candidateId: text('candidate_id')
+      .notNull()
+      .references(() => candidates.id, { onDelete: 'restrict' }),
+    snapshotId: text('snapshot_id')
+      .notNull()
+      .references(() => opportunitySnapshots.id, { onDelete: 'restrict' }),
+    priority: text('priority', { enum: DECISION_STATES }).notNull(),
+    action: text('action', { enum: DECISION_ACTIONS }),
+    explanation: text('explanation').notNull(),
+    engineVersion: text('engine_version'),
+    inputFingerprint: text('input_fingerprint'),
+    eligibilityInputFingerprint: text(
+      'eligibility_input_fingerprint',
+    ).notNull(),
+    fitInputFingerprint: text('fit_input_fingerprint').notNull(),
+    qualityInputFingerprint: text('quality_input_fingerprint').notNull(),
+    reasonCodes: text('reason_codes'),
+    evaluatedAt: integer('evaluated_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    index('decisions_eval_idx').on(table.evaluationId),
+    index('decisions_input_idx').on(
+      table.candidateId,
+      table.snapshotId,
+      table.engineVersion,
+      table.inputFingerprint,
+    ),
+    uniqueIndex('decisions_semantic_input_unique').on(
+      table.candidateId,
+      table.snapshotId,
+      table.engineVersion,
+      table.inputFingerprint,
+    ),
+  ],
+);
+
+export const decisionReasons = sqliteTable(
+  'decision_reasons',
+  {
+    id: text('id').primaryKey(),
+    decisionId: text('decision_id')
+      .notNull()
+      .references(() => decisions.id, { onDelete: 'cascade' }),
+    reasonCode: text('reason_code').notNull(),
+    findingId: text('finding_id')
+      .notNull()
+      .references(() => evaluationFindings.id, { onDelete: 'restrict' }),
+  },
+  (table) => [
+    index('decision_reason_decision_idx').on(table.decisionId),
+    uniqueIndex('decision_reason_unique').on(
+      table.decisionId,
+      table.reasonCode,
+      table.findingId,
+    ),
+  ],
+);
 
 export const APPLICATION_STATUSES = [
   'Preparing',

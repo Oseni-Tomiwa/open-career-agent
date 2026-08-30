@@ -45,9 +45,9 @@ Justified when a missing, inferred, ambiguous, stale, or contradictory fact coul
 
 Justified when no confirmed Hard Blocker exists but supported Fit is weak, important non-gating Requirements are missing, Candidate Preferences conflict, Quality is low, or stronger Opportunities deserve attention first. Low priority must not be used as a disguised ineligible state.
 
-### Ineligible
+### Blocked
 
-Justified only when at least one confirmed Hard Blocker passes the Eligibility test: an applicable explicit mandatory Requirement conflicts with adequate Candidate Evidence, is material to pursuit, and has no unresolved exception or contradiction.
+Justified when current pursuit should not proceed because of a confirmed upstream fact. An Eligibility Hard Blocker uses an `ELIGIBILITY_BLOCKER` reason while Eligibility remains the authority for candidate eligibility. An explicitly closed listing can use `LISTING_CLOSED` without making the Candidate ineligible.
 
 The explanation must quote or reference the blocking Requirement, identify the conflicting Candidate fact, and state what change could remove the blocker.
 
@@ -55,7 +55,7 @@ The explanation must quote or reference the blocking Requirement, identify the c
 
 Decision behavior can be specified as ordered constraints rather than weights:
 
-1. **Check confirmed blockers.** If present, return an ineligible recommendation for current pursuit, while preserving Fit and Quality explanations.
+1. **Check confirmed blockers.** If present, return a blocked recommendation for current pursuit, while preserving Fit and Quality explanations and the authority of the upstream dimension.
 2. **Check material Eligibility uncertainty.** If resolving an unknown or contradiction could produce a blocker, prefer investigate over immediate-application priority.
 3. **Check severe Quality risk.** If observable risk makes the Opportunity unsafe or unreliable, lower priority or investigate without changing Eligibility or Fit.
 4. **Compare supported Fit and Candidate Preferences.** Among realistically pursuable Opportunities, stronger supported alignment generally raises priority.

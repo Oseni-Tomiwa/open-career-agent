@@ -1,6 +1,11 @@
 import { eq } from 'drizzle-orm';
 import type { DatabaseHandle } from '../client.js';
-import { candidateClaims, candidates } from '../schema.js';
+import {
+  candidateClaims,
+  candidates,
+  opportunitySnapshots,
+} from '../schema.js';
+import { BackgroundTaskLedger } from '../task-ledger.js';
 import type { CandidateId, ClaimId } from '@oca/domain';
 
 export class CandidateRepository {
@@ -56,6 +61,21 @@ export class CandidateRepository {
         updatedAt: new Date(timestamp),
       })
       .run();
+
+    // Candidate knowledge is a material Evaluation input.  Enqueue targeted
+    // reevaluation work for existing snapshots; ledger identity prevents a
+    // duplicate command from producing a task storm.
+    const ledger = new BackgroundTaskLedger(this.db);
+    for (const snapshot of this.db.db
+      .select({ id: opportunitySnapshots.id })
+      .from(opportunitySnapshots)
+      .all()) {
+      ledger.enqueue({
+        taskType: 'eligibility.evaluate',
+        payload: { snapshotId: snapshot.id, candidateId: claim.candidateId },
+        idempotencyKey: `eligibility-claim-${claim.id}-${snapshot.id}`,
+      });
+    }
   }
 
   public getClaims(candidateId: CandidateId) {

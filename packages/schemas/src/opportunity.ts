@@ -102,6 +102,71 @@ export const QualityEvaluationSchema = Type.Object({
   findings: Type.Array(QualityFindingSchema),
 });
 
+export const EligibilityEvaluationSchema = Type.Object({
+  state: Type.Union([
+    Type.Literal('eligible'),
+    Type.Literal('ineligible'),
+    Type.Literal('investigate'),
+    Type.Literal('unknown'),
+  ]),
+  engineVersion: Type.String(),
+  findings: Type.Array(
+    Type.Object({
+      id: Type.String(),
+      dimension: Type.String(),
+      state: Type.String(),
+      summary: Type.String(),
+      confidence: Type.Optional(Type.String()),
+      evidence: Type.Array(QualityFindingEvidenceSchema),
+    }),
+  ),
+});
+
+export const DecisionStateSchema = Type.Union([
+  Type.Literal('high-priority'),
+  Type.Literal('consider'),
+  Type.Literal('investigate'),
+  Type.Literal('low-priority'),
+  Type.Literal('blocked'),
+]);
+
+export const DecisionActionSchema = Type.Union([
+  Type.Literal('apply'),
+  Type.Literal('review'),
+  Type.Literal('investigate'),
+  Type.Literal('do_not_apply'),
+]);
+
+export const DecisionReasonCodeSchema = Type.Union([
+  Type.Literal('ELIGIBILITY_BLOCKER'),
+  Type.Literal('LISTING_CLOSED'),
+  Type.Literal('LISTING_STALE'),
+  Type.Literal('ELIGIBILITY_UNRESOLVED'),
+  Type.Literal('STRONG_REQUIRED_FIT'),
+  Type.Literal('MODERATE_FIT'),
+  Type.Literal('MATERIAL_FIT_GAPS'),
+  Type.Literal('QUALITY_RISK'),
+  Type.Literal('QUALITY_UNCERTAINTY'),
+  Type.Literal('ACTIONABLE_LISTING'),
+]);
+
+export const DecisionReasonSchema = Type.Object({
+  code: DecisionReasonCodeSchema,
+  findingIds: Type.Array(Type.String()),
+});
+
+export const DecisionDetailSchema = Type.Object({
+  id: Type.String(),
+  state: DecisionStateSchema,
+  action: DecisionActionSchema,
+  explanation: Type.String(),
+  engineVersion: Type.String(),
+  inputFingerprint: Type.String(),
+  reasonCodes: Type.Array(DecisionReasonCodeSchema),
+  reasons: Type.Array(DecisionReasonSchema),
+  evaluatedAt: Type.String(),
+});
+
 export const OpportunitySchema = Type.Object(
   {
     id: Type.String(),
@@ -123,6 +188,7 @@ export const OpportunitySummarySchema = Type.Object(
     latestSnapshotId: Type.Optional(Type.String()),
     fitLevel: Type.Optional(FitLevelSchema),
     qualityLevel: Type.Optional(QualityLevelSchema),
+    decisionState: Type.Optional(DecisionStateSchema),
   },
   { $id: 'OpportunitySummary' },
 );
@@ -140,7 +206,9 @@ export const OpportunitySnapshotSchema = Type.Object(
     content: Type.String(),
     observedAt: Type.String(),
     fit: Type.Optional(FitEvaluationSchema),
+    eligibility: Type.Optional(EligibilityEvaluationSchema),
     quality: Type.Optional(QualityEvaluationSchema),
+    decision: Type.Optional(DecisionDetailSchema),
   },
   { $id: 'OpportunitySnapshot' },
 );
