@@ -77,7 +77,18 @@ export function createEligibilityHandlers(deps: {
       if (!candId) return;
       const claims = candidateRepo.getClaims(candId as unknown as CandidateId);
 
-      const result = engine.evaluate(snapshot, claims);
+      const result = engine.evaluate(
+        snapshot,
+        claims.map((claim) => ({
+          ...claim,
+          // Eligibility V1 predates the canonical persistence vocabulary.
+          // Keep the frozen engine stable and adapt at its workflow boundary.
+          state:
+            claim.state === 'CONFLICTING'
+              ? 'conflict'
+              : claim.state.toLowerCase(),
+        })),
+      );
 
       const evalId = randomUUID();
       const inputFingerprint = fingerprintEligibilityInputs({

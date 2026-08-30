@@ -21,6 +21,11 @@ export * from './schema.js';
 
 // Repositories
 export { CandidateRepository } from './repositories/candidate-repository.js';
+export {
+  CareerMemoryRepository,
+  CareerMemoryError,
+  type ManualEvidenceInput,
+} from './repositories/career-memory-repository.js';
 export { OpportunityRepository } from './repositories/opportunity-repository.js';
 export { EvaluationRepository } from './repositories/evaluation-repository.js';
 export { EvidenceRepository } from './repositories/evidence-repository.js';

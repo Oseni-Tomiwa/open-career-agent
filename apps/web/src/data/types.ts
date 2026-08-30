@@ -183,6 +183,68 @@ export interface CandidateProfile {
   readonly completeness: number;
 }
 
+export type CandidateClaimState =
+  | 'SUPPORTED'
+  | 'INFERRED'
+  | 'UNKNOWN'
+  | 'CONFLICTING'
+  | 'UNSUPPORTED';
+
+export type CandidateClaimConfidence = 'HIGH' | 'MODERATE' | 'LOW';
+
+export interface CareerMemoryEvidence {
+  readonly id: string;
+  readonly evidenceType: string;
+  readonly sourceReference: string;
+  readonly excerpt: string;
+  readonly state: EvidenceState;
+  readonly createdAt: string;
+}
+
+export interface CareerMemoryClaim {
+  readonly id: string;
+  readonly kind: string;
+  readonly value: string;
+  readonly scope: string | null;
+  readonly state: CandidateClaimState;
+  readonly confidence: CandidateClaimConfidence | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly evidence: readonly CareerMemoryEvidence[];
+}
+
+export interface CareerMemoryProfile {
+  readonly candidate: {
+    readonly id: string;
+    readonly createdAt: string;
+    readonly updatedAt: string;
+  };
+  readonly claims: readonly CareerMemoryClaim[];
+}
+
+export interface ManualEvidenceInput {
+  readonly evidenceType: string;
+  readonly sourceReference?: string;
+  readonly excerpt: string;
+  readonly state: 'candidate-confirmed' | 'unreviewed' | 'disputed';
+}
+
+export interface CreateCandidateClaimInput {
+  readonly kind: string;
+  readonly value: string;
+  readonly scope?: string;
+  readonly state: 'UNKNOWN' | 'SUPPORTED';
+  readonly confidence?: CandidateClaimConfidence;
+  readonly evidence?: ManualEvidenceInput;
+}
+
+export interface UpdateCandidateClaimInput {
+  readonly value?: string;
+  readonly scope?: string | null;
+  readonly state?: CandidateClaimState;
+  readonly confidence?: CandidateClaimConfidence | null;
+}
+
 export interface SearchPreferences {
   readonly targetRoles: readonly string[];
   readonly locations: readonly string[];
@@ -225,4 +287,17 @@ export interface ProductRepository {
   saveSearchPreferences(
     preferences: SearchPreferences,
   ): Promise<ProductSnapshot>;
+  getCareerMemory(): Promise<CareerMemoryProfile>;
+  createCandidateClaim(
+    input: CreateCandidateClaimInput,
+  ): Promise<CareerMemoryProfile>;
+  updateCandidateClaim(
+    claimId: string,
+    input: UpdateCandidateClaimInput,
+  ): Promise<CareerMemoryProfile>;
+  attachClaimEvidence(
+    claimId: string,
+    evidence: ManualEvidenceInput,
+    transitionTo?: CandidateClaimState,
+  ): Promise<CareerMemoryProfile>;
 }

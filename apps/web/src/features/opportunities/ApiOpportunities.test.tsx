@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { initialSeedSnapshot } from '../../data/seed.js';
 import type {
+  CareerMemoryProfile,
   Decision,
   Opportunity,
   ProductRepository,
@@ -44,6 +45,33 @@ class ApiFixtureRepository implements ProductRepository {
     this.snapshot = { ...this.snapshot, searchPreferences: preferences };
     return Promise.resolve(this.snapshot);
   }
+
+  public getCareerMemory(): Promise<CareerMemoryProfile> {
+    return Promise.resolve(emptyCareerMemory());
+  }
+
+  public createCandidateClaim(): Promise<CareerMemoryProfile> {
+    return Promise.resolve(emptyCareerMemory());
+  }
+
+  public updateCandidateClaim(): Promise<CareerMemoryProfile> {
+    return Promise.resolve(emptyCareerMemory());
+  }
+
+  public attachClaimEvidence(): Promise<CareerMemoryProfile> {
+    return Promise.resolve(emptyCareerMemory());
+  }
+}
+
+function emptyCareerMemory(): CareerMemoryProfile {
+  return {
+    candidate: {
+      id: 'candidate-1',
+      createdAt: '2026-08-29T10:00:00.000Z',
+      updatedAt: '2026-08-29T10:00:00.000Z',
+    },
+    claims: [],
+  };
 }
 
 function opportunity(overrides: Partial<Opportunity> = {}): Opportunity {
@@ -210,6 +238,10 @@ describe('API-mode Opportunities UI', () => {
       getOpportunity: () => Promise.resolve(null),
       setOpportunityDecision: () => Promise.reject(new Error('unsupported')),
       saveSearchPreferences: () => Promise.reject(new Error('unsupported')),
+      getCareerMemory: () => Promise.reject(new Error('unsupported')),
+      createCandidateClaim: () => Promise.reject(new Error('unsupported')),
+      updateCandidateClaim: () => Promise.reject(new Error('unsupported')),
+      attachClaimEvidence: () => Promise.reject(new Error('unsupported')),
     };
     renderProduct(<OpportunitiesPage />, ['/opportunities'], failing);
     expect(await screen.findByRole('alert')).toHaveTextContent(

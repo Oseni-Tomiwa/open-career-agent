@@ -1,14 +1,22 @@
 import {
+  AttachClaimEvidenceInputSchema,
+  CandidateProfileResponseSchema,
+  CareerMemoryMutationResponseSchema,
+  CreateCandidateClaimInputSchema,
   OpportunityDetailResponseSchema,
   OpportunityListResponseSchema,
+  UpdateCandidateClaimInputSchema,
 } from '@oca/schemas';
-import type { Static } from '@sinclair/typebox';
+import type { Static, TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
 import { browserConfig } from '../config.js';
 import { initialSeedSnapshot } from './seed.js';
 import type {
   Decision,
+  CandidateClaimState,
+  CareerMemoryProfile,
+  CreateCandidateClaimInput,
   EligibilityState,
   EvidenceReference,
   EvidenceState,
@@ -18,6 +26,8 @@ import type {
   ProductSnapshot,
   QualitySignal,
   SearchPreferences,
+  ManualEvidenceInput,
+  UpdateCandidateClaimInput,
 } from './types.js';
 
 type ListResponse = Static<typeof OpportunityListResponseSchema>;
@@ -113,15 +123,89 @@ export class ApiProductRepository implements ProductRepository {
     return Promise.resolve(this.snapshot);
   }
 
-  private async getValidated<TSchema extends typeof OpportunityListResponseSchema | typeof OpportunityDetailResponseSchema>(
+  public async getCareerMemory(): Promise<CareerMemoryProfile> {
+    return this.getValidated(
+      `/candidates/${encodeURIComponent(this.candidateId!)}/profile`,
+      CandidateProfileResponseSchema,
+    );
+  }
+
+  public async createCandidateClaim(
+    input: CreateCandidateClaimInput,
+  ): Promise<CareerMemoryProfile> {
+    if (!Value.Check(CreateCandidateClaimInputSchema, input)) {
+      throw new ApiProductRepositoryError('The claim input is invalid.');
+    }
+    return this.mutateCareerMemory(
+      `/candidates/${encodeURIComponent(this.candidateId!)}/claims`,
+      'POST',
+      input,
+    );
+  }
+
+  public async updateCandidateClaim(
+    claimId: string,
+    input: UpdateCandidateClaimInput,
+  ): Promise<CareerMemoryProfile> {
+    if (!Value.Check(UpdateCandidateClaimInputSchema, input)) {
+      throw new ApiProductRepositoryError('The claim update is invalid.');
+    }
+    return this.mutateCareerMemory(
+      `/candidates/${encodeURIComponent(this.candidateId!)}/claims/${encodeURIComponent(claimId)}`,
+      'PATCH',
+      input,
+    );
+  }
+
+  public async attachClaimEvidence(
+    claimId: string,
+    evidence: ManualEvidenceInput,
+    transitionTo?: CandidateClaimState,
+  ): Promise<CareerMemoryProfile> {
+    const input = { evidence, ...(transitionTo ? { transitionTo } : {}) };
+    if (!Value.Check(AttachClaimEvidenceInputSchema, input)) {
+      throw new ApiProductRepositoryError('The Evidence input is invalid.');
+    }
+    return this.mutateCareerMemory(
+      `/candidates/${encodeURIComponent(this.candidateId!)}/claims/${encodeURIComponent(claimId)}/evidence`,
+      'POST',
+      input,
+    );
+  }
+
+  private async mutateCareerMemory(
     path: string,
-    schema: TSchema,
+    method: 'POST' | 'PATCH',
+    body: unknown,
+  ): Promise<CareerMemoryProfile> {
+    const response = await this.getValidated(
+      path,
+      CareerMemoryMutationResponseSchema,
+      undefined,
+      {
+        method,
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    return { candidate: response.candidate, claims: response.claims };
+  }
+
+  private async getValidated<TSchemaType extends TSchema>(
+    path: string,
+    schema: TSchemaType,
     signal?: AbortSignal,
-  ): Promise<Static<TSchema>> {
+    init?: RequestInit,
+  ): Promise<Static<TSchemaType>> {
     let response: Response;
     try {
       response = await this.fetcher(`${this.baseUrl}${path}`, {
+        ...init,
         headers: { accept: 'application/json' },
+        ...(init?.headers ? { headers: init.headers } : {}),
         ...(signal ? { signal } : {}),
       });
     } catch (error) {

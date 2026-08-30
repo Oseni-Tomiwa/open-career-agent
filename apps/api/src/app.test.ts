@@ -12,6 +12,7 @@ import {
 } from '@oca/database';
 import {
   ApiErrorEnvelopeSchema,
+  CandidateProfileResponseSchema,
   OpportunityDetailResponseSchema,
   OpportunityListResponseSchema,
 } from '@oca/schemas';
@@ -503,5 +504,161 @@ describe('API application', () => {
       const summaryItem = items.find((d) => d.id === opportunity);
       expect(summaryItem?.decisionState).toBe('high-priority');
     }
+  });
+
+  it('reads and mutates candidate-scoped Career Memory with preserved provenance', async () => {
+    const candidate = candidateId('candidate-profile-api');
+    const otherCandidate = candidateId('candidate-profile-other');
+    const candidateRepository = new CandidateRepository(database);
+    candidateRepository.createCandidate(candidate);
+    candidateRepository.createCandidate(otherCandidate);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: `/candidates/${candidate}/claims`,
+      payload: {
+        kind: 'work_authorization',
+        value: 'Authorized to work',
+        scope: 'us',
+        state: 'SUPPORTED',
+        confidence: 'HIGH',
+        evidence: {
+          evidenceType: 'user-confirmed statement',
+          excerpt: 'I am authorized to work in the United States.',
+          state: 'candidate-confirmed',
+        },
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({
+      reevaluationRequested: true,
+      claims: [
+        {
+          kind: 'work_authorization',
+          scope: 'us',
+          state: 'SUPPORTED',
+          confidence: 'HIGH',
+          evidence: [
+            {
+              sourceReference: 'candidate-confirmed/manual',
+              state: 'candidate-confirmed',
+            },
+          ],
+        },
+      ],
+    });
+    const claim = created.json<{ claims: Array<{ id: string }> }>().claims[0]!;
+
+    const read = await app.inject({
+      method: 'GET',
+      url: `/candidates/${candidate}/profile`,
+    });
+    expect(read.statusCode).toBe(200);
+    expect(Value.Check(CandidateProfileResponseSchema, read.json())).toBe(true);
+
+    const invalidTransition = await app.inject({
+      method: 'PATCH',
+      url: `/candidates/${candidate}/claims/${claim.id}`,
+      payload: { state: 'UNKNOWN' },
+    });
+    expect(invalidTransition.statusCode).toBe(409);
+    expect(invalidTransition.json()).toMatchObject({
+      error: { code: 'INVALID_TRANSITION' },
+    });
+
+    const crossCandidate = await app.inject({
+      method: 'POST',
+      url: `/candidates/${otherCandidate}/claims/${claim.id}/evidence`,
+      payload: {
+        evidence: {
+          evidenceType: 'manual reference',
+          sourceReference: 'certificate:example',
+          excerpt: 'A reference that belongs only to the first candidate.',
+          state: 'unreviewed',
+        },
+      },
+    });
+    expect(crossCandidate.statusCode).toBe(404);
+
+    const otherProfile = await app.inject({
+      method: 'GET',
+      url: `/candidates/${otherCandidate}/profile`,
+    });
+    expect(otherProfile.json()).toMatchObject({ claims: [] });
+  });
+
+  it('supports unknown claim editing and evidence-backed confirmation', async () => {
+    const candidate = candidateId('candidate-profile-edit');
+    new CandidateRepository(database).createCandidate(candidate);
+    const created = await app.inject({
+      method: 'POST',
+      url: `/candidates/${candidate}/claims`,
+      payload: {
+        kind: 'language',
+        value: 'German',
+        scope: 'German',
+        state: 'UNKNOWN',
+      },
+    });
+    const claimId = created.json<{ claims: Array<{ id: string }> }>().claims[0]!
+      .id;
+
+    const updated = await app.inject({
+      method: 'PATCH',
+      url: `/candidates/${candidate}/claims/${claimId}`,
+      payload: {
+        value: 'German language',
+        scope: 'German',
+        confidence: 'MODERATE',
+      },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toMatchObject({
+      claims: [
+        {
+          value: 'German language',
+          scope: 'German',
+          state: 'UNKNOWN',
+          confidence: 'MODERATE',
+        },
+      ],
+    });
+
+    const confirmed = await app.inject({
+      method: 'POST',
+      url: `/candidates/${candidate}/claims/${claimId}/evidence`,
+      payload: {
+        evidence: {
+          evidenceType: 'user-confirmed statement',
+          excerpt: 'I can work professionally in German.',
+          state: 'candidate-confirmed',
+        },
+        transitionTo: 'SUPPORTED',
+      },
+    });
+    expect(confirmed.statusCode).toBe(201);
+    expect(confirmed.json()).toMatchObject({
+      claims: [
+        { state: 'SUPPORTED', evidence: [{ state: 'candidate-confirmed' }] },
+      ],
+    });
+  });
+
+  it('rejects invalid candidates and malformed Career Memory payloads', async () => {
+    expect(
+      (await app.inject({ method: 'GET', url: '/candidates/missing/profile' }))
+        .statusCode,
+    ).toBe(404);
+    const candidate = candidateId('candidate-profile-invalid');
+    new CandidateRepository(database).createCandidate(candidate);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/candidates/${candidate}/claims`,
+          payload: { kind: '', value: '', state: 'TRUE' },
+        })
+      ).statusCode,
+    ).toBe(400);
   });
 });

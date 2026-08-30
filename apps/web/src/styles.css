@@ -1895,6 +1895,141 @@ svg {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
+
+.career-memory-sections {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.career-claim-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+}
+
+.career-claim-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+}
+
+.career-claim-card > header,
+.career-claim-card dl > div,
+.claim-evidence-item > div,
+.claim-actions,
+.profile-editor > div {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+  justify-content: space-between;
+}
+
+.career-claim-card h3,
+.career-claim-card h4 {
+  margin: 0.25rem 0;
+}
+
+.career-claim-card dl {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.9rem 0;
+}
+
+.career-claim-card dt,
+.career-claim-card dd {
+  margin: 0;
+}
+
+.career-claim-card dt,
+.claim-guidance,
+.claim-evidence-item small {
+  color: var(--text-muted);
+}
+
+.claim-state {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 750;
+  padding: 0.25rem 0.5rem;
+}
+
+.claim-state-supported {
+  color: var(--success);
+}
+.claim-state-conflicting {
+  color: var(--danger);
+}
+.claim-state-unknown {
+  color: var(--text-muted);
+}
+.claim-state-inferred {
+  color: var(--warning);
+}
+.claim-state-unsupported {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.claim-evidence-list {
+  border-top: 1px solid var(--border);
+  margin-top: 0.9rem;
+  padding-top: 0.8rem;
+}
+
+.claim-evidence-item {
+  background: var(--surface-subtle);
+  border-radius: var(--radius-md);
+  margin-top: 0.55rem;
+  padding: 0.75rem;
+}
+
+.claim-actions {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin-top: 0.9rem;
+}
+
+.profile-editor {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: grid;
+  gap: 0.8rem;
+  margin: 1rem 0;
+  padding: 1rem;
+}
+
+.profile-editor.compact {
+  background: var(--surface-subtle);
+}
+
+.profile-editor label {
+  display: grid;
+  gap: 0.3rem;
+  font-weight: 650;
+}
+
+.profile-editor input,
+.profile-editor select,
+.profile-editor textarea {
+  width: 100%;
+}
+
+.profile-notice,
+.profile-error {
+  border-radius: var(--radius-md);
+  padding: 0.8rem 1rem;
+}
+
+.profile-notice {
+  background: var(--surface-subtle);
+}
+.profile-error {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
 .evidence-register-grid article > div {
   display: flex;
   align-items: center;

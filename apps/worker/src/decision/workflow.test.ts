@@ -6,6 +6,7 @@ import {
   applyMigrations,
   BackgroundTaskLedger,
   CandidateRepository,
+  CareerMemoryRepository,
   ApplicationRepository,
   EvidenceRepository,
   EvaluationRepository,
@@ -595,6 +596,108 @@ describe('decision.evaluate durable workflow', () => {
     const updatedDecision = repository.getCurrentDecision(candId, snapshot);
     expect(updatedDecision).not.toBeNull();
     expect(updatedDecision?.id).not.toBe(initialDecision?.id);
+  });
+
+  it('propagates evidence-backed Career Memory confirmation and conflict to Decision', async () => {
+    const candId = candidateId('cand-career-memory-e2e');
+    const candRepo = new CandidateRepository(database);
+    candRepo.createCandidate(candId);
+    candRepo.addClaim({
+      id: claimId('claim-memory-ts'),
+      candidateId: candId,
+      kind: 'skill',
+      value: 'TypeScript',
+      state: 'SUPPORTED',
+    });
+    candRepo.addClaim({
+      id: claimId('claim-memory-node'),
+      candidateId: candId,
+      kind: 'skill',
+      value: 'Node.js',
+      state: 'SUPPORTED',
+    });
+    const targetSnapshot = snapshotId('snap-career-memory-e2e');
+    new OpportunityRepository(database).appendSnapshot({
+      id: targetSnapshot,
+      opportunityId: opportunity,
+      title: 'Senior TypeScript Engineer',
+      organization: 'Acme Corp',
+      location: 'New York, US',
+      workModel: 'hybrid',
+      employmentType: 'full-time',
+      compensation: '$130,000 - $160,000',
+      content:
+        'Must be authorized to work in the US. Requirements: TypeScript, Node.js. Apply at https://boards.greenhouse.io/acme/jobs/123.',
+      fingerprint: 'snap-career-memory-e2e',
+      sourceObservationId: observationId,
+    });
+    const memory = new CareerMemoryRepository(database);
+    const authorization = memory.createClaim({
+      candidateId: candId,
+      kind: 'work_authorization',
+      value: 'US work authorization',
+      scope: 'us',
+      state: 'UNKNOWN',
+    });
+    const handlers = {
+      ...createEligibilityHandlers({ db: database }),
+      ...createFitHandlers({ db: database }),
+      ...createQualityHandlers({ db: database }),
+      ...createDecisionHandlers(database),
+    };
+    const drain = async () => {
+      let task = ledger.claimNext({
+        leaseOwner: 'memory-worker',
+        leaseDurationMs: 10_000,
+      });
+      while (task) {
+        await handlers[task.taskType]!(task);
+        ledger.markSucceeded(task.id, 'memory-worker');
+        task = ledger.claimNext({
+          leaseOwner: 'memory-worker',
+          leaseDurationMs: 10_000,
+        });
+      }
+    };
+
+    await drain();
+    let evaluation = repository.getCurrentEvaluation(candId, targetSnapshot);
+    let decision = repository.getCurrentDecision(candId, targetSnapshot);
+    expect(evaluation?.eligibilityState).toBe('investigate');
+    expect(decision?.priority).toBe('investigate');
+
+    memory.attachEvidence({
+      candidateId: candId,
+      claimId: claimId(authorization.id),
+      evidence: {
+        evidenceType: 'user-confirmed statement',
+        excerpt: 'I am authorized to work in the United States.',
+        state: 'candidate-confirmed',
+      },
+      transitionTo: 'SUPPORTED',
+    });
+    await drain();
+    evaluation = repository.getCurrentEvaluation(candId, targetSnapshot);
+    decision = repository.getCurrentDecision(candId, targetSnapshot);
+    expect(evaluation?.eligibilityState).toBe('eligible');
+    expect(decision?.action).not.toBe('do_not_apply');
+
+    memory.attachEvidence({
+      candidateId: candId,
+      claimId: claimId(authorization.id),
+      evidence: {
+        evidenceType: 'candidate correction',
+        sourceReference: 'manual:authorization-correction',
+        excerpt: 'I do not currently possess the required authorization.',
+        state: 'disputed',
+      },
+      transitionTo: 'CONFLICTING',
+    });
+    await drain();
+    evaluation = repository.getCurrentEvaluation(candId, targetSnapshot);
+    decision = repository.getCurrentDecision(candId, targetSnapshot);
+    expect(evaluation?.eligibilityState).toBe('ineligible');
+    expect(decision?.priority).toBe('blocked');
   });
 
   it('propagates fit changes end-to-end through pipeline to current decision', async () => {

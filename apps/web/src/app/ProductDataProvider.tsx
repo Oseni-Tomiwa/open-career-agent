@@ -13,11 +13,16 @@ import { browserConfig } from '../config.js';
 import { ApiProductRepository } from '../data/apiProductRepository.js';
 import { SeedProductRepository } from '../data/seedRepository.js';
 import type {
+  CandidateClaimState,
+  CareerMemoryProfile,
+  CreateCandidateClaimInput,
   Decision,
+  ManualEvidenceInput,
   Opportunity,
   ProductRepository,
   ProductSnapshot,
   SearchPreferences,
+  UpdateCandidateClaimInput,
 } from '../data/types.js';
 
 interface ProductDataContextValue {
@@ -34,6 +39,19 @@ interface ProductDataContextValue {
   readonly saveSearchPreferences: (
     preferences: SearchPreferences,
   ) => Promise<void>;
+  readonly getCareerMemory: () => Promise<CareerMemoryProfile>;
+  readonly createCandidateClaim: (
+    input: CreateCandidateClaimInput,
+  ) => Promise<CareerMemoryProfile>;
+  readonly updateCandidateClaim: (
+    claimId: string,
+    input: UpdateCandidateClaimInput,
+  ) => Promise<CareerMemoryProfile>;
+  readonly attachClaimEvidence: (
+    claimId: string,
+    evidence: ManualEvidenceInput,
+    transitionTo?: CandidateClaimState,
+  ) => Promise<CareerMemoryProfile>;
 }
 
 const ProductDataContext = createContext<ProductDataContextValue | null>(null);
@@ -123,6 +141,32 @@ export function ProductDataProvider({
     [repository],
   );
 
+  const getCareerMemory = useCallback(
+    () => repository.getCareerMemory(),
+    [repository],
+  );
+
+  const createCandidateClaim = useCallback(
+    (input: CreateCandidateClaimInput) =>
+      repository.createCandidateClaim(input),
+    [repository],
+  );
+
+  const updateCandidateClaim = useCallback(
+    (claimId: string, input: UpdateCandidateClaimInput) =>
+      repository.updateCandidateClaim(claimId, input),
+    [repository],
+  );
+
+  const attachClaimEvidence = useCallback(
+    (
+      claimId: string,
+      evidence: ManualEvidenceInput,
+      transitionTo?: CandidateClaimState,
+    ) => repository.attachClaimEvidence(claimId, evidence, transitionTo),
+    [repository],
+  );
+
   const value = useMemo<ProductDataContextValue | null>(
     () =>
       snapshot
@@ -132,13 +176,21 @@ export function ProductDataProvider({
             loadOpportunity,
             updateDecision,
             saveSearchPreferences,
+            getCareerMemory,
+            createCandidateClaim,
+            updateCandidateClaim,
+            attachClaimEvidence,
           }
         : null,
     [
       loadOpportunity,
+      attachClaimEvidence,
+      createCandidateClaim,
+      getCareerMemory,
       repository.dataSource,
       snapshot,
       updateDecision,
+      updateCandidateClaim,
       saveSearchPreferences,
     ],
   );

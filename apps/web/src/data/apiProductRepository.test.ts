@@ -297,4 +297,81 @@ describe('ApiProductRepository', () => {
       ),
     );
   });
+
+  it('reads and mutates Career Memory through candidate-scoped contracts', async () => {
+    const profile = {
+      candidate: {
+        id: 'candidate-1',
+        createdAt: observedAt,
+        updatedAt: observedAt,
+      },
+      claims: [
+        {
+          id: 'claim-1',
+          kind: 'skill',
+          value: 'Node.js',
+          scope: null,
+          state: 'SUPPORTED',
+          confidence: 'HIGH',
+          createdAt: observedAt,
+          updatedAt: observedAt,
+          evidence: [],
+        },
+      ],
+    } as const;
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(profile))
+      .mockResolvedValueOnce(
+        response({ ...profile, reevaluationRequested: true }, 201),
+      )
+      .mockResolvedValueOnce(
+        response({ ...profile, reevaluationRequested: true }),
+      )
+      .mockResolvedValueOnce(
+        response({ ...profile, reevaluationRequested: true }, 201),
+      );
+    const repository = new ApiProductRepository(
+      'http://api.test',
+      'candidate-1',
+      fetcher,
+    );
+
+    expect((await repository.getCareerMemory()).claims[0]?.state).toBe(
+      'SUPPORTED',
+    );
+    await repository.createCandidateClaim({
+      kind: 'skill',
+      value: 'Kubernetes',
+      state: 'UNKNOWN',
+    });
+    await repository.updateCandidateClaim('claim-1', {
+      confidence: 'MODERATE',
+    });
+    await repository.attachClaimEvidence(
+      'claim-1',
+      {
+        evidenceType: 'user-confirmed statement',
+        excerpt: 'I delivered this capability.',
+        state: 'candidate-confirmed',
+      },
+      'SUPPORTED',
+    );
+
+    expect(fetcher).toHaveBeenNthCalledWith(
+      2,
+      'http://api.test/candidates/candidate-1/claims',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      3,
+      'http://api.test/candidates/candidate-1/claims/claim-1',
+      expect.objectContaining({ method: 'PATCH' }),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      4,
+      'http://api.test/candidates/candidate-1/claims/claim-1/evidence',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
 });

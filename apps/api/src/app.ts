@@ -4,6 +4,8 @@ import swagger from '@fastify/swagger';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { ApiConfig } from '@oca/config/server';
 import {
+  CareerMemoryError,
+  CareerMemoryRepository,
   databaseIsReady,
   EvaluationRepository,
   EvidenceRepository,
@@ -15,6 +17,7 @@ import {
   evaluationId,
   findingId,
   candidateId,
+  claimId,
   decisionId,
   opportunityId,
   snapshotId,
@@ -25,8 +28,13 @@ import {
   ReadinessResponseSchema,
   OpportunityListResponseSchema,
   OpportunityDetailResponseSchema,
+  CandidateProfileResponseSchema,
+  CreateCandidateClaimInputSchema,
+  UpdateCandidateClaimInputSchema,
+  AttachClaimEvidenceInputSchema,
+  CareerMemoryMutationResponseSchema,
 } from '@oca/schemas';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 
 const SERVICE = { name: 'api', version: '0.0.0' } as const;
 
@@ -65,7 +73,7 @@ export async function createApiApp(
   });
   await app.register(cors, {
     origin: options.config.webOrigin,
-    methods: ['GET'],
+    methods: ['GET', 'POST', 'PATCH'],
   });
   await app.register(swagger, {
     openapi: {
@@ -160,6 +168,158 @@ export async function createApiApp(
   });
 
   app.addSchema(ApiErrorEnvelopeSchema);
+
+  const profileParams = Type.Object({ candidateId: Type.String() });
+  const claimParams = Type.Object({
+    candidateId: Type.String(),
+    claimId: Type.String(),
+  });
+
+  app.get(
+    '/candidates/:candidateId/profile',
+    {
+      schema: {
+        tags: ['career-memory'],
+        summary: 'Read candidate Career Memory',
+        params: profileParams,
+        response: {
+          200: CandidateProfileResponseSchema,
+          404: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const repository = new CareerMemoryRepository(options.database);
+      const profile = repository.getProfile(
+        candidateId(request.params.candidateId),
+      );
+      if (!profile) {
+        await sendCareerMemoryError(
+          reply,
+          request.id,
+          404,
+          'CANDIDATE_NOT_FOUND',
+        );
+        return;
+      }
+      return serializeProfile(profile);
+    },
+  );
+
+  app.post(
+    '/candidates/:candidateId/claims',
+    {
+      schema: {
+        tags: ['career-memory'],
+        summary: 'Create a candidate claim',
+        params: profileParams,
+        body: CreateCandidateClaimInputSchema,
+        response: {
+          201: CareerMemoryMutationResponseSchema,
+          404: ApiErrorEnvelopeSchema,
+          409: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const repository = new CareerMemoryRepository(options.database);
+      const cId = candidateId(request.params.candidateId);
+      try {
+        repository.createClaim({ candidateId: cId, ...request.body });
+        const profile = repository.getProfile(cId)!;
+        return await reply.status(201).send({
+          ...serializeProfile(profile),
+          reevaluationRequested: true,
+        });
+      } catch (error) {
+        if (error instanceof CareerMemoryError) {
+          await sendRepositoryError(reply, request.id, error);
+          return;
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.patch(
+    '/candidates/:candidateId/claims/:claimId',
+    {
+      schema: {
+        tags: ['career-memory'],
+        summary: 'Update mutable claim fields or transition claim state',
+        params: claimParams,
+        body: UpdateCandidateClaimInputSchema,
+        response: {
+          200: CareerMemoryMutationResponseSchema,
+          404: ApiErrorEnvelopeSchema,
+          409: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (Object.keys(request.body).length === 0) {
+        await sendCareerMemoryError(reply, request.id, 400, 'EMPTY_MUTATION');
+        return;
+      }
+      const repository = new CareerMemoryRepository(options.database);
+      const cId = candidateId(request.params.candidateId);
+      try {
+        repository.updateClaim({
+          candidateId: cId,
+          claimId: claimId(request.params.claimId),
+          ...request.body,
+        });
+        return {
+          ...serializeProfile(repository.getProfile(cId)!),
+          reevaluationRequested: true,
+        };
+      } catch (error) {
+        if (error instanceof CareerMemoryError) {
+          await sendRepositoryError(reply, request.id, error);
+          return;
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post(
+    '/candidates/:candidateId/claims/:claimId/evidence',
+    {
+      schema: {
+        tags: ['career-memory'],
+        summary: 'Attach manual Evidence to a candidate claim',
+        params: claimParams,
+        body: AttachClaimEvidenceInputSchema,
+        response: {
+          201: CareerMemoryMutationResponseSchema,
+          404: ApiErrorEnvelopeSchema,
+          409: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const repository = new CareerMemoryRepository(options.database);
+      const cId = candidateId(request.params.candidateId);
+      try {
+        repository.attachEvidence({
+          candidateId: cId,
+          claimId: claimId(request.params.claimId),
+          ...request.body,
+        });
+        return await reply.status(201).send({
+          ...serializeProfile(repository.getProfile(cId)!),
+          reevaluationRequested: true,
+        });
+      } catch (error) {
+        if (error instanceof CareerMemoryError) {
+          await sendRepositoryError(reply, request.id, error);
+          return;
+        }
+        throw error;
+      }
+    },
+  );
 
   app.get(
     '/opportunities',
@@ -413,4 +573,62 @@ export async function createApiApp(
   }
 
   return app;
+}
+
+function serializeProfile(
+  profile: NonNullable<ReturnType<CareerMemoryRepository['getProfile']>>,
+) {
+  return {
+    candidate: {
+      id: profile.candidate.id,
+      createdAt: profile.candidate.createdAt.toISOString(),
+      updatedAt: profile.candidate.updatedAt.toISOString(),
+    },
+    claims: profile.claims.map((claim) => ({
+      id: claim.id,
+      kind: claim.kind,
+      value: claim.value,
+      scope: claim.scope,
+      state: claim.state,
+      confidence: claim.confidence,
+      createdAt: claim.createdAt.toISOString(),
+      updatedAt: claim.updatedAt.toISOString(),
+      evidence: claim.evidence.map((item) => ({
+        ...item,
+        createdAt: item.createdAt.toISOString(),
+      })),
+    })),
+  };
+}
+
+async function sendRepositoryError(
+  reply: Parameters<typeof sendCareerMemoryError>[0],
+  requestId: string,
+  error: CareerMemoryError,
+) {
+  const status =
+    error.code === 'CANDIDATE_NOT_FOUND' || error.code === 'CLAIM_NOT_FOUND'
+      ? 404
+      : 409;
+  await sendCareerMemoryError(reply, requestId, status, error.code);
+}
+
+async function sendCareerMemoryError(
+  reply: FastifyReply,
+  requestId: string,
+  status: number,
+  code: string,
+) {
+  await reply.status(status).send({
+    error: {
+      code,
+      message:
+        status === 404
+          ? 'The requested candidate or claim was not found.'
+          : status === 400
+            ? 'The mutation payload is empty.'
+            : 'The Career Memory mutation violates domain rules.',
+      requestId,
+    },
+  });
 }

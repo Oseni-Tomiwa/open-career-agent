@@ -11,3 +11,4 @@ export type {
   ServiceMetadata,
 } from './service.js';
 export * from './opportunity.js';
+export * from './career-memory.js';

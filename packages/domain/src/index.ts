@@ -26,3 +26,9 @@ export {
 } from './identifiers.js';
 export type { OpportunityType } from './opportunity.js';
 export { OPPORTUNITY_TYPES } from './opportunity.js';
+export {
+  CAREER_MEMORY_CLAIM_STATES,
+  canTransitionClaimState,
+  claimStateTransitionRequiresEvidence,
+  type CareerMemoryClaimState,
+} from './career-memory.js';
