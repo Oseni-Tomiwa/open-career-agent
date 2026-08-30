@@ -50,6 +50,14 @@ export class ApplicationRepository {
     return result ?? null;
   }
 
+  public listApplications(cId: CandidateId) {
+    return this.db.db
+      .select()
+      .from(applications)
+      .where(eq(applications.candidateId, cId))
+      .all();
+  }
+
   public updateStatus(
     id: ApplicationId,
     status:

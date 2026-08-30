@@ -38,3 +38,7 @@ export {
   type DiscoveryRunRecord,
   type DiscoveryMatchRecord,
 } from './repositories/search-target-repository.js';
+export {
+  TodayRepository,
+  type TodayDashboardOptions,
+} from './repositories/today-repository.js';

@@ -27,6 +27,7 @@ import type {
   SearchTarget,
   DiscoveryRun,
   UpdateCandidateClaimInput,
+  TodayDashboardResponse,
 } from '../data/types.js';
 
 interface ProductDataContextValue {
@@ -70,6 +71,10 @@ interface ProductDataContextValue {
     targetId: string,
   ) => Promise<{ run: DiscoveryRun; taskEnqueued: boolean }>;
   readonly getDiscoveryRuns: () => Promise<readonly DiscoveryRun[]>;
+  readonly getTodayDashboard: (
+    timeWindowDays?: number,
+    signal?: AbortSignal,
+  ) => Promise<TodayDashboardResponse>;
 }
 
 const ProductDataContext = createContext<ProductDataContextValue | null>(null);
@@ -216,6 +221,12 @@ export function ProductDataProvider({
     [repository],
   );
 
+  const getTodayDashboard = useCallback(
+    (timeWindowDays?: number, signal?: AbortSignal) =>
+      repository.getTodayDashboard(timeWindowDays, signal),
+    [repository],
+  );
+
   const value = useMemo<ProductDataContextValue | null>(
     () =>
       snapshot
@@ -236,6 +247,7 @@ export function ProductDataProvider({
             deleteSearchTarget,
             runDiscovery,
             getDiscoveryRuns,
+            getTodayDashboard,
           }
         : null,
     [
@@ -254,6 +266,7 @@ export function ProductDataProvider({
       deleteSearchTarget,
       runDiscovery,
       getDiscoveryRuns,
+      getTodayDashboard,
     ],
   );
 

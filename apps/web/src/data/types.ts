@@ -345,6 +345,26 @@ export interface ProductSnapshot {
   readonly sourceStatuses: readonly SourceStatus[];
 }
 
+import type {
+  TodayDashboardResponse,
+  PriorityOpportunityItem,
+  NeedsAttentionItem,
+  RecentChangeItem,
+  DiscoveryActivityItem,
+  CareerMemoryAttentionItem,
+  ApplicationActivityItem,
+} from '@oca/schemas';
+
+export type {
+  TodayDashboardResponse,
+  PriorityOpportunityItem,
+  NeedsAttentionItem,
+  RecentChangeItem,
+  DiscoveryActivityItem,
+  CareerMemoryAttentionItem,
+  ApplicationActivityItem,
+};
+
 export interface ProductRepository {
   readonly dataSource: 'seed' | 'api';
   getSnapshot(): Promise<ProductSnapshot>;
@@ -383,4 +403,8 @@ export interface ProductRepository {
     targetId: string,
   ): Promise<{ run: DiscoveryRun; taskEnqueued: boolean }>;
   getDiscoveryRuns(): Promise<readonly DiscoveryRun[]>;
+  getTodayDashboard(
+    timeWindowDays?: number,
+    signal?: AbortSignal,
+  ): Promise<TodayDashboardResponse>;
 }

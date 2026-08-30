@@ -12,6 +12,7 @@ import type {
   SearchPreferences,
   SearchTarget,
   DiscoveryRun,
+  TodayDashboardResponse,
 } from '../../data/types.js';
 import { renderProduct } from '../../test/render.js';
 import { OpportunitiesPage } from './OpportunitiesPage.js';
@@ -86,6 +87,21 @@ class ApiFixtureRepository implements ProductRepository {
 
   public getDiscoveryRuns(): Promise<readonly DiscoveryRun[]> {
     return Promise.resolve([]);
+  }
+
+  public getTodayDashboard(): Promise<TodayDashboardResponse> {
+    return Promise.resolve({
+      generatedAt: new Date().toISOString(),
+      greetingName: 'Alex',
+      summaryText: 'No priority opportunities',
+      timeWindowDays: 7,
+      priorityOpportunities: [],
+      needsAttention: [],
+      recentChanges: [],
+      discoveryActivity: [],
+      applicationActivity: [],
+      careerMemoryAttention: [],
+    });
   }
 }
 
@@ -274,6 +290,7 @@ describe('API-mode Opportunities UI', () => {
       deleteSearchTarget: () => Promise.reject(new Error('unsupported')),
       runDiscovery: () => Promise.reject(new Error('unsupported')),
       getDiscoveryRuns: () => Promise.reject(new Error('unsupported')),
+      getTodayDashboard: () => Promise.reject(new Error('unsupported')),
     };
     renderProduct(<OpportunitiesPage />, ['/opportunities'], failing);
     expect(await screen.findByRole('alert')).toHaveTextContent(

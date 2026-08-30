@@ -17,6 +17,7 @@ import {
   CandidateProfileResponseSchema,
   OpportunityDetailResponseSchema,
   OpportunityListResponseSchema,
+  TodayDashboardResponseSchema,
 } from '@oca/schemas';
 import {
   candidateId,
@@ -841,5 +842,31 @@ describe('API application', () => {
     const oppsBData = oppsBRes.json<{ data: Array<{ id: string }> }>().data;
     expect(oppsBData).toHaveLength(1);
     expect(oppsBData[0]?.id).toBe(oppIdB);
+  });
+
+  it('returns Today attention dashboard with schema validation and candidate isolation', async () => {
+    const candidateA = candidateId('cand-today-a');
+    const candidateB = candidateId('cand-today-b');
+    const candRepo = new CandidateRepository(database);
+    candRepo.createCandidate(candidateA);
+    candRepo.createCandidate(candidateB);
+
+    const responseA = await app.inject({
+      method: 'GET',
+      url: `/candidates/${candidateA}/today`,
+    });
+
+    expect(responseA.statusCode).toBe(200);
+    const bodyA: unknown = responseA.json();
+    expect(Value.Check(TodayDashboardResponseSchema, bodyA)).toBe(true);
+    expect(bodyA).toMatchObject({
+      timeWindowDays: 7,
+      priorityOpportunities: [],
+      needsAttention: [],
+      recentChanges: [],
+      discoveryActivity: [],
+      applicationActivity: [],
+      careerMemoryAttention: [],
+    });
   });
 });

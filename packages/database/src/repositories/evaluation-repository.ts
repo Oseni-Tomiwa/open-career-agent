@@ -8,6 +8,7 @@ import {
   evaluationFindings,
   evaluationFindingEvidence,
   decisionReasons,
+  opportunitySnapshots,
 } from '../schema.js';
 import type {
   CandidateId,
@@ -16,6 +17,7 @@ import type {
   DecisionId,
   FindingId,
   EvidenceId,
+  OpportunityId,
 } from '@oca/domain';
 
 export class EvaluationRepository {
@@ -844,5 +846,28 @@ export class EvaluationRepository {
       .from(decisionReasons)
       .where(eq(decisionReasons.decisionId, decisionId))
       .all();
+  }
+
+  public getDecisionHistoryForCandidate(
+    cId: CandidateId,
+    oppId: OpportunityId,
+  ) {
+    return this.db.db
+      .select({ decision: decisions })
+      .from(decisions)
+      .innerJoin(evaluations, eq(decisions.evaluationId, evaluations.id))
+      .innerJoin(
+        opportunitySnapshots,
+        eq(evaluations.snapshotId, opportunitySnapshots.id),
+      )
+      .where(
+        and(
+          eq(decisions.candidateId, cId),
+          eq(opportunitySnapshots.opportunityId, oppId),
+        ),
+      )
+      .orderBy(desc(decisions.evaluatedAt))
+      .all()
+      .map((r) => r.decision);
   }
 }

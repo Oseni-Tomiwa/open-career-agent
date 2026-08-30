@@ -7,6 +7,7 @@ import {
   CareerMemoryError,
   CareerMemoryRepository,
   SearchTargetRepository,
+  TodayRepository,
   databaseIsReady,
   EvaluationRepository,
   EvidenceRepository,
@@ -43,6 +44,7 @@ import {
   SearchTargetListResponseSchema,
   DiscoveryRunListResponseSchema,
   TriggerDiscoveryRunResponseSchema,
+  TodayDashboardResponseSchema,
 } from '@oca/schemas';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 
@@ -565,6 +567,35 @@ export async function createApiApp(
           rejectedByReason: r.rejectedByReason ?? null,
         })),
       };
+    },
+  );
+
+  app.get(
+    '/candidates/:candidateId/today',
+    {
+      schema: {
+        tags: ['today'],
+        summary: 'Get candidate Today attention dashboard',
+        params: profileParams,
+        querystring: Type.Object({
+          timeWindowDays: Type.Optional(Type.Number()),
+        }),
+        response: {
+          200: TodayDashboardResponseSchema,
+        },
+      },
+    },
+    (request) => {
+      const repo = new TodayRepository(options.database);
+      const dashboard = repo.getTodayDashboard(
+        candidateId(request.params.candidateId),
+        {
+          ...(request.query.timeWindowDays
+            ? { timeWindowDays: request.query.timeWindowDays }
+            : {}),
+        },
+      );
+      return dashboard;
     },
   );
 

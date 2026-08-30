@@ -15,6 +15,7 @@ import type {
   CreateSearchTargetInput,
   UpdateSearchTargetInput,
   DiscoveryRun,
+  TodayDashboardResponse,
 } from './types.js';
 
 export class SeedProductRepository implements ProductRepository {
@@ -240,6 +241,67 @@ export class SeedProductRepository implements ProductRepository {
 
   public getDiscoveryRuns(): Promise<readonly DiscoveryRun[]> {
     return Promise.resolve(this.discoveryRuns);
+  }
+
+  public getTodayDashboard(): Promise<TodayDashboardResponse> {
+    const priorities = this.snapshot.opportunities
+      .filter((o) => o.decision === 'high-priority')
+      .map((o) => ({
+        opportunityId: o.id,
+        title: o.role,
+        organization: o.company.name,
+        location: o.location,
+        decisionState: 'high-priority',
+        action: o.nextAction,
+        explanation: o.explanation,
+        observedAt: o.updatedAt,
+        reasonCodes: [],
+        freshnessBucket: 'recent',
+        applicationStatus: 'not_started',
+      }));
+
+    const investigations = this.snapshot.opportunities
+      .filter(
+        (o) =>
+          o.decision === 'investigate' || o.eligibility === 'unknown',
+      )
+      .map((o) => ({
+        opportunityId: o.id,
+        title: o.role,
+        organization: o.company.name,
+        category: 'investigate' as const,
+        titleOrSummary: o.eligibilityLabel,
+        explanation: o.eligibilityLabel,
+        nextAction: o.nextAction,
+        eligibilityState: o.eligibility,
+        decisionState: o.decision,
+        reasonCodes: [],
+      }));
+
+    const changed = this.snapshot.opportunities
+      .filter((o) => o.changed || o.isNew)
+      .map((o) => ({
+        opportunityId: o.id,
+        title: o.role,
+        organization: o.company.name,
+        changeType: 'newly_discovered' as const,
+        headline: o.changed ?? 'New opportunity discovered',
+        detail: o.summary,
+        occurredAt: o.updatedAt,
+      }));
+
+    return Promise.resolve({
+      generatedAt: new Date().toISOString(),
+      greetingName: this.snapshot.profile.name.split(' ')[0] ?? 'there',
+      summaryText: `${priorities.length} priority opportunities ready for action, while ${investigations.length} items need review.`,
+      timeWindowDays: 7,
+      priorityOpportunities: priorities,
+      needsAttention: investigations,
+      recentChanges: changed,
+      discoveryActivity: [],
+      applicationActivity: [],
+      careerMemoryAttention: [],
+    });
   }
 }
 

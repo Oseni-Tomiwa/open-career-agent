@@ -12,6 +12,7 @@ import {
   SearchTargetListResponseSchema,
   DiscoveryRunListResponseSchema,
   TriggerDiscoveryRunResponseSchema,
+  TodayDashboardResponseSchema,
 } from '@oca/schemas';
 import type { Static, TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
@@ -38,6 +39,7 @@ import type {
   CreateSearchTargetInput,
   UpdateSearchTargetInput,
   DiscoveryRun,
+  TodayDashboardResponse,
 } from './types.js';
 
 type ListResponse = Static<typeof OpportunityListResponseSchema>;
@@ -265,6 +267,18 @@ export class ApiProductRepository implements ProductRepository {
       DiscoveryRunListResponseSchema,
     );
     return res.data;
+  }
+
+  public async getTodayDashboard(
+    timeWindowDays?: number,
+    signal?: AbortSignal,
+  ): Promise<TodayDashboardResponse> {
+    const query = timeWindowDays ? `?timeWindowDays=${timeWindowDays}` : '';
+    return this.getValidated(
+      `/candidates/${encodeURIComponent(this.candidateId!)}/today${query}`,
+      TodayDashboardResponseSchema,
+      signal,
+    );
   }
 
   private async mutateCareerMemory(
