@@ -190,6 +190,9 @@ export async function createApiApp(
           : null;
         return {
           ...item,
+          ...(evaluation?.eligibilityState
+            ? { eligibilityState: evaluation.eligibilityState }
+            : {}),
           ...(evaluation?.fitLevel ? { fitLevel: evaluation.fitLevel } : {}),
           ...(evaluation?.qualityLevel
             ? { qualityLevel: evaluation.qualityLevel }

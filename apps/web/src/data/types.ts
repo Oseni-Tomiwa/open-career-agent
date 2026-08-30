@@ -11,7 +11,7 @@ export type Decision =
   | 'consider'
   | 'investigate'
   | 'low-priority'
-  | 'ineligible';
+  | 'blocked';
 
 export type EvidenceState =
   | 'source-verified'
@@ -60,6 +60,7 @@ export interface QualitySignal {
   readonly label: string;
   readonly state: 'positive' | 'neutral' | 'warning' | 'risk';
   readonly summary: string;
+  readonly evidenceIds?: readonly string[];
 }
 
 export interface OpportunityHistoryEvent {
@@ -78,30 +79,31 @@ export interface Opportunity {
   readonly description: readonly string[];
   readonly location: string;
   readonly country: string;
-  readonly workModel: 'Remote' | 'Hybrid' | 'On-site';
+  readonly workModel: string;
   readonly remotePolicy: string;
   readonly compensation: string | null;
-  readonly employmentType: 'Full-time' | 'Internship' | 'Contract';
-  readonly seniority: 'Early career' | 'Mid-level' | 'Senior' | 'Lead';
+  readonly employmentType: string;
+  readonly seniority: string;
   readonly technologies: readonly string[];
-  readonly source: 'Greenhouse' | 'Ashby' | 'Lever';
+  readonly source: string;
   readonly sourceReference: string;
   readonly freshness: string;
   readonly publishedAt: string;
   readonly updatedAt: string;
   readonly sponsorship: 'Available' | 'Unavailable' | 'Unknown' | 'Conflicting';
   readonly relocation: 'Supported' | 'Not offered' | 'Unknown';
-  readonly eligibility: EligibilityState;
+  readonly eligibility: EligibilityState | null;
   readonly eligibilityLabel: string;
-  readonly fit: FitLevel;
-  readonly fitScore: number;
-  readonly quality: QualityLevel;
-  readonly qualityScore: number;
-  readonly decision: Decision;
+  readonly fit: FitLevel | null;
+  readonly fitScore: number | null;
+  readonly quality: QualityLevel | null;
+  readonly qualityScore: number | null;
+  readonly decision: Decision | null;
   readonly decisionLabel: string;
+  readonly decisiveFindingIds: readonly string[];
   readonly explanation: string;
   readonly nextAction: string;
-  readonly completeness: number;
+  readonly completeness: number | null;
   readonly requirements: readonly string[];
   readonly eligibilitySignals: readonly EvaluationSignal[];
   readonly fitSignals: readonly FitSignal[];
@@ -210,7 +212,12 @@ export interface ProductSnapshot {
 }
 
 export interface ProductRepository {
+  readonly dataSource: 'seed' | 'api';
   getSnapshot(): Promise<ProductSnapshot>;
+  getOpportunity(
+    opportunityId: string,
+    signal?: AbortSignal,
+  ): Promise<Opportunity | null>;
   setOpportunityDecision(
     opportunityId: string,
     decision: Decision,

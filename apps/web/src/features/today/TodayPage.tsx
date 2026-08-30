@@ -4,11 +4,27 @@ import { useProductData } from '../../app/ProductDataProvider.js';
 import { CompanyMark } from '../../components/CompanyMark.js';
 import { Icon } from '../../components/Icon.js';
 import { PageHeader } from '../../components/PageHeader.js';
+import { EmptyState } from '../../components/EmptyState.js';
 import { EligibilityStatus } from '../../components/Status.js';
 import { OpportunitySummary } from '../opportunities/OpportunitySummary.js';
 
 export function TodayPage() {
-  const { snapshot } = useProductData();
+  const { dataSource, snapshot } = useProductData();
+  if (dataSource === 'api') {
+    return (
+      <div className="page today-page">
+        <PageHeader
+          description="Today aggregation is not connected to canonical API intelligence in Phase 1."
+          eyebrow="Development mode"
+          title="Today"
+        />
+        <EmptyState
+          description="Use Opportunities for API-backed list and detail data. Today remains intentionally unavailable in API mode."
+          title="Not available in API mode yet"
+        />
+      </div>
+    );
+  }
   const priorities = snapshot.opportunities
     .filter((opportunity) => opportunity.decision === 'high-priority')
     .slice(0, 3);

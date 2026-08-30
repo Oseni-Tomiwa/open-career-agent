@@ -21,12 +21,17 @@ const primaryNavigation: readonly {
 type ApiState = 'checking' | 'available' | 'unavailable';
 
 export function AppShell() {
-  const { snapshot } = useProductData();
+  const { dataSource, snapshot } = useProductData();
   const { preference, setPreference } = useTheme();
   const [navigationOpen, setNavigationOpen] = useState(false);
-  const [apiState, setApiState] = useState<ApiState>('checking');
+  const [apiState, setApiState] = useState<ApiState>(
+    dataSource === 'seed' ? 'available' : 'checking',
+  );
 
   useEffect(() => {
+    if (dataSource === 'seed') {
+      return;
+    }
     let active = true;
     getBootstrapStatus()
       .then(() => {
@@ -38,7 +43,7 @@ export function AppShell() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [dataSource]);
 
   useEffect(() => {
     if (!navigationOpen) return;
@@ -110,12 +115,14 @@ export function AppShell() {
       <div className="app-content">
         <div className="environment-strip">
           <span>
-            <Icon name="info" size={15} /> Fictional development dataset
+            <Icon name="info" size={15} />{' '}
+            {dataSource === 'api'
+              ? 'API-backed Opportunities · other pages remain development-only'
+              : 'Fictional development dataset'}
           </span>
           {apiState === 'unavailable' && (
             <span className="api-unavailable">
-              API unavailable · product data remains in the seeded frontend
-              repository
+              API unavailable · API-mode opportunity data could not be refreshed
             </span>
           )}
           {apiState === 'checking' && <span>Checking local API…</span>}

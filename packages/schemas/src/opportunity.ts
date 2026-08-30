@@ -186,6 +186,14 @@ export const OpportunitySummarySchema = Type.Object(
     latestObservedAt: Type.Optional(Type.String()),
     sourceSystems: Type.Array(Type.String()),
     latestSnapshotId: Type.Optional(Type.String()),
+    eligibilityState: Type.Optional(
+      Type.Union([
+        Type.Literal('eligible'),
+        Type.Literal('ineligible'),
+        Type.Literal('investigate'),
+        Type.Literal('unknown'),
+      ]),
+    ),
     fitLevel: Type.Optional(FitLevelSchema),
     qualityLevel: Type.Optional(QualityLevelSchema),
     decisionState: Type.Optional(DecisionStateSchema),

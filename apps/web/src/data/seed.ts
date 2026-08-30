@@ -159,6 +159,7 @@ function makeOpportunity(
     updatedAt: '2026-08-28T09:00:00Z',
     relocation: 'Unknown',
     completeness: input.eligibility === 'unknown' ? 68 : 91,
+    decisiveFindingIds: [],
     requirements: [
       'Production TypeScript and Node.js experience',
       'Evidence of owning reliable backend services',
@@ -286,7 +287,7 @@ export const seedOpportunities: readonly Opportunity[] = [
     fitScore: 94,
     quality: 'strong',
     qualityScore: 86,
-    decision: 'ineligible',
+    decision: 'blocked',
     decisionLabel: 'Do not pursue now',
     explanation:
       'The technical match is excellent, but the role-specific listing explicitly excludes sponsorship required by the candidate.',
@@ -494,7 +495,7 @@ export const seedOpportunities: readonly Opportunity[] = [
     fitScore: 84,
     quality: 'strong',
     qualityScore: 85,
-    decision: 'ineligible',
+    decision: 'blocked',
     decisionLabel: 'Not eligible',
     explanation:
       'The program requires current student enrollment for the full term; the candidate graduated and is not enrolled.',
@@ -519,7 +520,7 @@ export const seedOpportunities: readonly Opportunity[] = [
     fitScore: 88,
     quality: 'moderate',
     qualityScore: 78,
-    decision: 'ineligible',
+    decision: 'blocked',
     decisionLabel: 'Not eligible',
     explanation:
       'The contract requires US citizenship; candidate evidence confirms another citizenship. Technical Fit remains separate.',
@@ -607,7 +608,7 @@ export const seedOpportunities: readonly Opportunity[] = [
     fitScore: 90,
     quality: 'strong',
     qualityScore: 84,
-    decision: 'ineligible',
+    decision: 'blocked',
     decisionLabel: 'Not eligible',
     explanation:
       'The candidate’s location is outside the explicit remote employment geography, despite strong payments-service Fit.',

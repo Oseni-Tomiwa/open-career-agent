@@ -41,7 +41,7 @@ describe('opportunity exploration', () => {
       within(first as HTMLElement).getByText('Senior Backend Engineer'),
     ).toBeInTheDocument();
     expect(
-      within(first as HTMLElement).getByText('Blocked'),
+      within(first as HTMLElement).getByText('Ineligible'),
     ).toBeInTheDocument();
   });
 });

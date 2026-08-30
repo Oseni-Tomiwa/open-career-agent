@@ -176,8 +176,13 @@ export class OpportunityRepository {
       const latest = this.getLatestSnapshot(opp.id as OpportunityId);
       const sourceSystems: string[] = [];
       if (latest) {
-        // Note: strictly speaking, we'd need to look up the listing from the observation to get the system.
-        // For now, returning it empty or querying it if necessary.
+        sourceSystems.push(
+          ...new Set(
+            this.getObservationsForSnapshot(latest.id as SnapshotId).map(
+              (observation) => observation.sourceSystem,
+            ),
+          ),
+        );
       }
       return {
         id: opp.id,

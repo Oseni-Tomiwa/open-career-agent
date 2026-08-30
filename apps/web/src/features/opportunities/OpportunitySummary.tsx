@@ -18,7 +18,7 @@ export function OpportunitySummary({
   readonly opportunity: Opportunity;
   readonly compact?: boolean;
 }) {
-  const { updateDecision } = useProductData();
+  const { dataSource, updateDecision } = useProductData();
   const [notice, setNotice] = useState<string | null>(null);
 
   async function chooseDecision(decision: Decision, message: string) {
@@ -119,22 +119,26 @@ export function OpportunitySummary({
             )}
             {opportunity.decision !== 'investigate' && (
               <button
+                aria-label={`Review evidence for ${opportunity.role}`}
                 className="button button-quiet"
                 onClick={() => {
                   void chooseDecision(
                     'investigate',
-                    'Marked for investigation',
+                    'Marked for evidence review',
                   );
                 }}
                 type="button"
               >
-                Investigate
+                Review evidence
               </button>
             )}
           </div>
           {notice && (
             <p aria-live="polite" className="session-notice">
               {notice}
+              {dataSource === 'api'
+                ? ' The canonical API Decision was not changed.'
+                : ''}
             </p>
           )}
         </>

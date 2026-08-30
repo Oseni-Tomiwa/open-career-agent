@@ -9,7 +9,7 @@ import { Icon, type IconName } from './Icon.js';
 
 const eligibilityCopy: Record<EligibilityState, string> = {
   eligible: 'Eligible',
-  ineligible: 'Blocked',
+  ineligible: 'Ineligible',
   investigate: 'Investigate',
   unknown: 'Unknown',
 };
@@ -24,8 +24,9 @@ const eligibilityIcon: Record<EligibilityState, IconName> = {
 export function EligibilityStatus({
   state,
 }: {
-  readonly state: EligibilityState;
+  readonly state: EligibilityState | null;
 }) {
+  if (!state) return <span className="status-label">Not evaluated</span>;
   return (
     <span className="status-label" data-status={state}>
       <Icon name={eligibilityIcon[state]} size={15} />
@@ -34,13 +35,20 @@ export function EligibilityStatus({
   );
 }
 
-export function DecisionBadge({ decision }: { readonly decision: Decision }) {
+export function DecisionBadge({
+  decision,
+}: {
+  readonly decision: Decision | null;
+}) {
+  if (!decision) {
+    return <span className="decision-label">Not evaluated</span>;
+  }
   const labels: Record<Decision, string> = {
     'high-priority': 'High priority',
     consider: 'Consider',
     investigate: 'Investigate',
     'low-priority': 'Low priority',
-    ineligible: 'Ineligible',
+    blocked: 'Blocked',
   };
   return (
     <span className="decision-label" data-decision={decision}>
@@ -55,22 +63,36 @@ export function SignalScore({
   score,
 }: {
   readonly label: string;
-  readonly level: FitLevel | QualityLevel;
-  readonly score: number;
+  readonly level: FitLevel | QualityLevel | null;
+  readonly score: number | null;
 }) {
+  if (!level) {
+    return (
+      <div className="signal-score">
+        <div className="signal-score-copy">
+          <span>{label}</span>
+          <strong>Not evaluated</strong>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="signal-score" data-level={level}>
       <div className="signal-score-copy">
         <span>{label}</span>
         <strong>{level}</strong>
       </div>
-      <div
-        aria-label={`${label}: ${level}, ${score} out of 100`}
-        className="score-track"
-        role="img"
-      >
-        <span style={{ width: `${score}%` }} />
-      </div>
+      {score === null ? (
+        <small aria-label={`${label}: ${level}`}>Canonical API level</small>
+      ) : (
+        <div
+          aria-label={`${label}: ${level}, ${score} out of 100`}
+          className="score-track"
+          role="img"
+        >
+          <span style={{ width: `${score}%` }} />
+        </div>
+      )}
     </div>
   );
 }

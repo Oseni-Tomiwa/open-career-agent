@@ -9,9 +9,12 @@ import {
 } from 'react';
 
 import { AppLoading } from './AppLoading.js';
+import { browserConfig } from '../config.js';
+import { ApiProductRepository } from '../data/apiProductRepository.js';
 import { SeedProductRepository } from '../data/seedRepository.js';
 import type {
   Decision,
+  Opportunity,
   ProductRepository,
   ProductSnapshot,
   SearchPreferences,
@@ -19,6 +22,11 @@ import type {
 
 interface ProductDataContextValue {
   readonly snapshot: ProductSnapshot;
+  readonly dataSource: 'seed' | 'api';
+  readonly loadOpportunity: (
+    opportunityId: string,
+    signal?: AbortSignal,
+  ) => Promise<Opportunity | null>;
   readonly updateDecision: (
     opportunityId: string,
     decision: Decision,
@@ -32,23 +40,69 @@ const ProductDataContext = createContext<ProductDataContextValue | null>(null);
 
 export function ProductDataProvider({
   children,
+  repository: suppliedRepository,
 }: {
   readonly children: ReactNode;
+  readonly repository?: ProductRepository;
 }) {
   const [repository] = useState<ProductRepository>(
-    () => new SeedProductRepository(),
+    () =>
+      suppliedRepository ??
+      (browserConfig.productDataSource === 'api'
+        ? new ApiProductRepository()
+        : new SeedProductRepository()),
   );
   const [snapshot, setSnapshot] = useState<ProductSnapshot | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
-    void repository.getSnapshot().then((value) => {
-      if (active) setSnapshot(value);
-    });
+    void repository
+      .getSnapshot()
+      .then((value) => {
+        if (active) setSnapshot(value);
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : 'Product data failed to load.',
+          );
+        }
+      });
     return () => {
       active = false;
     };
-  }, [repository]);
+  }, [repository, loadAttempt]);
+
+  const loadOpportunity = useCallback(
+    async (opportunityId: string, signal?: AbortSignal) => {
+      const opportunity = await repository.getOpportunity(
+        opportunityId,
+        signal,
+      );
+      if (opportunity && !signal?.aborted) {
+        setSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                opportunities: current.opportunities.some(
+                  (item) => item.id === opportunity.id,
+                )
+                  ? current.opportunities.map((item) =>
+                      item.id === opportunity.id ? opportunity : item,
+                    )
+                  : [...current.opportunities, opportunity],
+              }
+            : current,
+        );
+      }
+      return opportunity;
+    },
+    [repository],
+  );
 
   const updateDecision = useCallback(
     async (opportunityId: string, decision: Decision) => {
@@ -71,10 +125,41 @@ export function ProductDataProvider({
 
   const value = useMemo<ProductDataContextValue | null>(
     () =>
-      snapshot ? { snapshot, updateDecision, saveSearchPreferences } : null,
-    [snapshot, updateDecision, saveSearchPreferences],
+      snapshot
+        ? {
+            snapshot,
+            dataSource: repository.dataSource,
+            loadOpportunity,
+            updateDecision,
+            saveSearchPreferences,
+          }
+        : null,
+    [
+      loadOpportunity,
+      repository.dataSource,
+      snapshot,
+      updateDecision,
+      saveSearchPreferences,
+    ],
   );
 
+  if (loadError) {
+    return (
+      <main className="app-load-error" role="alert">
+        <h1>Opportunity data could not be loaded</h1>
+        <p>{loadError}</p>
+        <button
+          onClick={() => {
+            setLoadError(null);
+            setLoadAttempt((attempt) => attempt + 1);
+          }}
+          type="button"
+        >
+          Try again
+        </button>
+      </main>
+    );
+  }
   if (!value) return <AppLoading />;
 
   return (

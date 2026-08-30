@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { useProductData } from '../../app/ProductDataProvider.js';
@@ -33,17 +33,76 @@ const tabs: readonly { readonly value: DetailTab; readonly label: string }[] = [
 
 export function OpportunityDetailPage() {
   const { opportunityId } = useParams();
-  const { snapshot, updateDecision } = useProductData();
+  const { dataSource, snapshot, loadOpportunity, updateDecision } =
+    useProductData();
   const [activeTab, setActiveTab] = useState<DetailTab>('overview');
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [loadedState, setLoadedState] = useState<{
+    readonly opportunityId: string;
+    readonly status: 'ready' | 'missing' | 'error';
+    readonly error: string | null;
+  } | null>(null);
   const opportunity = snapshot.opportunities.find(
     (item) => item.id === opportunityId,
   );
+  const currentLoadedState =
+    loadedState?.opportunityId === opportunityId ? loadedState : null;
+  const detailStatus = !opportunityId
+    ? 'missing'
+    : (currentLoadedState?.status ?? 'loading');
+  const detailError = currentLoadedState?.error ?? null;
 
-  if (!opportunity) {
+  useEffect(() => {
+    if (!opportunityId) return;
+    const controller = new AbortController();
+    void loadOpportunity(opportunityId, controller.signal)
+      .then((value) =>
+        setLoadedState({
+          opportunityId,
+          status: value ? 'ready' : 'missing',
+          error: null,
+        }),
+      )
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setLoadedState({
+          opportunityId,
+          status: 'error',
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Opportunity detail failed to load.',
+        });
+      });
+    return () => controller.abort();
+  }, [loadOpportunity, opportunityId]);
+
+  if (detailStatus === 'loading') {
+    return (
+      <div className="page" role="status">
+        Loading opportunity analysis…
+      </div>
+    );
+  }
+
+  if (detailStatus === 'error') {
+    return (
+      <div className="page" role="alert">
+        <h1>Opportunity analysis could not be loaded</h1>
+        <p>{detailError}</p>
+        <Link to="/opportunities">Back to opportunities</Link>
+      </div>
+    );
+  }
+
+  if (detailStatus === 'missing' || !opportunity) {
     return (
       <NotFoundPage
-        description="That opportunity is not present in the fictional development dataset. It may have been removed or the link may be incorrect."
+        description={
+          dataSource === 'api'
+            ? 'That opportunity is not available from the API. It may have been removed or the link may be incorrect.'
+            : 'That opportunity is not present in the fictional development dataset. It may have been removed or the link may be incorrect.'
+        }
         title="Opportunity not found"
       />
     );
@@ -105,12 +164,13 @@ export function OpportunityDetailPage() {
           </button>
           <button
             className="button button-secondary"
+            aria-label="Review evidence for this opportunity"
             onClick={() => {
-              void act('investigate', 'Marked for investigation');
+              void act('investigate', 'Marked for evidence review');
             }}
             type="button"
           >
-            Investigate
+            Review evidence
           </button>
           <button
             className="button button-quiet"
@@ -162,11 +222,17 @@ export function OpportunityDetailPage() {
           />
           <div className="completeness-metric">
             <span className="metric-label">Evidence completeness</span>
-            <strong>{opportunity.completeness}%</strong>
+            <strong>
+              {opportunity.completeness === null
+                ? 'Not evaluated'
+                : `${opportunity.completeness}%`}
+            </strong>
             <small>
-              {opportunity.completeness < 75
-                ? 'Material information is still missing'
-                : 'Adequate for this recommendation'}
+              {opportunity.completeness === null
+                ? 'No canonical completeness result is available'
+                : opportunity.completeness < 75
+                  ? 'Material information is still missing'
+                  : 'Adequate for this recommendation'}
             </small>
           </div>
         </div>
@@ -255,6 +321,9 @@ function Overview({ opportunity }: { readonly opportunity: Opportunity }) {
         {opportunity.description.map((paragraph) => (
           <p key={paragraph}>{paragraph}</p>
         ))}
+        {opportunity.description.length === 0 && (
+          <p>No description supplied.</p>
+        )}
       </AnalysisSection>
       <aside className="role-facts">
         <h3>Role facts</h3>
@@ -344,6 +413,7 @@ function EligibilityAnalysis({
           />
         ))}
       </div>
+      {opportunity.eligibilitySignals.length === 0 && <p>Not evaluated.</p>}
     </AnalysisSection>
   );
 }
@@ -374,6 +444,9 @@ function EligibilitySignalRow({
           <span>{signal.state}</span>
         </div>
         <p>{signal.summary}</p>
+        {opportunity.decisiveFindingIds.includes(signal.id) && (
+          <strong className="impact-copy">Referenced by the Decision</strong>
+        )}
         <small>
           Confidence: {signal.confidence} · Supported by{' '}
           {signal.evidenceIds.length} evidence references
@@ -384,7 +457,10 @@ function EligibilitySignalRow({
             <span>{signal.investigate}</span>
           </div>
         )}
-        <EvidenceLinks ids={signal.evidenceIds} opportunity={opportunity} />
+        <EvidenceLinks
+          ids={signal.evidenceIds ?? []}
+          opportunity={opportunity}
+        />
       </div>
     </article>
   );
@@ -405,6 +481,7 @@ function FitAnalysis({ opportunity }: { readonly opportunity: Opportunity }) {
           />
         ))}
       </div>
+      {opportunity.fitSignals.length === 0 && <p>Not evaluated.</p>}
     </AnalysisSection>
   );
 }
@@ -433,8 +510,14 @@ function FitSignalRow({
           <span>{signal.state}</span>
         </div>
         <p>{signal.summary}</p>
+        {opportunity.decisiveFindingIds.includes(signal.id) && (
+          <strong className="impact-copy">Referenced by the Decision</strong>
+        )}
         <strong className="impact-copy">Impact: {signal.impact}</strong>
-        <EvidenceLinks ids={signal.evidenceIds} opportunity={opportunity} />
+        <EvidenceLinks
+          ids={signal.evidenceIds ?? []}
+          opportunity={opportunity}
+        />
       </div>
     </article>
   );
@@ -452,14 +535,25 @@ function QualityAnalysis({
     >
       <div className="analysis-list">
         {opportunity.qualitySignals.map((signal) => (
-          <QualitySignalRow key={signal.id} signal={signal} />
+          <QualitySignalRow
+            key={signal.id}
+            signal={signal}
+            opportunity={opportunity}
+          />
         ))}
       </div>
+      {opportunity.qualitySignals.length === 0 && <p>Not evaluated.</p>}
     </AnalysisSection>
   );
 }
 
-function QualitySignalRow({ signal }: { readonly signal: QualitySignal }) {
+function QualitySignalRow({
+  signal,
+  opportunity,
+}: {
+  readonly signal: QualitySignal;
+  readonly opportunity: Opportunity;
+}) {
   return (
     <article className="analysis-row" data-signal={signal.state}>
       <span className="analysis-icon">
@@ -479,6 +573,13 @@ function QualitySignalRow({ signal }: { readonly signal: QualitySignal }) {
           <span>{signal.state}</span>
         </div>
         <p>{signal.summary}</p>
+        {opportunity.decisiveFindingIds.includes(signal.id) && (
+          <strong className="impact-copy">Referenced by the Decision</strong>
+        )}
+        <EvidenceLinks
+          ids={signal.evidenceIds ?? []}
+          opportunity={opportunity}
+        />
       </div>
     </article>
   );
@@ -491,7 +592,7 @@ function EvidenceAnalysis({
 }) {
   return (
     <AnalysisSection
-      description="Fictional source references demonstrate how claims remain reviewable without exposing raw unsafe markup."
+      description="Source references keep findings reviewable without exposing unsafe source markup."
       title="Evidence and provenance"
     >
       <div className="evidence-grid">
@@ -516,6 +617,7 @@ function EvidenceAnalysis({
           </article>
         ))}
       </div>
+      {opportunity.evidence.length === 0 && <p>No Evidence is attached.</p>}
     </AnalysisSection>
   );
 }

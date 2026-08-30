@@ -188,7 +188,13 @@ describe('API application', () => {
       url: `/opportunities?candidateId=${candidate}`,
     });
     expect(listResponse.json()).toMatchObject({
-      data: [{ id: opportunity, fitLevel: 'strong' }],
+      data: [
+        {
+          id: opportunity,
+          eligibilityState: 'investigate',
+          fitLevel: 'strong',
+        },
+      ],
     });
   });
 

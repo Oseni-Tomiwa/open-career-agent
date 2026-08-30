@@ -11,7 +11,7 @@ import { OpportunitySummary } from './OpportunitySummary.js';
 type SortValue = 'priority' | 'fit' | 'quality' | 'freshness';
 
 export function OpportunitiesPage() {
-  const { snapshot } = useProductData();
+  const { dataSource, snapshot } = useProductData();
   const [params, setParams] = useSearchParams();
   const query = params.get('q') ?? '';
   const eligibility = params.get('eligibility') ?? 'all';
@@ -73,7 +73,11 @@ export function OpportunitiesPage() {
   return (
     <div className="page opportunities-page">
       <PageHeader
-        description="Explore fictional development opportunities with Eligibility, Fit, and Quality kept deliberately separate."
+        description={
+          dataSource === 'api'
+            ? 'Explore API-backed opportunities with Eligibility, Fit, Quality, and Decision kept separate.'
+            : 'Explore fictional development opportunities with Eligibility, Fit, and Quality kept deliberately separate.'
+        }
         eyebrow="Opportunity intelligence"
         title="Opportunities"
       />
@@ -106,7 +110,7 @@ export function OpportunitiesPage() {
               <option value="eligible">Eligible</option>
               <option value="investigate">Investigate</option>
               <option value="unknown">Unknown</option>
-              <option value="ineligible">Blocked</option>
+              <option value="ineligible">Ineligible</option>
             </select>
           </label>
           <label>
@@ -172,8 +176,16 @@ export function OpportunitiesPage() {
 
       {results.length === 0 ? (
         <EmptyState
-          description="Try broadening Eligibility or sponsorship filters. Unknown is kept separate, so it may be worth including investigation states."
-          title="No opportunities match these filters"
+          description={
+            snapshot.opportunities.length === 0
+              ? 'No opportunities are currently available from the selected data source.'
+              : 'Try broadening Eligibility or sponsorship filters. Unknown is kept separate, so it may be worth including investigation states.'
+          }
+          title={
+            snapshot.opportunities.length === 0
+              ? 'No opportunities available'
+              : 'No opportunities match these filters'
+          }
         />
       ) : (
         <div className="opportunity-results">
@@ -190,17 +202,29 @@ export function OpportunitiesPage() {
 }
 
 function compareOpportunities(a: Opportunity, b: Opportunity, sort: SortValue) {
-  if (sort === 'fit') return b.fitScore - a.fitScore;
-  if (sort === 'quality') return b.qualityScore - a.qualityScore;
+  if (sort === 'fit') {
+    const order = { strong: 0, moderate: 1, weak: 2 } as const;
+    const levelDifference =
+      (a.fit ? order[a.fit] : 3) - (b.fit ? order[b.fit] : 3);
+    return levelDifference || (b.fitScore ?? -1) - (a.fitScore ?? -1);
+  }
+  if (sort === 'quality') {
+    const order = { strong: 0, moderate: 1, weak: 2, risk: 3 } as const;
+    const levelDifference =
+      (a.quality ? order[a.quality] : 4) - (b.quality ? order[b.quality] : 4);
+    return levelDifference || (b.qualityScore ?? -1) - (a.qualityScore ?? -1);
+  }
   if (sort === 'freshness') return b.updatedAt.localeCompare(a.updatedAt);
   const order = {
     'high-priority': 0,
     investigate: 1,
     consider: 2,
     'low-priority': 3,
-    ineligible: 4,
+    blocked: 4,
   } as const;
-  return order[a.decision] - order[b.decision];
+  return (
+    (a.decision ? order[a.decision] : 5) - (b.decision ? order[b.decision] : 5)
+  );
 }
 
 export default OpportunitiesPage;

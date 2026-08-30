@@ -24,13 +24,28 @@ The root development command builds and watches the shared packages, then starts
 - the Fastify API at `http://127.0.0.1:3000`; and
 - the background worker using the same canonical SQLite database.
 
-The visible page is intentionally a technical bootstrap surface. It reports API and database readiness and links to the generated OpenAPI document. It is not the product dashboard or a design proposal.
+The web app defaults to its deterministic fictional seed repository. The
+Opportunities list and detail routes can instead consume the local API by
+setting the browser-safe variables below. The API repository validates shared
+TypeBox response contracts and maps them into the UI view model; React
+components do not calculate Eligibility, Fit, Quality, or Decision.
+
+```dotenv
+VITE_PRODUCT_DATA_SOURCE=api
+VITE_API_BASE_URL=http://localhost:3000
+VITE_DEVELOPMENT_CANDIDATE_ID=<fictional-candidate-id-in-your-local-database>
+```
+
+`VITE_PRODUCT_DATA_SOURCE=seed` remains the default and does not require a
+candidate ID. Restart Vite after changing these variables.
 
 ## Service endpoints
 
 - `GET /health` — API process liveness only
 - `GET /ready` — API readiness, including SQLite access
 - `GET /openapi.json` — OpenAPI generated from registered TypeBox route schemas
+- `GET /opportunities?candidateId=...` — lightweight candidate-scoped list projection
+- `GET /opportunities/:id?candidateId=...` — snapshot history and coherent Evaluation projection
 
 Responses do not expose the configured database path or secrets.
 
@@ -58,7 +73,10 @@ SQLite is canonical v0.1 state. By default the database is stored at `data/open-
 
 Migrations live in `packages/database/migrations` and are applied by both process startup and `pnpm db:migrate`. Generate a reviewed migration after changing the Drizzle schema with `pnpm db:generate`. Do not edit a migration that has shipped.
 
-There is no career-oriented seed data yet. A future seed mechanism should use the application/persistence boundaries and fictional publishable records; it must not create a separate canonical store.
+The browser seed repository contains fictional publishable development data.
+In API mode, only Opportunities list/detail are real-backed in Phase 1. Today
+shows an explicit unavailable state; Applications, Career Profile, and Search
+remain development-only and are not API migrations.
 
 ## Environment boundaries
 
@@ -82,12 +100,9 @@ Run `pnpm test:e2e` after installing Playwright's Chromium binary with `pnpm exe
 
 CI performs these checks on Node 24 and installs Chromium for the bootstrap browser smoke test. No deployment is configured.
 
-## Deferred work
+## Deferred web integration
 
-- Product UI, product navigation, and fictional career seed data
-- Product/domain tables beyond the infrastructure task ledger
-- Source adapters and normalization
-- AI providers and intelligence evaluation
-- Authentication and authorization
-- Generated API clients; the OpenAPI contract is ready for them when product endpoints exist
-- Docker/self-hosting packaging and production cloud decisions
+- Today aggregation
+- Applications persistence/workflows
+- Candidate Career Memory and Search configuration
+- Authentication, deployment, and generated API clients
