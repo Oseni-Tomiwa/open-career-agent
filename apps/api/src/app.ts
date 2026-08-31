@@ -8,6 +8,8 @@ import {
   CareerMemoryRepository,
   SearchTargetRepository,
   TodayRepository,
+  ApplicationRepository,
+  SourceListingRepository,
   databaseIsReady,
   EvaluationRepository,
   EvidenceRepository,
@@ -26,6 +28,7 @@ import {
   snapshotId,
   searchTargetId,
   discoveryRunId,
+  applicationId,
 } from '@oca/domain';
 import {
   ApiErrorEnvelopeSchema,
@@ -45,6 +48,12 @@ import {
   DiscoveryRunListResponseSchema,
   TriggerDiscoveryRunResponseSchema,
   TodayDashboardResponseSchema,
+  ApplicationListResponseSchema,
+  ApplicationDetailResponseSchema,
+  CreateApplicationInputSchema,
+  UpdateApplicationInputSchema,
+  AddApplicationEventInputSchema,
+  ApplicationEventSchema,
 } from '@oca/schemas';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 
@@ -596,6 +605,418 @@ export async function createApiApp(
         },
       );
       return dashboard;
+    },
+  );
+
+  function buildApplicationDetail(
+    app: NonNullable<ReturnType<ApplicationRepository['getApplication']>>,
+    appRepo: ApplicationRepository,
+    oppRepo: OpportunityRepository,
+    evalRepo: EvaluationRepository,
+  ) {
+    const oppId = opportunityId(app.opportunityId);
+    const snapshot = oppRepo.getLatestSnapshot(oppId);
+    const sourceRepo = new SourceListingRepository(options.database);
+    const sourceListing = sourceRepo.findListingByOpportunityId(
+      app.opportunityId,
+    );
+
+    let currentDecision: {
+      state: string;
+      action: string | null;
+      explanation: string;
+    } | null = null;
+    if (snapshot) {
+      const dec = evalRepo.getCurrentDecision(
+        candidateId(app.candidateId),
+        snapshotId(snapshot.id),
+      );
+      if (dec) {
+        currentDecision = {
+          state: dec.priority,
+          action: dec.action ?? null,
+          explanation: dec.explanation,
+        };
+      }
+    }
+
+    const events = appRepo.getEvents(
+      candidateId(app.candidateId),
+      applicationId(app.id),
+    );
+
+    return {
+      id: app.id,
+      candidateId: app.candidateId,
+      opportunityId: app.opportunityId,
+      status: app.status,
+      originatingDecisionId: app.originatingDecisionId ?? null,
+      originatingDecisionState: app.originatingDecisionState ?? null,
+      originatingDecisionAction: app.originatingDecisionAction ?? null,
+      submittedAt: app.submittedAt ? app.submittedAt.toISOString() : null,
+      followUpDueAt: app.followUpDueAt ? app.followUpDueAt.toISOString() : null,
+      followUpNote: app.followUpNote ?? null,
+      followUpCompletedAt: app.followUpCompletedAt
+        ? app.followUpCompletedAt.toISOString()
+        : null,
+      note: app.note ?? null,
+      createdAt: app.createdAt.toISOString(),
+      updatedAt: app.updatedAt.toISOString(),
+      opportunity: snapshot
+        ? {
+            id: app.opportunityId,
+            title: snapshot.title,
+            organization: snapshot.organization ?? null,
+            location: snapshot.location ?? null,
+            sourceUrl: sourceListing?.sourceUrl ?? null,
+          }
+        : null,
+      currentDecision,
+      events: events.map((ev) => ({
+        id: ev.id,
+        applicationId: ev.applicationId,
+        eventType: ev.eventType,
+        detail: ev.detail,
+        occurredAt: ev.occurredAt.toISOString(),
+        actor: 'Candidate' as const,
+      })),
+    };
+  }
+
+  const applicationParams = Type.Object({
+    candidateId: Type.String(),
+    applicationId: Type.String(),
+  });
+
+  app.get(
+    '/candidates/:candidateId/applications',
+    {
+      schema: {
+        tags: ['applications'],
+        summary: 'List candidate applications',
+        params: profileParams,
+        response: {
+          200: ApplicationListResponseSchema,
+        },
+      },
+    },
+    (request) => {
+      const cId = candidateId(request.params.candidateId);
+      const appRepo = new ApplicationRepository(options.database);
+      const oppRepo = new OpportunityRepository(options.database);
+      const evalRepo = new EvaluationRepository(options.database);
+
+      const apps = appRepo.listApplications(cId);
+      const data = apps.map((app) => {
+        const oppId = opportunityId(app.opportunityId);
+        const snapshot = oppRepo.getLatestSnapshot(oppId);
+        const dec = snapshot
+          ? evalRepo.getCurrentDecision(cId, snapshotId(snapshot.id))
+          : null;
+        const events = appRepo.getEvents(cId, applicationId(app.id));
+        const lastEvent = events.length > 0 ? events[events.length - 1] : null;
+
+        return {
+          id: app.id,
+          opportunityId: app.opportunityId,
+          title: snapshot?.title ?? 'Opportunity',
+          organization: snapshot?.organization ?? null,
+          location: snapshot?.location ?? null,
+          status: app.status,
+          currentDecision: dec ? dec.priority : null,
+          submittedAt: app.submittedAt ? app.submittedAt.toISOString() : null,
+          followUpDueAt: app.followUpDueAt
+            ? app.followUpDueAt.toISOString()
+            : null,
+          lastEventAt: lastEvent
+            ? lastEvent.occurredAt.toISOString()
+            : app.updatedAt.toISOString(),
+          createdAt: app.createdAt.toISOString(),
+          updatedAt: app.updatedAt.toISOString(),
+        };
+      });
+
+      return { data };
+    },
+  );
+
+  app.post(
+    '/candidates/:candidateId/applications',
+    {
+      schema: {
+        tags: ['applications'],
+        summary: 'Create candidate application',
+        params: profileParams,
+        body: CreateApplicationInputSchema,
+        response: {
+          201: ApplicationDetailResponseSchema,
+          400: ApiErrorEnvelopeSchema,
+          403: ApiErrorEnvelopeSchema,
+          409: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const cId = candidateId(request.params.candidateId);
+      const appRepo = new ApplicationRepository(options.database);
+      const oppRepo = new OpportunityRepository(options.database);
+      const evalRepo = new EvaluationRepository(options.database);
+
+      try {
+        const app = appRepo.createApplication({
+          candidateId: cId,
+          opportunityId: opportunityId(request.body.opportunityId),
+          ...(request.body.status ? { status: request.body.status } : {}),
+          ...(request.body.originatingDecisionId
+            ? { originatingDecisionId: request.body.originatingDecisionId }
+            : {}),
+          ...(request.body.note ? { note: request.body.note } : {}),
+          ...(request.body.appliedAt
+            ? { appliedAt: new Date(request.body.appliedAt) }
+            : {}),
+        });
+
+        reply.status(201);
+        return buildApplicationDetail(app, appRepo, oppRepo, evalRepo);
+      } catch (err: unknown) {
+        if (
+          err instanceof Error &&
+          'code' in err &&
+          typeof (err as { code?: unknown }).code === 'string'
+        ) {
+          const code = (err as { code: string }).code;
+          const statusCode =
+            code === 'DUPLICATE_APPLICATION'
+              ? 409
+              : code === 'UNAUTHORIZED'
+                ? 403
+                : 400;
+          await reply.status(statusCode).send({
+            error: {
+              code,
+              message: err.message,
+              requestId: request.id,
+            },
+          });
+          return;
+        }
+        throw err;
+      }
+    },
+  );
+
+  app.get(
+    '/candidates/:candidateId/applications/:applicationId',
+    {
+      schema: {
+        tags: ['applications'],
+        summary: 'Get candidate application detail',
+        params: applicationParams,
+        response: {
+          200: ApplicationDetailResponseSchema,
+          404: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const cId = candidateId(request.params.candidateId);
+      const appId = applicationId(request.params.applicationId);
+      const appRepo = new ApplicationRepository(options.database);
+      const oppRepo = new OpportunityRepository(options.database);
+      const evalRepo = new EvaluationRepository(options.database);
+
+      const app = appRepo.getApplication(cId, appId);
+      if (!app) {
+        await reply.status(404).send({
+          error: {
+            code: 'NOT_FOUND',
+            message: `Application '${request.params.applicationId}' not found for candidate.`,
+            requestId: request.id,
+          },
+        });
+        return;
+      }
+
+      return buildApplicationDetail(app, appRepo, oppRepo, evalRepo);
+    },
+  );
+
+  app.patch(
+    '/candidates/:candidateId/applications/:applicationId',
+    {
+      schema: {
+        tags: ['applications'],
+        summary: 'Update candidate application',
+        params: applicationParams,
+        body: UpdateApplicationInputSchema,
+        response: {
+          200: ApplicationDetailResponseSchema,
+          400: ApiErrorEnvelopeSchema,
+          403: ApiErrorEnvelopeSchema,
+          404: ApiErrorEnvelopeSchema,
+          409: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const cId = candidateId(request.params.candidateId);
+      const appId = applicationId(request.params.applicationId);
+      const appRepo = new ApplicationRepository(options.database);
+      const oppRepo = new OpportunityRepository(options.database);
+      const evalRepo = new EvaluationRepository(options.database);
+
+      if (!appRepo.getApplication(cId, appId)) {
+        await reply.status(404).send({
+          error: {
+            code: 'NOT_FOUND',
+            message: `Application '${request.params.applicationId}' not found for candidate.`,
+            requestId: request.id,
+          },
+        });
+        return;
+      }
+
+      try {
+        const updated = appRepo.updateApplication({
+          id: appId,
+          candidateId: cId,
+          ...(request.body.status ? { status: request.body.status } : {}),
+          ...(request.body.expectedUpdatedAt
+            ? { expectedUpdatedAt: request.body.expectedUpdatedAt }
+            : {}),
+          ...(request.body.note !== undefined
+            ? { note: request.body.note }
+            : {}),
+          ...(request.body.followUpDueAt !== undefined
+            ? {
+                followUpDueAt: request.body.followUpDueAt
+                  ? new Date(request.body.followUpDueAt)
+                  : null,
+              }
+            : {}),
+          ...(request.body.followUpNote !== undefined
+            ? { followUpNote: request.body.followUpNote }
+            : {}),
+          ...(request.body.followUpCompletedAt !== undefined
+            ? {
+                followUpCompletedAt: request.body.followUpCompletedAt
+                  ? new Date(request.body.followUpCompletedAt)
+                  : null,
+              }
+            : {}),
+        });
+
+        return buildApplicationDetail(updated, appRepo, oppRepo, evalRepo);
+      } catch (err: unknown) {
+        if (
+          err instanceof Error &&
+          'code' in err &&
+          typeof (err as { code?: unknown }).code === 'string'
+        ) {
+          const code = (err as { code: string }).code;
+          let statusCode: 400 | 404 | 409 | 403 = 400;
+          if (code === 'NOT_FOUND') statusCode = 404;
+          if (code === 'STALE_WRITE_CONFLICT') statusCode = 409;
+          if (code === 'UNAUTHORIZED') statusCode = 403;
+          await reply.status(statusCode).send({
+            error: {
+              code,
+              message: err.message,
+              requestId: request.id,
+            },
+          });
+          return;
+        }
+        throw err;
+      }
+    },
+  );
+
+  app.post(
+    '/candidates/:candidateId/applications/:applicationId/events',
+    {
+      schema: {
+        tags: ['applications'],
+        summary: 'Append custom event to candidate application',
+        params: applicationParams,
+        body: AddApplicationEventInputSchema,
+        response: {
+          200: ApplicationDetailResponseSchema,
+          404: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const cId = candidateId(request.params.candidateId);
+      const appId = applicationId(request.params.applicationId);
+      const appRepo = new ApplicationRepository(options.database);
+      const oppRepo = new OpportunityRepository(options.database);
+      const evalRepo = new EvaluationRepository(options.database);
+
+      const app = appRepo.getApplication(cId, appId);
+      if (!app) {
+        await reply.status(404).send({
+          error: {
+            code: 'NOT_FOUND',
+            message: `Application '${request.params.applicationId}' not found.`,
+            requestId: request.id,
+          },
+        });
+        return;
+      }
+
+      appRepo.appendEvent({
+        candidateId: cId,
+        applicationId: appId,
+        eventType: request.body.eventType,
+        detail: request.body.detail,
+      });
+
+      return buildApplicationDetail(app, appRepo, oppRepo, evalRepo);
+    },
+  );
+
+  app.get(
+    '/candidates/:candidateId/applications/:applicationId/events',
+    {
+      schema: {
+        tags: ['applications'],
+        summary: 'Get application timeline events',
+        params: applicationParams,
+        response: {
+          200: Type.Object({ data: Type.Array(ApplicationEventSchema) }),
+          404: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const cId = candidateId(request.params.candidateId);
+      const appId = applicationId(request.params.applicationId);
+      const appRepo = new ApplicationRepository(options.database);
+
+      const app = appRepo.getApplication(cId, appId);
+      if (!app) {
+        await reply.status(404).send({
+          error: {
+            code: 'NOT_FOUND',
+            message: `Application '${request.params.applicationId}' not found.`,
+            requestId: request.id,
+          },
+        });
+        return;
+      }
+
+      const events = appRepo.getEvents(cId, appId);
+      return {
+        data: events.map((ev) => ({
+          id: ev.id,
+          applicationId: ev.applicationId,
+          eventType: ev.eventType,
+          detail: ev.detail,
+          occurredAt: ev.occurredAt.toISOString(),
+          actor: 'Candidate' as const,
+        })),
+      };
     },
   );
 

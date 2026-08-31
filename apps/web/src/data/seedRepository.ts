@@ -16,6 +16,12 @@ import type {
   UpdateSearchTargetInput,
   DiscoveryRun,
   TodayDashboardResponse,
+  ApplicationItem,
+  ApplicationDetailResponse,
+  ApplicationStatus,
+  CreateApplicationInput,
+  UpdateApplicationInput,
+  AddApplicationEventInput,
 } from './types.js';
 
 export class SeedProductRepository implements ProductRepository {
@@ -23,6 +29,10 @@ export class SeedProductRepository implements ProductRepository {
   private snapshot: ProductSnapshot = initialSeedSnapshot;
   private careerMemory = seedCareerMemory();
   private mutationSequence = 0;
+  private readonly applicationDetails = new Map<
+    string,
+    ApplicationDetailResponse
+  >();
 
   public async getSnapshot(): Promise<ProductSnapshot> {
     return Promise.resolve(this.snapshot);
@@ -302,6 +312,382 @@ export class SeedProductRepository implements ProductRepository {
       applicationActivity: [],
       careerMemoryAttention: [],
     });
+  }
+
+  public getApplications(): Promise<readonly ApplicationItem[]> {
+    const apps: ApplicationItem[] = this.snapshot.applications.map((a) => {
+      const opp = this.snapshot.opportunities.find((o) => o.id === a.opportunityId);
+      return {
+        id: a.id,
+        opportunityId: a.opportunityId,
+        title: opp?.role ?? 'Opportunity',
+        organization: opp?.company.name ?? 'Organization',
+        location: opp?.location ?? null,
+        status: a.status,
+        nextAction: a.nextAction,
+        dueDate: a.dueDate,
+        currentDecision: opp?.decision ?? null,
+        submittedAt: a.updatedAt,
+        followUpDueAt: a.dueDate ?? null,
+        lastEventAt: a.updatedAt,
+        createdAt: a.updatedAt,
+        updatedAt: a.updatedAt,
+      };
+    });
+    return Promise.resolve(apps);
+  }
+
+  public getApplication(
+    applicationId: string,
+  ): Promise<ApplicationDetailResponse | null> {
+    const cached = this.applicationDetails.get(applicationId);
+    if (cached) return Promise.resolve(cached);
+    const app = this.snapshot.applications.find(
+      (a) => a.id === applicationId,
+    );
+    if (!app) return Promise.resolve(null);
+    const opp = this.snapshot.opportunities.find((o) => o.id === app.opportunityId);
+
+    const detail: ApplicationDetailResponse = {
+      id: app.id,
+      candidateId: 'fictional-seed-candidate',
+      opportunityId: app.opportunityId,
+      status: app.status,
+      originatingDecisionId: null,
+      originatingDecisionState: opp?.decision ?? null,
+      originatingDecisionAction: 'apply',
+      submittedAt: app.updatedAt,
+      followUpDueAt: app.dueDate ?? null,
+      followUpNote: app.nextAction ?? null,
+      followUpCompletedAt: null,
+      note: app.nextAction ?? null,
+      createdAt: app.updatedAt,
+      updatedAt: app.updatedAt,
+      opportunity: opp
+        ? {
+            id: opp.id,
+            title: opp.role,
+            organization: opp.company.name,
+            location: opp.location,
+            sourceUrl: 'https://careers.example.com/jobs/' + opp.id,
+          }
+        : null,
+      currentDecision: opp
+        ? {
+            state: opp.decision ?? 'high-priority',
+            action: 'apply',
+            explanation: opp.eligibilityLabel,
+          }
+        : null,
+      events: app.events.map((ev) => ({
+        id: ev.id,
+        applicationId: app.id,
+        eventType: 'status_changed',
+        title: ev.title,
+        detail: ev.detail,
+        occurredAt: ev.date,
+        actor: ev.actor,
+      })),
+    };
+    this.applicationDetails.set(applicationId, detail);
+    return Promise.resolve(detail);
+  }
+
+  public async createApplication(
+    input: CreateApplicationInput,
+  ): Promise<ApplicationDetailResponse> {
+    const existingSeed = this.snapshot.applications.find(
+      (application) => application.opportunityId === input.opportunityId,
+    );
+    if (existingSeed) {
+      const existing = await this.getApplication(existingSeed.id);
+      if (existing) return existing;
+    }
+    const opp = this.snapshot.opportunities.find(
+      (o) => o.id === input.opportunityId,
+    );
+    const status: ApplicationStatus = input.status ?? 'Saved';
+    const now = new Date().toISOString();
+    const id = `app-seed-${input.opportunityId}`;
+    this.snapshot = {
+      ...this.snapshot,
+      applications: [
+        ...this.snapshot.applications,
+        {
+          id,
+          opportunityId: input.opportunityId,
+          status,
+          nextAction:
+            input.note ?? `Follow up on ${status.toLowerCase()} status`,
+          dueDate: null,
+          updatedAt: now,
+          events: [
+            {
+              id: `ev-created-${++this.mutationSequence}`,
+              date: now,
+              title: 'Application created',
+              detail: `Application created with status ${status}`,
+              actor: 'Candidate',
+            },
+          ],
+        },
+      ],
+    };
+    const detail: ApplicationDetailResponse = {
+      id,
+      candidateId: 'fictional-seed-candidate',
+      opportunityId: input.opportunityId,
+      status,
+      originatingDecisionId: input.originatingDecisionId ?? null,
+      originatingDecisionState: opp?.decision ?? 'high-priority',
+      originatingDecisionAction: 'apply',
+      submittedAt: status === 'Applied' ? now : null,
+      followUpDueAt: null,
+      followUpNote: null,
+      followUpCompletedAt: null,
+      note: input.note ?? null,
+      createdAt: now,
+      updatedAt: now,
+      opportunity: opp
+        ? {
+            id: opp.id,
+            title: opp.role,
+            organization: opp.company.name,
+            location: opp.location,
+            sourceUrl: 'https://careers.example.com/jobs/' + opp.id,
+          }
+        : null,
+      currentDecision: opp
+        ? {
+            state: opp.decision ?? 'high-priority',
+            action: 'apply',
+            explanation: opp.eligibilityLabel,
+          }
+        : null,
+      events: [
+        {
+          id: `ev-created-${this.mutationSequence}`,
+          applicationId: id,
+          eventType: 'application_created',
+          detail: `Application created with status ${status}`,
+          occurredAt: now,
+          actor: 'Candidate',
+        },
+      ],
+    };
+    this.applicationDetails.set(id, detail);
+    return detail;
+  }
+
+  public updateApplication(
+    applicationId: string,
+    input: UpdateApplicationInput,
+  ): Promise<ApplicationDetailResponse> {
+    return this.getApplication(applicationId).then((app) => {
+      if (!app) {
+        throw new Error(`Application ${applicationId} not found`);
+      }
+      if (input.expectedUpdatedAt && input.expectedUpdatedAt !== app.updatedAt) {
+        throw new Error(`Stale write conflict on application '${applicationId}'.`);
+      }
+      const now = new Date(
+        Math.max(Date.now(), new Date(app.updatedAt).getTime() + 1),
+      ).toISOString();
+      const updatedStatus = input.status ?? app.status;
+      const statusChanged = updatedStatus !== app.status;
+      if (statusChanged) validateSeedTransition(app.status, updatedStatus);
+      const noteChanged =
+        input.note !== undefined && input.note !== app.note;
+      const followUpDueChanged =
+        input.followUpDueAt !== undefined &&
+        input.followUpDueAt !== app.followUpDueAt;
+      const followUpNoteChanged =
+        input.followUpNote !== undefined &&
+        input.followUpNote !== app.followUpNote;
+      const repeatedCompletion = Boolean(
+        app.followUpCompletedAt && input.followUpCompletedAt,
+      );
+      const followUpCompletionChanged =
+        input.followUpCompletedAt !== undefined &&
+        !repeatedCompletion &&
+        input.followUpCompletedAt !== app.followUpCompletedAt;
+      if (
+        !statusChanged &&
+        !noteChanged &&
+        !followUpDueChanged &&
+        !followUpNoteChanged &&
+        !followUpCompletionChanged
+      ) {
+        return app;
+      }
+      const followUpCompletedAt =
+        repeatedCompletion
+          ? app.followUpCompletedAt
+          : input.followUpCompletedAt !== undefined
+            ? input.followUpCompletedAt
+            : app.followUpCompletedAt;
+      const events = [
+        ...app.events,
+        ...(statusChanged
+          ? [
+              {
+                id: `ev-updated-${++this.mutationSequence}`,
+                applicationId: app.id,
+                eventType: 'status_changed',
+                detail: `Status changed from ${app.status} to ${updatedStatus}`,
+                occurredAt: now,
+                actor: 'Candidate' as const,
+              },
+            ]
+          : []),
+        ...(noteChanged
+          ? [
+              {
+                id: `ev-note-${++this.mutationSequence}`,
+                applicationId: app.id,
+                eventType: 'note_added',
+                detail: input.note ? `Note updated: ${input.note}` : 'Note cleared',
+                occurredAt: now,
+                actor: 'Candidate' as const,
+              },
+            ]
+          : []),
+        ...(followUpDueChanged || followUpNoteChanged
+          ? [
+              {
+                id: `ev-follow-up-${++this.mutationSequence}`,
+                applicationId: app.id,
+                eventType: 'follow_up_set',
+                detail: input.followUpDueAt
+                  ? `Follow-up scheduled for ${input.followUpDueAt}`
+                  : 'Follow-up updated',
+                occurredAt: now,
+                actor: 'Candidate' as const,
+              },
+            ]
+          : []),
+        ...(input.followUpCompletedAt && !app.followUpCompletedAt
+          ? [
+              {
+                id: `ev-follow-up-complete-${++this.mutationSequence}`,
+                applicationId: app.id,
+                eventType: 'follow_up_completed',
+                detail: 'Follow-up marked completed',
+                occurredAt: now,
+                actor: 'Candidate' as const,
+              },
+            ]
+          : []),
+      ];
+      const updated: ApplicationDetailResponse = {
+        ...app,
+        status: updatedStatus,
+        note: input.note !== undefined ? input.note : app.note,
+        followUpDueAt:
+          input.followUpDueAt !== undefined
+            ? input.followUpDueAt
+            : app.followUpDueAt,
+        followUpNote:
+          input.followUpNote !== undefined
+            ? input.followUpNote
+            : app.followUpNote,
+        followUpCompletedAt,
+        updatedAt: now,
+        events,
+      };
+      this.snapshot = {
+        ...this.snapshot,
+        applications: this.snapshot.applications.map((item) =>
+          item.id === applicationId
+            ? {
+                ...item,
+                status: updatedStatus,
+                nextAction: updated.followUpNote ?? item.nextAction,
+                dueDate:
+                  updated.followUpDueAt && !updated.followUpCompletedAt
+                    ? updated.followUpDueAt
+                    : null,
+                updatedAt: now,
+                events: events.map((event) => ({
+                  id: event.id,
+                  date: event.occurredAt,
+                  title: event.eventType.replace(/_/g, ' '),
+                  detail: event.detail,
+                  actor: event.actor,
+                })),
+              }
+            : item,
+        ),
+      };
+      this.applicationDetails.set(applicationId, updated);
+      return updated;
+    });
+  }
+
+  public addApplicationEvent(
+    applicationId: string,
+    input: AddApplicationEventInput,
+  ): Promise<ApplicationDetailResponse> {
+    return this.getApplication(applicationId).then((app) => {
+      if (!app) throw new Error(`Application ${applicationId} not found`);
+      const now = new Date().toISOString();
+      const updated: ApplicationDetailResponse = {
+        ...app,
+        updatedAt: now,
+        events: [
+          ...app.events,
+          {
+            id: `ev-custom-${Date.now()}`,
+            applicationId: app.id,
+            eventType: input.eventType,
+            detail: input.detail,
+            occurredAt: now,
+            actor: 'Candidate',
+          },
+        ],
+      };
+      this.snapshot = {
+        ...this.snapshot,
+        applications: this.snapshot.applications.map((item) =>
+          item.id === applicationId
+            ? {
+                ...item,
+                updatedAt: now,
+                events: updated.events.map((event) => ({
+                  id: event.id,
+                  date: event.occurredAt,
+                  title: event.eventType.replace(/_/g, ' '),
+                  detail: event.detail,
+                  actor: event.actor,
+                })),
+              }
+            : item,
+        ),
+      };
+      this.applicationDetails.set(applicationId, updated);
+      return updated;
+    });
+  }
+}
+
+const SEED_TRANSITIONS: Record<ApplicationStatus, readonly ApplicationStatus[]> = {
+  Saved: ['Preparing', 'Applied', 'Withdrawn', 'Closed'],
+  Preparing: ['Applied', 'Withdrawn', 'Closed'],
+  Applied: ['Assessment', 'Interview', 'Offer', 'Rejected', 'Withdrawn', 'Closed'],
+  Assessment: ['Interview', 'Offer', 'Rejected', 'Withdrawn', 'Closed'],
+  Interview: ['Offer', 'Rejected', 'Withdrawn', 'Closed'],
+  Offer: ['Closed', 'Withdrawn'],
+  Rejected: [],
+  Withdrawn: [],
+  Closed: [],
+};
+
+function validateSeedTransition(
+  current: ApplicationStatus,
+  next: ApplicationStatus,
+): void {
+  if (!SEED_TRANSITIONS[current].includes(next)) {
+    throw new Error(`Invalid application status transition from '${current}' to '${next}'.`);
   }
 }
 

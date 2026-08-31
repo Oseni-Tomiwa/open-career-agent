@@ -115,16 +115,7 @@ export interface Opportunity {
   readonly isNew?: boolean;
 }
 
-export type ApplicationStatus =
-  | 'Preparing'
-  | 'Applied'
-  | 'Assessment'
-  | 'Interview'
-  | 'Offer'
-  | 'Rejected'
-  | 'Withdrawn';
-
-export interface ApplicationEvent {
+export interface SeedApplicationEvent {
   readonly id: string;
   readonly date: string;
   readonly title: string;
@@ -139,7 +130,7 @@ export interface Application {
   readonly nextAction: string;
   readonly dueDate: string | null;
   readonly updatedAt: string;
-  readonly events: readonly ApplicationEvent[];
+  readonly events: readonly SeedApplicationEvent[];
 }
 
 export interface CareerEvidence {
@@ -353,6 +344,14 @@ import type {
   DiscoveryActivityItem,
   CareerMemoryAttentionItem,
   ApplicationActivityItem,
+  ApplicationStatus,
+  ApplicationEvent,
+  ApplicationItem,
+  ApplicationDetailResponse,
+  CreateApplicationInput,
+  UpdateApplicationInput,
+  AddApplicationEventInput,
+  ApplicationListResponse,
 } from '@oca/schemas';
 
 export type {
@@ -363,6 +362,14 @@ export type {
   DiscoveryActivityItem,
   CareerMemoryAttentionItem,
   ApplicationActivityItem,
+  ApplicationStatus,
+  ApplicationEvent,
+  ApplicationItem,
+  ApplicationDetailResponse,
+  CreateApplicationInput,
+  UpdateApplicationInput,
+  AddApplicationEventInput,
+  ApplicationListResponse,
 };
 
 export interface ProductRepository {
@@ -407,4 +414,20 @@ export interface ProductRepository {
     timeWindowDays?: number,
     signal?: AbortSignal,
   ): Promise<TodayDashboardResponse>;
+  getApplications(signal?: AbortSignal): Promise<readonly ApplicationItem[]>;
+  getApplication(
+    applicationId: string,
+    signal?: AbortSignal,
+  ): Promise<ApplicationDetailResponse | null>;
+  createApplication(
+    input: CreateApplicationInput,
+  ): Promise<ApplicationDetailResponse>;
+  updateApplication(
+    applicationId: string,
+    input: UpdateApplicationInput,
+  ): Promise<ApplicationDetailResponse>;
+  addApplicationEvent(
+    applicationId: string,
+    input: AddApplicationEventInput,
+  ): Promise<ApplicationDetailResponse>;
 }

@@ -11,6 +11,7 @@ import {
   searchTargetId,
   discoveryRunId,
   discoveryMatchId,
+  applicationId,
 } from '@oca/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -22,6 +23,7 @@ import { OpportunityRepository } from './repositories/opportunity-repository.js'
 import { SearchTargetRepository } from './repositories/search-target-repository.js';
 import { TodayRepository } from './repositories/today-repository.js';
 import { SourceListingRepository } from './repositories/source-listing-repository.js';
+import { ApplicationRepository } from './repositories/application-repository.js';
 
 describe('TodayRepository', () => {
   let directory: string;
@@ -74,6 +76,52 @@ describe('TodayRepository', () => {
     expect(dashboard.discoveryActivity).toEqual([]);
     expect(dashboard.applicationActivity).toEqual([]);
     expect(dashboard.careerMemoryAttention).toEqual([]);
+  });
+
+  it('surfaces an incomplete due follow-up and removes it after completion', () => {
+    oppRepo.createOpportunity(opp1);
+    oppRepo.appendSnapshot({
+      id: snap1,
+      opportunityId: opp1,
+      title: 'Platform Engineer',
+      organization: 'Northstar',
+      content: 'Role',
+      fingerprint: 'fp-follow-up',
+    });
+    const applications = new ApplicationRepository(database);
+    const app = applications.createApplication({
+      id: applicationId('app-follow-up'),
+      candidateId: candidateAlex,
+      opportunityId: opp1,
+      status: 'Applied',
+    });
+    const scheduled = applications.updateApplication({
+      id: applicationId(app.id),
+      candidateId: candidateAlex,
+      expectedUpdatedAt: app.updatedAt,
+      followUpDueAt: new Date('2026-08-31T09:00:00.000Z'),
+      followUpNote: 'Email the recruiter',
+    });
+
+    expect(
+      todayRepo.getTodayDashboard(candidateAlex, { now })
+        .applicationActivity[0],
+    ).toMatchObject({
+      applicationId: app.id,
+      nextAction: 'Email the recruiter',
+      dueDate: '2026-08-31T09:00:00.000Z',
+    });
+
+    applications.updateApplication({
+      id: applicationId(app.id),
+      candidateId: candidateAlex,
+      expectedUpdatedAt: scheduled.updatedAt,
+      followUpCompletedAt: now,
+    });
+    expect(
+      todayRepo.getTodayDashboard(candidateAlex, { now }).applicationActivity[0]
+        ?.dueDate,
+    ).toBeNull();
   });
 
   it('aggregates priority opportunities and needs attention with strict candidate isolation', () => {

@@ -936,6 +936,7 @@ describe('Domain Persistence Foundation', () => {
       const evId = eventId('ev-app-no-interfere');
       apps.appendEvent({
         id: evId,
+        candidateId: candidate,
         applicationId: appId,
         eventType: 'status_changed',
         detail: 'Submitted application on website.',
@@ -961,8 +962,8 @@ describe('Domain Persistence Foundation', () => {
       });
 
       // Application and event exist unchanged
-      expect(apps.getApplication(appId)?.status).toBe('Applied');
-      expect(apps.getEvents(appId)).toHaveLength(1);
+      expect(apps.getApplication(candidate, appId)?.status).toBe('Applied');
+      expect(apps.getEvents(candidate, appId)).toHaveLength(3);
 
       // Transition Decision to blocked (e.g. listing closed)
       const eval2 = evaluationId('eval-app-no-interfere-2');
@@ -997,11 +998,11 @@ describe('Domain Persistence Foundation', () => {
       });
 
       // Application status and history events MUST NOT be affected by Decision transition
-      const appAfter = apps.getApplication(appId);
+      const appAfter = apps.getApplication(candidate, appId);
       expect(appAfter?.status).toBe('Applied');
-      const eventsAfter = apps.getEvents(appId);
-      expect(eventsAfter).toHaveLength(1);
-      expect(eventsAfter[0]?.id).toBe(evId);
+      const eventsAfter = apps.getEvents(candidate, appId);
+      expect(eventsAfter).toHaveLength(3);
+      expect(eventsAfter.some((event) => event.id === evId)).toBe(true);
     });
   });
 

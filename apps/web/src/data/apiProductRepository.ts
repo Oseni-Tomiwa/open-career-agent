@@ -13,6 +13,8 @@ import {
   DiscoveryRunListResponseSchema,
   TriggerDiscoveryRunResponseSchema,
   TodayDashboardResponseSchema,
+  ApplicationListResponseSchema,
+  ApplicationDetailResponseSchema,
 } from '@oca/schemas';
 import type { Static, TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
@@ -40,6 +42,11 @@ import type {
   UpdateSearchTargetInput,
   DiscoveryRun,
   TodayDashboardResponse,
+  ApplicationItem,
+  ApplicationDetailResponse,
+  CreateApplicationInput,
+  UpdateApplicationInput,
+  AddApplicationEventInput,
 } from './types.js';
 
 type ListResponse = Static<typeof OpportunityListResponseSchema>;
@@ -64,6 +71,7 @@ export class ApiProductRepository implements ProductRepository {
   private snapshot: ProductSnapshot = {
     ...initialSeedSnapshot,
     opportunities: [],
+    applications: [],
   };
   private readonly summaries = new Map<string, Summary>();
 
@@ -278,6 +286,91 @@ export class ApiProductRepository implements ProductRepository {
       `/candidates/${encodeURIComponent(this.candidateId!)}/today${query}`,
       TodayDashboardResponseSchema,
       signal,
+    );
+  }
+
+  public async getApplications(
+    signal?: AbortSignal,
+  ): Promise<readonly ApplicationItem[]> {
+    const res = await this.getValidated(
+      `/candidates/${encodeURIComponent(this.candidateId!)}/applications`,
+      ApplicationListResponseSchema,
+      signal,
+    );
+    return res.data;
+  }
+
+  public async getApplication(
+    applicationId: string,
+    signal?: AbortSignal,
+  ): Promise<ApplicationDetailResponse | null> {
+    try {
+      return await this.getValidated(
+        `/candidates/${encodeURIComponent(this.candidateId!)}/applications/${encodeURIComponent(applicationId)}`,
+        ApplicationDetailResponseSchema,
+        signal,
+      );
+    } catch (error) {
+      if (error instanceof ApiProductRepositoryError && error.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  public async createApplication(
+    input: CreateApplicationInput,
+  ): Promise<ApplicationDetailResponse> {
+    return this.getValidated(
+      `/candidates/${encodeURIComponent(this.candidateId!)}/applications`,
+      ApplicationDetailResponseSchema,
+      undefined,
+      {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(input),
+      },
+    );
+  }
+
+  public async updateApplication(
+    applicationId: string,
+    input: UpdateApplicationInput,
+  ): Promise<ApplicationDetailResponse> {
+    return this.getValidated(
+      `/candidates/${encodeURIComponent(this.candidateId!)}/applications/${encodeURIComponent(applicationId)}`,
+      ApplicationDetailResponseSchema,
+      undefined,
+      {
+        method: 'PATCH',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(input),
+      },
+    );
+  }
+
+  public async addApplicationEvent(
+    applicationId: string,
+    input: AddApplicationEventInput,
+  ): Promise<ApplicationDetailResponse> {
+    return this.getValidated(
+      `/candidates/${encodeURIComponent(this.candidateId!)}/applications/${encodeURIComponent(applicationId)}/events`,
+      ApplicationDetailResponseSchema,
+      undefined,
+      {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(input),
+      },
     );
   }
 

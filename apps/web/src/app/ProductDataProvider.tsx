@@ -28,6 +28,11 @@ import type {
   DiscoveryRun,
   UpdateCandidateClaimInput,
   TodayDashboardResponse,
+  ApplicationItem,
+  ApplicationDetailResponse,
+  CreateApplicationInput,
+  UpdateApplicationInput,
+  AddApplicationEventInput,
 } from '../data/types.js';
 
 interface ProductDataContextValue {
@@ -75,6 +80,24 @@ interface ProductDataContextValue {
     timeWindowDays?: number,
     signal?: AbortSignal,
   ) => Promise<TodayDashboardResponse>;
+  readonly getApplications: (
+    signal?: AbortSignal,
+  ) => Promise<readonly ApplicationItem[]>;
+  readonly getApplication: (
+    applicationId: string,
+    signal?: AbortSignal,
+  ) => Promise<ApplicationDetailResponse | null>;
+  readonly createApplication: (
+    input: CreateApplicationInput,
+  ) => Promise<ApplicationDetailResponse>;
+  readonly updateApplication: (
+    applicationId: string,
+    input: UpdateApplicationInput,
+  ) => Promise<ApplicationDetailResponse>;
+  readonly addApplicationEvent: (
+    applicationId: string,
+    input: AddApplicationEventInput,
+  ) => Promise<ApplicationDetailResponse>;
 }
 
 const ProductDataContext = createContext<ProductDataContextValue | null>(null);
@@ -227,6 +250,34 @@ export function ProductDataProvider({
     [repository],
   );
 
+  const getApplications = useCallback(
+    (signal?: AbortSignal) => repository.getApplications(signal),
+    [repository],
+  );
+
+  const getApplication = useCallback(
+    (applicationId: string, signal?: AbortSignal) =>
+      repository.getApplication(applicationId, signal),
+    [repository],
+  );
+
+  const createApplication = useCallback(
+    (input: CreateApplicationInput) => repository.createApplication(input),
+    [repository],
+  );
+
+  const updateApplication = useCallback(
+    (applicationId: string, input: UpdateApplicationInput) =>
+      repository.updateApplication(applicationId, input),
+    [repository],
+  );
+
+  const addApplicationEvent = useCallback(
+    (applicationId: string, input: AddApplicationEventInput) =>
+      repository.addApplicationEvent(applicationId, input),
+    [repository],
+  );
+
   const value = useMemo<ProductDataContextValue | null>(
     () =>
       snapshot
@@ -248,6 +299,11 @@ export function ProductDataProvider({
             runDiscovery,
             getDiscoveryRuns,
             getTodayDashboard,
+            getApplications,
+            getApplication,
+            createApplication,
+            updateApplication,
+            addApplicationEvent,
           }
         : null,
     [
@@ -267,6 +323,11 @@ export function ProductDataProvider({
       runDiscovery,
       getDiscoveryRuns,
       getTodayDashboard,
+      getApplications,
+      getApplication,
+      createApplication,
+      updateApplication,
+      addApplicationEvent,
     ],
   );
 

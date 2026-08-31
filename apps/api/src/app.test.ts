@@ -869,4 +869,168 @@ describe('API application', () => {
       careerMemoryAttention: [],
     });
   });
+
+  it('manages Applications V1 lifecycle via API with schema validation and candidate isolation', async () => {
+    const candidateA = candidateId('cand-app-api-a');
+    const candidateB = candidateId('cand-app-api-b');
+    const opp1 = opportunityId('opp-app-api-1');
+    const snap1 = snapshotId('snap-app-api-1');
+
+    const candRepo = new CandidateRepository(database);
+    candRepo.createCandidate(candidateA);
+    candRepo.createCandidate(candidateB);
+
+    const oppRepo = new OpportunityRepository(database);
+    oppRepo.createOpportunity(opp1);
+    oppRepo.appendSnapshot({
+      id: snap1,
+      opportunityId: opp1,
+      title: 'Principal Backend Systems Architect',
+      organization: 'Orbit Cloud',
+      content: 'Cloud platform lead',
+      fingerprint: 'fp-snap-app-api-1',
+    });
+    recordTestDiscoveryMatch(candidateA, opp1, 'api-app-1');
+
+    // 1. Create Application
+    const createRes = await app.inject({
+      method: 'POST',
+      url: `/candidates/${candidateA}/applications`,
+      payload: {
+        opportunityId: opp1,
+        status: 'Preparing',
+        note: 'Reviewing cloud architecture notes',
+      },
+    });
+
+    expect(createRes.statusCode).toBe(201);
+    const createdApp = createRes.json<{
+      id: string;
+      status: string;
+      note: string;
+      opportunity: { title: string };
+      updatedAt: string;
+    }>();
+    expect(createdApp.status).toBe('Preparing');
+    expect(createdApp.note).toBe('Reviewing cloud architecture notes');
+    expect(createdApp.opportunity.title).toBe(
+      'Principal Backend Systems Architect',
+    );
+
+    // 2. Duplicate Application creation should return 409
+    const dupRes = await app.inject({
+      method: 'POST',
+      url: `/candidates/${candidateA}/applications`,
+      payload: {
+        opportunityId: opp1,
+        status: 'Saved',
+      },
+    });
+    expect(dupRes.statusCode).toBe(409);
+
+    // 3. Update Application Status to Applied
+    const updateRes = await app.inject({
+      method: 'PATCH',
+      url: `/candidates/${candidateA}/applications/${createdApp.id}`,
+      payload: {
+        status: 'Applied',
+        expectedUpdatedAt: createdApp.updatedAt,
+        followUpDueAt: new Date(Date.now() + 86400000).toISOString(),
+        followUpNote: 'Check in on referral',
+      },
+    });
+
+    expect(updateRes.statusCode).toBe(200);
+    const updatedApp = updateRes.json<{
+      status: string;
+      submittedAt: string;
+      followUpDueAt: string;
+      updatedAt: string;
+    }>();
+    expect(updatedApp.status).toBe('Applied');
+    expect(updatedApp.submittedAt).not.toBeNull();
+
+    // 4. Invalid Status Transition should return 400
+    const invalidRes = await app.inject({
+      method: 'PATCH',
+      url: `/candidates/${candidateA}/applications/${createdApp.id}`,
+      payload: {
+        status: 'Saved',
+        expectedUpdatedAt: updatedApp.updatedAt,
+      },
+    });
+    expect(invalidRes.statusCode).toBe(400);
+
+    // 5. Candidate B cannot read Candidate A's application
+    const isolateRes = await app.inject({
+      method: 'GET',
+      url: `/candidates/${candidateB}/applications/${createdApp.id}`,
+    });
+    expect(isolateRes.statusCode).toBe(404);
+
+    const isolateUpdateRes = await app.inject({
+      method: 'PATCH',
+      url: `/candidates/${candidateB}/applications/${createdApp.id}`,
+      payload: {
+        status: 'Withdrawn',
+        expectedUpdatedAt: updatedApp.updatedAt,
+      },
+    });
+    expect(isolateUpdateRes.statusCode).toBe(404);
+
+    const isolateEventRes = await app.inject({
+      method: 'POST',
+      url: `/candidates/${candidateB}/applications/${createdApp.id}/events`,
+      payload: { eventType: 'candidate_activity', detail: 'cross-candidate' },
+    });
+    expect(isolateEventRes.statusCode).toBe(404);
+
+    // 6. List Applications for Candidate A
+    const listRes = await app.inject({
+      method: 'GET',
+      url: `/candidates/${candidateA}/applications`,
+    });
+    expect(listRes.statusCode).toBe(200);
+    const listData = listRes.json<{
+      data: Array<{ id: string; status: string }>;
+    }>().data;
+    expect(listData).toHaveLength(1);
+    expect(listData[0]!.id).toBe(createdApp.id);
+    expect(listData[0]!.status).toBe('Applied');
+
+    const listBRes = await app.inject({
+      method: 'GET',
+      url: `/candidates/${candidateB}/applications`,
+    });
+    expect(listBRes.statusCode).toBe(200);
+    expect(listBRes.json<{ data: unknown[] }>().data).toEqual([]);
+
+    const beforeReads = {
+      applications: database.sqlite
+        .prepare('select count(*) as count from applications')
+        .get() as { count: number },
+      events: database.sqlite
+        .prepare('select count(*) as count from application_events')
+        .get() as { count: number },
+    };
+    for (const url of [
+      `/candidates/${candidateA}/today`,
+      `/opportunities?candidateId=${candidateA}`,
+      `/opportunities/${opp1}?candidateId=${candidateA}`,
+      `/candidates/${candidateA}/applications`,
+      `/candidates/${candidateA}/applications/${createdApp.id}`,
+    ]) {
+      expect((await app.inject({ method: 'GET', url })).statusCode).toBe(200);
+    }
+    expect(
+      database.sqlite
+        .prepare('select count(*) as count from applications')
+        .get(),
+    ).toEqual(beforeReads.applications);
+    expect(
+      database.sqlite
+        .prepare('select count(*) as count from application_events')
+        .get(),
+    ).toEqual(beforeReads.events);
+  });
 });

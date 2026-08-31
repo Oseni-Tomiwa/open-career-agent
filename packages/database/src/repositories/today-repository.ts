@@ -338,7 +338,7 @@ export class TodayRepository {
       const snapshot = this.oppRepo.getLatestSnapshot(
         opportunityId(app.opportunityId),
       );
-      const events = this.appRepo.getEvents(applicationId(app.id));
+      const events = this.appRepo.getEvents(cId, applicationId(app.id));
       const lastEvent = events.length > 0 ? events[events.length - 1] : null;
       const lastEventAt = lastEvent
         ? toIso(lastEvent.occurredAt)
@@ -351,8 +351,15 @@ export class TodayRepository {
         organization: snapshot?.organization ?? null,
         status: app.status,
         lastEventAt,
-        nextAction: `Follow up on ${app.status.toLowerCase()} status`,
-        dueDate: null,
+        nextAction:
+          app.followUpDueAt && !app.followUpCompletedAt
+            ? (app.followUpNote ??
+              `Follow up on ${app.status.toLowerCase()} status`)
+            : `Follow up on ${app.status.toLowerCase()} status`,
+        dueDate:
+          app.followUpDueAt && !app.followUpCompletedAt
+            ? app.followUpDueAt.toISOString()
+            : null,
       });
     }
 
@@ -383,6 +390,13 @@ export class TodayRepository {
     };
 
     appActivityItems.sort((a, b) => {
+      if (a.dueDate && !b.dueDate) return -1;
+      if (!a.dueDate && b.dueDate) return 1;
+      if (a.dueDate && b.dueDate) {
+        const dueDiff =
+          new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+        if (dueDiff !== 0) return dueDiff;
+      }
       const weightA = statusWeight[a.status] ?? 99;
       const weightB = statusWeight[b.status] ?? 99;
       if (weightA !== weightB) return weightA - weightB;

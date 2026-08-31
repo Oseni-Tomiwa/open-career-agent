@@ -119,4 +119,13 @@ export class SourceListingRepository {
       .get();
     return result ?? null;
   }
+
+  public findListingByOpportunityId(opportunityId: string) {
+    const result = this.db.db
+      .select()
+      .from(sourceListings)
+      .where(eq(sourceListings.opportunityId, opportunityId))
+      .get();
+    return result ?? null;
+  }
 }

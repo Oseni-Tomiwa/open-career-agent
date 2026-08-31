@@ -298,6 +298,37 @@ describe('ApiProductRepository', () => {
     );
   });
 
+  it('never exposes seed applications in API mode when the API list is empty', async () => {
+    const repository = new ApiProductRepository(
+      'http://api.test',
+      'candidate-1',
+      vi.fn<typeof fetch>().mockImplementation(() =>
+        Promise.resolve(response({ data: [] })),
+      ),
+    );
+
+    expect(await repository.getApplications()).toEqual([]);
+    expect((await repository.getSnapshot()).applications).toEqual([]);
+  });
+
+  it('distinguishes application not-found from API unavailability', async () => {
+    const notFound = new ApiProductRepository(
+      'http://api.test',
+      'candidate-1',
+      vi.fn<typeof fetch>().mockResolvedValue(response({ error: {} }, 404)),
+    );
+    await expect(notFound.getApplication('missing')).resolves.toBeNull();
+
+    const unavailable = new ApiProductRepository(
+      'http://api.test',
+      'candidate-1',
+      vi.fn<typeof fetch>().mockRejectedValue(new TypeError('offline')),
+    );
+    await expect(unavailable.getApplication('app-1')).rejects.toEqual(
+      new ApiProductRepositoryError('The opportunity API is unavailable.'),
+    );
+  });
+
   it('reads and mutates Career Memory through candidate-scoped contracts', async () => {
     const profile = {
       candidate: {

@@ -33,10 +33,21 @@ const tabs: readonly { readonly value: DetailTab; readonly label: string }[] = [
 
 export function OpportunityDetailPage() {
   const { opportunityId } = useParams();
-  const { dataSource, snapshot, loadOpportunity, updateDecision } =
-    useProductData();
+  const {
+    dataSource,
+    snapshot,
+    loadOpportunity,
+    updateDecision,
+    createApplication,
+    getApplications,
+  } = useProductData();
   const [activeTab, setActiveTab] = useState<DetailTab>('overview');
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [appStatus, setAppStatus] = useState<string | null>(null);
+  const [applicationLookupState, setApplicationLookupState] = useState<{
+    readonly opportunityId: string;
+    readonly status: 'ready' | 'error';
+  } | null>(null);
   const [loadedState, setLoadedState] = useState<{
     readonly opportunityId: string;
     readonly status: 'ready' | 'missing' | 'error';
@@ -51,6 +62,11 @@ export function OpportunityDetailPage() {
     ? 'missing'
     : (currentLoadedState?.status ?? 'loading');
   const detailError = currentLoadedState?.error ?? null;
+  const applicationLookup =
+    applicationLookupState &&
+    applicationLookupState.opportunityId === opportunityId
+      ? applicationLookupState.status
+      : 'loading';
 
   useEffect(() => {
     if (!opportunityId) return;
@@ -76,6 +92,42 @@ export function OpportunityDetailPage() {
       });
     return () => controller.abort();
   }, [loadOpportunity, opportunityId]);
+
+  useEffect(() => {
+    if (!opportunityId) return;
+    const controller = new AbortController();
+    void getApplications(controller.signal)
+      .then((apps) => {
+        const found = apps.find((a) => a.opportunityId === opportunityId);
+        setAppStatus(found?.status ?? null);
+        setApplicationLookupState({ opportunityId, status: 'ready' });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setApplicationLookupState({ opportunityId, status: 'error' });
+        }
+      });
+    return () => controller.abort();
+  }, [getApplications, opportunityId]);
+
+  const handleCreateApp = async (status: 'Saved' | 'Preparing' | 'Applied') => {
+    if (!opportunityId) return;
+    try {
+      const res = await createApplication({
+        opportunityId,
+        status,
+      });
+      setAppStatus(res.status);
+      setApplicationLookupState({ opportunityId, status: 'ready' });
+      setActionNotice(`Application tracked with status '${res.status}'.`);
+    } catch (err: unknown) {
+      setActionNotice(
+        err instanceof Error
+          ? err.message
+          : 'Could not create application tracking record.',
+      );
+    }
+  };
 
   if (detailStatus === 'loading') {
     return (
@@ -153,15 +205,58 @@ export function OpportunityDetailPage() {
           </div>
         </div>
         <div className="detail-actions">
-          <button
-            className="button button-primary"
-            onClick={() => {
-              void act('consider', 'Shortlisted');
-            }}
-            type="button"
-          >
-            Shortlist
-          </button>
+          {applicationLookup === 'loading' ? (
+            <span className="session-notice" role="status">
+              Checking application tracking…
+            </span>
+          ) : applicationLookup === 'error' ? (
+            <span className="session-notice" role="alert">
+              Application tracking could not be loaded. No local fallback was
+              used.
+            </span>
+          ) : appStatus ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span
+                className="application-stage"
+                data-status={appStatus}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '16px',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                }}
+              >
+                Tracked: {appStatus}
+              </span>
+              <Link className="button button-secondary" to="/applications">
+                View in Applications
+              </Link>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                className="button button-secondary"
+                onClick={() => void handleCreateApp('Saved')}
+                type="button"
+              >
+                Save opportunity
+              </button>
+              <button
+                className="button button-primary"
+                onClick={() => void handleCreateApp('Preparing')}
+                type="button"
+              >
+                Start application
+              </button>
+              <button
+                className="button button-secondary"
+                onClick={() => void handleCreateApp('Applied')}
+                type="button"
+              >
+                Mark as applied
+              </button>
+            </div>
+          )}
           <button
             className="button button-secondary"
             aria-label="Review evidence for this opportunity"
@@ -175,11 +270,11 @@ export function OpportunityDetailPage() {
           <button
             className="button button-quiet"
             onClick={() => {
-              void act('low-priority', 'Dismissed for now');
+              void act('consider', 'Shortlisted');
             }}
             type="button"
           >
-            Dismiss
+            Shortlist
           </button>
         </div>
       </header>

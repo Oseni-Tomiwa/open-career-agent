@@ -8,11 +8,12 @@ import {
   CandidateRepository,
   CareerMemoryRepository,
   ApplicationRepository,
-  EvidenceRepository,
   EvaluationRepository,
   openDatabase,
   OpportunityRepository,
   SourceListingRepository,
+  SearchTargetRepository,
+  TodayRepository,
   evaluationFindings,
   type DatabaseHandle,
 } from '@oca/database';
@@ -23,8 +24,10 @@ import {
   claimId,
   evaluationId,
   findingId,
-  evidenceId,
   eventId,
+  searchTargetId,
+  discoveryRunId,
+  discoveryMatchId,
   opportunityId,
   snapshotId,
 } from '@oca/domain';
@@ -300,59 +303,97 @@ describe('decision.evaluate durable workflow', () => {
       id: application,
       candidateId: candidate,
       opportunityId: opportunity,
+      status: 'Preparing',
+    });
+    let current = applications.getApplication(candidate, application)!;
+    current = applications.updateApplication({
+      id: application,
+      candidateId: candidate,
+      expectedUpdatedAt: current.updatedAt,
       status: 'Applied',
+    });
+    current = applications.updateApplication({
+      id: application,
+      candidateId: candidate,
+      expectedUpdatedAt: current.updatedAt,
+      status: 'Assessment',
+    });
+    applications.updateApplication({
+      id: application,
+      candidateId: candidate,
+      expectedUpdatedAt: current.updatedAt,
+      status: 'Interview',
     });
     applications.appendEvent({
       id: eventId('application-event-before-decision'),
+      candidateId: candidate,
       applicationId: application,
       eventType: 'note',
       detail: 'Existing application history',
+    });
+
+    const sourceRepo = new SourceListingRepository(database);
+    const closedObservation = 'obs-dec-closed';
+    sourceRepo.persistObservation(
+      closedObservation,
+      listingId,
+      {
+        rawPayload: JSON.stringify({
+          title: 'Senior TypeScript Engineer',
+          company_name: 'Acme Corp',
+          status: 'closed',
+        }),
+        fingerprint: 'obs-fp-dec-closed',
+      },
+      Date.now(),
+    );
+    const closedSnapshot = snapshotId('snap-dec-closed');
+    new OpportunityRepository(database).appendSnapshot({
+      id: closedSnapshot,
+      opportunityId: opportunity,
+      title: 'Senior TypeScript Engineer',
+      organization: 'Acme Corp',
+      content: 'This listing is closed.',
+      fingerprint: 'snap-hash-dec-closed',
+      sourceObservationId: closedObservation,
     });
 
     const closedEvaluation = evaluationId('eval-dec-closed');
     repository.persistEvaluation({
       id: closedEvaluation,
       candidateId: candidate,
-      snapshotId: snapshot,
+      snapshotId: closedSnapshot,
       eligibilityState: 'eligible',
       eligibilityInputFingerprint: 'elig-closed-fp',
       fitLevel: 'strong',
       fitInputFingerprint: 'fit-closed-fp',
-      qualityLevel: 'risk',
-      qualityEngineVersion: 'quality-v1',
-      qualityInputFingerprint: 'quality-closed-fp',
     });
-    const closedFinding = findingId('finding-listing-closed');
-    repository.persistFinding({
-      id: closedFinding,
-      evaluationId: closedEvaluation,
-      category: 'quality',
-      dimensionKey: 'listing_status',
-      state: 'RISK',
-      summary: 'Source explicitly confirmed this listing is closed.',
-      explanation: 'Source explicitly confirmed this listing is closed.',
-    });
-    new EvidenceRepository(database).attachToSnapshot(snapshot, {
-      id: evidenceId('evidence-listing-closed'),
-      evidenceType: 'source-observation',
-      sourceReference: 'greenhouse:123',
-      excerpt: 'This job is closed.',
-      state: 'source-verified',
-    });
-    repository.attachEvidenceToFinding(
-      closedFinding,
-      evidenceId('evidence-listing-closed'),
-    );
 
-    const task = ledger.enqueue({
-      taskType: 'decision.evaluate',
+    ledger.enqueue({
+      taskType: 'quality.evaluate',
       payload: {
         evaluationId: closedEvaluation,
-        snapshotId: snapshot,
+        snapshotId: closedSnapshot,
         candidateId: candidate,
       },
     });
-    await createDecisionHandlers(database)['decision.evaluate']!(task);
+    const qualityTask = ledger.claimNext({
+      leaseOwner: 'closed-listing-test',
+      leaseDurationMs: 30_000,
+      now: new Date(Date.now() + 1),
+    });
+    expect(qualityTask?.taskType).toBe('quality.evaluate');
+    await createQualityHandlers({ db: database })['quality.evaluate']!(
+      qualityTask!,
+    );
+    ledger.markSucceeded(qualityTask!.id, 'closed-listing-test');
+    const decisionTask = ledger.claimNext({
+      leaseOwner: 'closed-listing-test',
+      leaseDurationMs: 30_000,
+      now: new Date(Date.now() + 1),
+    });
+    expect(decisionTask?.taskType).toBe('decision.evaluate');
+    await createDecisionHandlers(database)['decision.evaluate']!(decisionTask!);
 
     const decision =
       repository.getLatestDecisionForEvaluation(closedEvaluation);
@@ -368,20 +409,45 @@ describe('decision.evaluate durable workflow', () => {
       fitLevel: 'strong',
     });
     expect(repository.getDecisionReasons(decisionId(decision!.id))).toEqual([
+      expect.objectContaining({ reasonCode: 'LISTING_CLOSED' }),
+    ]);
+    expect(applications.getApplication(candidate, application)?.status).toBe(
+      'Interview',
+    );
+    expect(applications.getEvents(candidate, application)).toHaveLength(6);
+
+    const search = new SearchTargetRepository(database);
+    const target = search.createSearchTarget(candidate, { name: 'Backend' });
+    const run = discoveryRunId('run-closed-listing');
+    search.createDiscoveryRun(
+      run,
+      candidate,
+      searchTargetId(target.id),
+      'greenhouse',
+    );
+    search.recordDiscoveryMatch({
+      id: discoveryMatchId('match-closed-listing'),
+      candidateId: candidate,
+      searchTargetId: searchTargetId(target.id),
+      discoveryRunId: run,
+      opportunityId: opportunity,
+      sourceListingId: listingId,
+      matchReasons: [],
+      retainedUnresolved: [],
+    });
+    const today = new TodayRepository(database).getTodayDashboard(candidate);
+    expect(today.needsAttention).toEqual([
       expect.objectContaining({
-        reasonCode: 'LISTING_CLOSED',
-        findingId: closedFinding,
+        opportunityId: opportunity,
+        category: 'blocked_closed',
       }),
     ]);
-    expect(
-      database.sqlite
-        .prepare(
-          'select evidence_id as evidenceId from evaluation_finding_evidence where finding_id = ?',
-        )
-        .all(closedFinding),
-    ).toEqual([{ evidenceId: evidenceId('evidence-listing-closed') }]);
-    expect(applications.getApplication(application)?.status).toBe('Applied');
-    expect(applications.getEvents(application)).toHaveLength(1);
+    expect(today.applicationActivity).toEqual([
+      expect.objectContaining({
+        applicationId: application,
+        status: 'Interview',
+      }),
+    ]);
   });
 
   it('handles Quality risk as investigate without marking candidate ineligible', async () => {

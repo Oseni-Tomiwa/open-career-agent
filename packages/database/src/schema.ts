@@ -460,6 +460,7 @@ export const decisionReasons = sqliteTable(
 );
 
 export const APPLICATION_STATUSES = [
+  'Saved',
   'Preparing',
   'Applied',
   'Assessment',
@@ -467,6 +468,7 @@ export const APPLICATION_STATUSES = [
   'Offer',
   'Rejected',
   'Withdrawn',
+  'Closed',
 ] as const;
 
 export const applications = sqliteTable(
@@ -480,6 +482,19 @@ export const applications = sqliteTable(
       .notNull()
       .references(() => opportunities.id, { onDelete: 'restrict' }),
     status: text('status', { enum: APPLICATION_STATUSES }).notNull(),
+    originatingDecisionId: text('originating_decision_id').references(
+      () => decisions.id,
+      { onDelete: 'set null' },
+    ),
+    originatingDecisionState: text('originating_decision_state'),
+    originatingDecisionAction: text('originating_decision_action'),
+    submittedAt: integer('submitted_at', { mode: 'timestamp_ms' }),
+    followUpDueAt: integer('follow_up_due_at', { mode: 'timestamp_ms' }),
+    followUpNote: text('follow_up_note'),
+    followUpCompletedAt: integer('follow_up_completed_at', {
+      mode: 'timestamp_ms',
+    }),
+    note: text('note'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
@@ -487,6 +502,10 @@ export const applications = sqliteTable(
     uniqueIndex('applications_candidate_opportunity_idx').on(
       table.candidateId,
       table.opportunityId,
+    ),
+    index('applications_candidate_status_idx').on(
+      table.candidateId,
+      table.status,
     ),
   ],
 );
