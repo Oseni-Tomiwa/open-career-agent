@@ -12,7 +12,7 @@ describe('CareerSignalsPage', () => {
     renderProduct(<CareerSignalsPage />);
 
     expect(
-      await screen.findByRole('heading', { name: 'Career Signals' }),
+      await screen.findByRole('heading', { name: 'Career Insights' }),
     ).toBeInTheDocument();
 
     expect(
@@ -32,12 +32,12 @@ describe('CareerSignalsPage', () => {
 
     renderProduct(
       <CareerSignalsPage />,
-      ['/signals'],
+      ['/insights'],
       failingRepo as ProductRepository,
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Failed to Load Signals' }),
+      await screen.findByRole('heading', { name: 'Failed to Load Insights' }),
     ).toBeInTheDocument();
 
     expect(

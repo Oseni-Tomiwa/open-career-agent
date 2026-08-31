@@ -5,7 +5,7 @@ import { renderProduct } from '../../test/render.js';
 import { SearchPage } from './SearchPage.js';
 
 describe('Search & Discovery Configuration Page', () => {
-  it('renders search targets, allows editing, and triggers manual discovery run', async () => {
+  it('renders search preferences, allows editing, and triggers manual discovery run', async () => {
     renderProduct(<SearchPage />);
 
     expect(await screen.findByText('Search & Discovery')).toBeInTheDocument();
@@ -14,15 +14,13 @@ describe('Search & Discovery Configuration Page', () => {
     ).toBeInTheDocument();
 
     const saveButton = screen.getByRole('button', {
-      name: 'Save Search Target',
+      name: 'Save Search Preference',
     });
     expect(saveButton).toBeInTheDocument();
 
     fireEvent.click(saveButton);
     expect(
-      await screen.findByText(
-        /Search target configuration updated successfully/i,
-      ),
+      await screen.findByText(/Search preference updated successfully/i),
     ).toBeInTheDocument();
 
     const runButton = screen.getByRole('button', { name: 'Run Discovery Now' });

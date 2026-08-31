@@ -322,8 +322,9 @@ export function ApplicationsPage() {
                     <span className="application-next">
                       <strong>{application.nextAction}</strong>
                       <small>
-                        {application.dueDate ??
-                          `Updated ${application.updatedAt}`}
+                        {application.dueDate
+                          ? formatApplicationDate(application.dueDate, true)
+                          : `Updated ${formatApplicationDate(application.updatedAt)}`}
                       </small>
                     </span>
                     <Icon name="chevron-down" size={17} />
@@ -338,7 +339,10 @@ export function ApplicationsPage() {
                           </span>
                           <h3>{application.nextAction}</h3>
                           {application.dueDate && (
-                            <p>Due {application.dueDate}</p>
+                            <p>
+                              Due{' '}
+                              {formatApplicationDate(application.dueDate, true)}
+                            </p>
                           )}
                         </div>
                         <div style={{ display: 'flex', gap: '8px' }}>
@@ -355,7 +359,7 @@ export function ApplicationsPage() {
                             )}
                           <Link
                             className="button button-secondary"
-                            to={`/opportunities/${application.opportunityId}`}
+                            to={`/discover/${application.opportunityId}`}
                           >
                             View opportunity
                           </Link>
@@ -556,6 +560,15 @@ export function ApplicationsPage() {
       </div>
     </div>
   );
+}
+
+function formatApplicationDate(value: string, includeTime = false): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    dateStyle: 'medium',
+    ...(includeTime ? { timeStyle: 'short' as const } : {}),
+  });
 }
 
 export default ApplicationsPage;

@@ -16,13 +16,13 @@ describe('application shell navigation', () => {
     renderProduct(
       <Routes>
         <Route element={<AppShell />} path="/">
-          <Route index element={<h1>Today workspace</h1>} />
+          <Route index element={<h1>Overview workspace</h1>} />
           <Route path="applications" element={<h1>Application pipeline</h1>} />
         </Route>
       </Routes>,
     );
     expect(
-      await screen.findByRole('heading', { name: 'Today workspace' }),
+      await screen.findByRole('heading', { name: 'Overview workspace' }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: 'Applications' }));
     expect(
@@ -30,7 +30,7 @@ describe('application shell navigation', () => {
     ).toBeInTheDocument();
   });
 
-  it('opens and closes the responsive navigation control', async () => {
+  it('renders exact V1 primary navigation items and excludes deferred surfaces', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn<typeof fetch>().mockRejectedValue(new Error('offline')),
@@ -38,16 +38,40 @@ describe('application shell navigation', () => {
     renderProduct(
       <Routes>
         <Route element={<AppShell />} path="/">
-          <Route index element={<h1>Today workspace</h1>} />
+          <Route index element={<h1>Overview workspace</h1>} />
         </Route>
       </Routes>,
     );
-    const trigger = await screen.findByRole('button', {
-      name: 'Open navigation',
+
+    const nav = await screen.findByRole('navigation', {
+      name: 'Primary navigation',
     });
-    fireEvent.click(trigger);
-    expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(nav).toBeInTheDocument();
+
+    // Must contain V1 primary navigation items
+    expect(screen.getByRole('link', { name: 'Overview' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Discover Jobs' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Matches' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Applications' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Career Insights' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Agent Activity' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
+
+    // Must NOT contain deferred / un-implemented surfaces
+    expect(
+      screen.queryByRole('link', { name: 'Documents' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Notifications' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Rolevia Pro/i)).not.toBeInTheDocument();
   });
 });

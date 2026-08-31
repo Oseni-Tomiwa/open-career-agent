@@ -12,14 +12,17 @@ const OpportunitiesPage = lazy(
 const OpportunityDetailPage = lazy(
   () => import('./features/opportunities/OpportunityDetailPage.js'),
 );
+const MatchesPage = lazy(() => import('./features/matches/MatchesPage.js'));
 const ApplicationsPage = lazy(
   () => import('./features/applications/ApplicationsPage.js'),
 );
 const CareerSignalsPage = lazy(
   () => import('./features/signals/CareerSignalsPage.js'),
 );
-const ProfilePage = lazy(() => import('./features/profile/ProfilePage.js'));
-const SearchPage = lazy(() => import('./features/search/SearchPage.js'));
+const AgentActivityPage = lazy(
+  () => import('./features/activity/AgentActivityPage.js'),
+);
+const SettingsPage = lazy(() => import('./features/settings/SettingsPage.js'));
 const NotFoundPage = lazy(() => import('./features/NotFoundPage.js'));
 
 function lazyPage(page: React.ReactNode) {
@@ -32,17 +35,34 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     errorElement: <RouteError />,
     children: [
-      { index: true, element: <Navigate replace to="/today" /> },
-      { path: 'today', element: lazyPage(<TodayPage />) },
-      { path: 'opportunities', element: lazyPage(<OpportunitiesPage />) },
+      { index: true, element: <Navigate replace to="/overview" /> },
+      // Canonical Primary Routes
+      { path: 'overview', element: lazyPage(<TodayPage />) },
+      { path: 'discover', element: lazyPage(<OpportunitiesPage />) },
+      {
+        path: 'discover/:opportunityId',
+        element: lazyPage(<OpportunityDetailPage />),
+      },
+      { path: 'matches', element: lazyPage(<MatchesPage />) },
+      { path: 'applications', element: lazyPage(<ApplicationsPage />) },
+      { path: 'insights', element: lazyPage(<CareerSignalsPage />) },
+      { path: 'activity', element: lazyPage(<AgentActivityPage />) },
+      { path: 'settings', element: lazyPage(<SettingsPage />) },
+
+      // Legacy Aliases & Redirects for Backward Compatibility
+      { path: 'today', element: <Navigate replace to="/overview" /> },
+      { path: 'opportunities', element: <Navigate replace to="/discover" /> },
       {
         path: 'opportunities/:opportunityId',
         element: lazyPage(<OpportunityDetailPage />),
       },
-      { path: 'applications', element: lazyPage(<ApplicationsPage />) },
-      { path: 'signals', element: lazyPage(<CareerSignalsPage />) },
-      { path: 'profile', element: lazyPage(<ProfilePage />) },
-      { path: 'search', element: lazyPage(<SearchPage />) },
+      { path: 'signals', element: <Navigate replace to="/insights" /> },
+      { path: 'profile', element: <Navigate replace to="/settings" /> },
+      {
+        path: 'search',
+        element: <Navigate replace to="/discover?tab=preferences" />,
+      },
+
       { path: '*', element: lazyPage(<NotFoundPage />) },
     ],
   },

@@ -12,12 +12,13 @@ const primaryNavigation: readonly {
   readonly label: string;
   readonly icon: IconName;
 }[] = [
-  { to: '/today', label: 'Today', icon: 'today' },
-  { to: '/opportunities', label: 'Opportunities', icon: 'opportunities' },
+  { to: '/overview', label: 'Overview', icon: 'today' },
+  { to: '/discover', label: 'Discover Jobs', icon: 'opportunities' },
+  { to: '/matches', label: 'Matches', icon: 'matches' },
   { to: '/applications', label: 'Applications', icon: 'applications' },
-  { to: '/signals', label: 'Career Signals', icon: 'signals' },
-  { to: '/profile', label: 'Career Profile', icon: 'profile' },
-  { to: '/search', label: 'Search', icon: 'search' },
+  { to: '/insights', label: 'Career Insights', icon: 'signals' },
+  { to: '/activity', label: 'Agent Activity', icon: 'activity' },
+  { to: '/settings', label: 'Settings', icon: 'settings' },
 ];
 
 type ApiState = 'checking' | 'available' | 'unavailable';
@@ -90,7 +91,7 @@ export function AppShell() {
           {primaryNavigation.map((item) => (
             <NavLink
               className={({ isActive }) => (isActive ? 'active' : undefined)}
-              end={item.to === '/today'}
+              end={item.to === '/overview'}
               key={item.to}
               onClick={() => setNavigationOpen(false)}
               to={item.to}
@@ -129,7 +130,7 @@ export function AppShell() {
           <span>
             <Icon name="info" size={15} />{' '}
             {dataSource === 'api'
-              ? 'API-backed Opportunities · other pages remain development-only'
+              ? 'API-backed candidate workspace'
               : 'Fictional development dataset'}
           </span>
           {apiState === 'unavailable' && (
@@ -150,16 +151,16 @@ export function AppShell() {
 function ProductIdentity() {
   return (
     <NavLink
-      aria-label="Open Career Agent Today"
+      aria-label="Rolevia Overview"
       className="product-identity"
-      to="/today"
+      to="/overview"
     >
       <span className="product-mark" aria-hidden="true">
         <span />
         <span />
       </span>
       <span>
-        <strong>Open Career Agent</strong>
+        <strong>Rolevia</strong>
         <small>Career intelligence</small>
       </span>
     </NavLink>

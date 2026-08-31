@@ -115,3 +115,33 @@ export function EvidenceStateLabel({
     </span>
   );
 }
+
+export function DiscoveryRunStatus({
+  status,
+}: {
+  readonly status: string | null | undefined;
+}) {
+  if (!status) return <span className="badge badge-neutral">Unknown</span>;
+
+  const normalized = status.toUpperCase();
+  const labels: Readonly<Record<string, string>> = {
+    PENDING: 'Pending',
+    RUNNING: 'Running',
+    COMPLETED: 'Completed',
+    FAILED: 'Failed',
+  };
+  const variant =
+    normalized === 'COMPLETED'
+      ? 'badge-success'
+      : normalized === 'FAILED'
+        ? 'badge-danger'
+        : normalized === 'PENDING' || normalized === 'RUNNING'
+          ? 'badge-warning'
+          : 'badge-neutral';
+
+  return (
+    <span className={`badge ${variant}`} data-status={normalized.toLowerCase()}>
+      {labels[normalized] ?? 'Unknown'}
+    </span>
+  );
+}

@@ -148,12 +148,12 @@ function SignIn({
             <span />
           </span>
           <span>
-            <strong>Open Career Agent</strong>
-            <small>Rolevia Cloud</small>
+            <strong>Rolevia</strong>
+            <small>Career intelligence</small>
           </span>
         </div>
         <h1 id="auth-title">{registering ? 'Create account' : 'Sign in'}</h1>
-        <p>Your career data stays isolated to your Candidate profile.</p>
+        <p>Your career data stays isolated to your profile.</p>
         <form onSubmit={(event) => void submit(event)}>
           <label>
             Email

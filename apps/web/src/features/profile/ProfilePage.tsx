@@ -18,8 +18,7 @@ const SECTION_ORDER = [
   'Education and certifications',
   'Languages',
   'Location and work authorization',
-  'Preferences',
-  'Other Career Memory',
+  'Other profile information',
 ] as const;
 
 export function ProfilePage() {
@@ -58,7 +57,7 @@ export function ProfilePage() {
           setLoadError(
             error instanceof Error
               ? error.message
-              : 'Career Memory could not be loaded.',
+              : 'Your Career Profile could not be loaded.',
           );
         }
       });
@@ -82,7 +81,7 @@ export function ProfilePage() {
       setMutationError(
         error instanceof Error
           ? error.message
-          : 'Career Memory could not be updated.',
+          : 'Your Career Profile could not be updated.',
       );
     } finally {
       setSaving(false);
@@ -96,7 +95,9 @@ export function ProfilePage() {
         <PageHeader eyebrow="Evidence-backed profile" title="Career Profile" />
         <section className="empty-state" role="alert">
           <h2>
-            {notFound ? 'Candidate not found' : 'Career Memory unavailable'}
+            {notFound
+              ? 'Career Profile not found'
+              : 'Career Profile unavailable'}
           </h2>
           <p>{loadError}</p>
           <button type="button" onClick={() => setReload((value) => value + 1)}>
@@ -110,7 +111,7 @@ export function ProfilePage() {
   if (!profile) {
     return (
       <div className="page profile-page" role="status">
-        Loading Career Memory…
+        Loading Career Profile…
       </div>
     );
   }
@@ -118,12 +119,12 @@ export function ProfilePage() {
   return (
     <div className="page profile-page">
       <PageHeader
-        description="Career Memory keeps candidate claims connected to their scope, epistemic state, and supporting Evidence."
+        description="Keep your factual skills, experience, education, languages, location, and work authorization connected to supporting evidence. Search intent belongs in Discover Jobs under Search Preferences."
         eyebrow="Evidence-backed profile"
         title="Career Profile"
         actions={
           <button type="button" onClick={() => setShowAdd((value) => !value)}>
-            Add claim
+            Add profile item
           </button>
         }
       />
@@ -135,19 +136,18 @@ export function ProfilePage() {
         <div>
           <p className="eyebrow">
             {dataSource === 'api'
-              ? 'Persisted Career Memory'
-              : 'Seed Career Memory'}
+              ? 'Saved Career Profile'
+              : 'Development Career Profile'}
           </p>
-          <h2>Development candidate</h2>
-          <strong>{profile.candidate.id}</strong>
+          <h2>Your evidence-backed profile</h2>
           <p>
-            {profile.claims.length} claim
+            {profile.claims.length} profile item
             {profile.claims.length === 1 ? '' : 's'} with{' '}
             {profile.claims.reduce(
               (count, claim) => count + claim.evidence.length,
               0,
             )}{' '}
-            linked Evidence items
+            supporting evidence items
           </p>
           <small>Updated {formatDate(profile.candidate.updatedAt)}</small>
         </div>
@@ -155,8 +155,7 @@ export function ProfilePage() {
 
       {reevaluating ? (
         <p className="profile-notice" role="status">
-          Career Memory saved. Re-evaluating affected opportunities through the
-          background worker…
+          Career Profile saved. Updating affected job recommendations…
         </p>
       ) : null}
       {mutationError ? (
@@ -177,8 +176,8 @@ export function ProfilePage() {
 
       {profile.claims.length === 0 ? (
         <EmptyState
-          title="Career Memory is empty"
-          description="Add an unknown claim or a supported claim with candidate-confirmed Evidence."
+          title="Career Profile is empty"
+          description="Add a factual profile item and attach evidence when it is available."
         />
       ) : (
         <div className="career-memory-sections">
@@ -270,7 +269,7 @@ function ClaimCard(props: {
         <span
           className={`claim-state claim-state-${props.claim.state.toLowerCase()}`}
         >
-          {props.claim.state}
+          {humanize(props.claim.state)}
         </span>
       </header>
       <dl>
@@ -303,7 +302,7 @@ function ClaimCard(props: {
       ) : null}
       {props.claim.state === 'UNSUPPORTED' ? (
         <p className="claim-guidance">
-          This claim is not trusted Career Memory.
+          This profile item is not supported by reliable evidence.
         </p>
       ) : null}
 
@@ -330,7 +329,7 @@ function ClaimCard(props: {
             disabled={props.disabled}
             onClick={() => props.onEdit()}
           >
-            Edit claim
+            Edit profile item
           </button>
         ) : null}
         <button
@@ -432,9 +431,9 @@ function ClaimForm(props: {
   }
   return (
     <form className="profile-editor" onSubmit={submit}>
-      <h2>Add Career Memory claim</h2>
+      <h2>Add profile item</h2>
       <label>
-        Claim kind
+        Profile category
         <input
           name="kind"
           required
@@ -442,7 +441,7 @@ function ClaimForm(props: {
         />
       </label>
       <label>
-        Claim value
+        Details
         <input name="value" required />
       </label>
       <label>
@@ -474,7 +473,7 @@ function ClaimForm(props: {
       </label>
       <div>
         <button disabled={props.disabled} type="submit">
-          Save claim
+          Save profile item
         </button>
         <button type="button" onClick={() => props.onCancel()}>
           Cancel
@@ -510,7 +509,7 @@ function EditClaimForm(props: {
       }}
     >
       <label>
-        Claim value
+        Details
         <input name="value" defaultValue={props.claim.value} required />
       </label>
       <label>
@@ -630,8 +629,7 @@ function claimSection(kind: string): (typeof SECTION_ORDER)[number] {
     /location|authorization|citizenship|sponsorship|clearance/.test(normalized)
   )
     return 'Location and work authorization';
-  if (/preference|target/.test(normalized)) return 'Preferences';
-  return 'Other Career Memory';
+  return 'Other profile information';
 }
 
 function humanize(value: string): string {

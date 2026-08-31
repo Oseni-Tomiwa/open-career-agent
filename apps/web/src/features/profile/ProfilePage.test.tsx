@@ -93,8 +93,8 @@ describe('Career Memory profile', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Node.js')).toBeInTheDocument();
     expect(screen.getByText('Kubernetes')).toBeInTheDocument();
-    expect(screen.getAllByText('SUPPORTED').length).toBeGreaterThan(0);
-    expect(screen.getByText('UNKNOWN')).toBeInTheDocument();
+    expect(screen.getAllByText('Supported').length).toBeGreaterThan(0);
+    expect(screen.getByText('Unknown')).toBeInTheDocument();
   });
 
   it('renders API claims, states, scope, confidence, and Evidence without seed leakage', async () => {
@@ -111,10 +111,7 @@ describe('Career Memory profile', () => {
     });
     renderProduct(<ProfilePage />, ['/profile'], apiRepository(fetcher));
 
-    expect(
-      await screen.findByText('candidate-api-profile'),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Node.js')).toBeInTheDocument();
+    expect(await screen.findByText('Node.js')).toBeInTheDocument();
     expect(screen.getAllByText('High').length).toBeGreaterThan(0);
     expect(screen.getByText('US work authorization')).toBeInTheDocument();
     expect(screen.getByText('us')).toBeInTheDocument();
@@ -151,16 +148,16 @@ describe('Career Memory profile', () => {
       );
     });
     renderProduct(<ProfilePage />, ['/profile'], apiRepository(fetcher));
-    await screen.findByText('candidate-api-profile');
+    await screen.findByText('Node.js');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add claim' }));
-    fireEvent.change(screen.getByLabelText('Claim kind'), {
+    fireEvent.click(screen.getByRole('button', { name: 'Add profile item' }));
+    fireEvent.change(screen.getByLabelText('Profile category'), {
       target: { value: 'language' },
     });
-    fireEvent.change(screen.getByLabelText('Claim value'), {
+    fireEvent.change(screen.getByLabelText('Details'), {
       target: { value: 'German' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save claim' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile item' }));
     await waitFor(() =>
       expect(fetcher).toHaveBeenCalledWith(
         'http://api.test/candidates/candidate-api-profile/claims',
@@ -238,15 +235,15 @@ describe('Career Memory profile', () => {
       );
     });
     renderProduct(<ProfilePage />, ['/profile'], apiRepository(fetcher));
-    await screen.findByText('candidate-api-profile');
-    fireEvent.click(screen.getByRole('button', { name: 'Add claim' }));
-    fireEvent.change(screen.getByLabelText('Claim kind'), {
+    await screen.findByText('Node.js');
+    fireEvent.click(screen.getByRole('button', { name: 'Add profile item' }));
+    fireEvent.change(screen.getByLabelText('Profile category'), {
       target: { value: 'skill' },
     });
-    fireEvent.change(screen.getByLabelText('Claim value'), {
+    fireEvent.change(screen.getByLabelText('Details'), {
       target: { value: 'Rust' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save claim' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile item' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('status 409');
     expect(screen.queryByText('Docker')).not.toBeInTheDocument();
   });

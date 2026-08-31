@@ -24,11 +24,11 @@ The root development command builds and watches the shared packages, then starts
 - the Fastify API at `http://127.0.0.1:3000`; and
 - the background worker using the same canonical SQLite database.
 
-The web app defaults to its deterministic fictional seed repository. The
-Opportunities list and detail routes can instead consume the local API by
-setting the browser-safe variables below. The API repository validates shared
-TypeBox response contracts and maps them into the UI view model; React
-components do not calculate Eligibility, Fit, Quality, or Decision.
+The web app defaults to its deterministic fictional seed repository. Its
+primary product surfaces can instead consume the local API by setting the
+browser-safe variables below. The API repository validates shared TypeBox
+response contracts and maps them into the UI view model; React components do
+not calculate Eligibility, Fit, Quality, or Decision.
 
 ```dotenv
 VITE_PRODUCT_DATA_SOURCE=api
@@ -48,6 +48,11 @@ candidate ID. Restart Vite after changing these variables.
 - `GET /openapi.json` — OpenAPI generated from registered TypeBox route schemas
 - `GET /opportunities?candidateId=...` — lightweight candidate-scoped list projection
 - `GET /opportunities/:id?candidateId=...` — snapshot history and coherent Evaluation projection
+- `GET /candidates/:candidateId/today` — candidate overview and persisted activity projection
+- `GET /candidates/:candidateId/career-signals` — candidate-scoped career insights
+- `/candidates/:candidateId/claims` — Career Profile claim and evidence operations
+- `/candidates/:candidateId/search-targets` — Search Preference and discovery operations
+- `/candidates/:candidateId/applications` — application tracking and event history
 
 Responses do not expose the configured database path or secrets.
 
@@ -79,9 +84,8 @@ process startup by default; Cloud mode defaults to an explicit
 Drizzle schema with `pnpm db:generate`. Do not edit a migration that has shipped.
 
 The browser seed repository contains fictional publishable development data.
-In API mode, only Opportunities list/detail are real-backed in Phase 1. Today
-shows an explicit unavailable state; Applications, Career Profile, and Search
-remain development-only and are not API migrations.
+In API mode, product data is loaded from candidate-scoped API contracts without
+falling back to seed records when a response is empty or unavailable.
 
 ## Environment boundaries
 

@@ -2470,12 +2470,16 @@ svg {
 
 @media (max-width: 62rem) {
   .sidebar {
+    visibility: hidden;
     width: 16rem;
     transform: translateX(-105%);
-    transition: transform 200ms ease;
+    transition:
+      transform 200ms ease,
+      visibility 200ms ease;
     box-shadow: var(--shadow-md);
   }
   .sidebar[data-open='true'] {
+    visibility: visible;
     transform: translateX(0);
   }
   .sidebar .product-identity {

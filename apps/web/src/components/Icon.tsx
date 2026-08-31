@@ -8,6 +8,8 @@ export type IconName =
   | 'profile'
   | 'search'
   | 'settings'
+  | 'matches'
+  | 'activity'
   | 'sun'
   | 'moon'
   | 'system'
@@ -41,6 +43,10 @@ const paths: Record<IconName, readonly string[]> = {
     'M4.5 21a7.5 7.5 0 0 1 15 0',
   ],
   search: ['M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z', 'm16 16 5 5'],
+  matches: [
+    'M12 3l2.8 5.7 6.3.9-4.5 4.4 1.1 6.3L12 17.3 6.3 20.3l1.1-6.3-4.5-4.4 6.3-.9L12 3Z',
+  ],
+  activity: ['M22 12h-4l-3 9L9 3l-3 9H2'],
   settings: [
     'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z',
     'M19 12h3M2 12h3M12 2v3M12 19v3M18.4 5.6l2.1-2.1M3.5 20.5l2.1-2.1M18.4 18.4l2.1 2.1M3.5 3.5l2.1 2.1',

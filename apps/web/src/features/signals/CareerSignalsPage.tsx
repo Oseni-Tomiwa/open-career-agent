@@ -32,7 +32,7 @@ export function CareerSignalsPage() {
           setError(
             err instanceof Error
               ? err.message
-              : 'Failed to load Career Signals',
+              : 'Failed to load Career Insights',
           );
           setLoading(false);
         }
@@ -50,13 +50,13 @@ export function CareerSignalsPage() {
         <PageHeader
           description="Aggregating market intelligence across your active discovered roles..."
           eyebrow="Loading"
-          title="Career Signals"
+          title="Career Insights"
         />
         <div
           className="app-loading"
           style={{ padding: '2rem', textAlign: 'center' }}
         >
-          Loading Career Signals...
+          Loading Career Insights...
         </div>
       </div>
     );
@@ -66,13 +66,13 @@ export function CareerSignalsPage() {
     return (
       <div className="page signals-page">
         <PageHeader
-          description="Error loading candidate market signals."
+          description="Error loading candidate market insights."
           eyebrow="Intelligence Error"
-          title="Career Signals"
+          title="Career Insights"
         />
         <EmptyState
-          description={error ?? 'Unable to retrieve Career Signals.'}
-          title="Failed to Load Signals"
+          description={error ?? 'Unable to retrieve Career Insights.'}
+          title="Failed to Load Insights"
         />
       </div>
     );
@@ -90,9 +90,9 @@ export function CareerSignalsPage() {
   return (
     <div className="page signals-page" data-testid="career-signals-page">
       <PageHeader
-        description="Deterministic market intelligence aggregated across your active discovered opportunities."
+        description="Evidence-backed market intelligence aggregated across your active discovered jobs."
         eyebrow="Candidate Intelligence"
-        title="Career Signals"
+        title="Career Insights"
       />
 
       <div
@@ -123,8 +123,8 @@ export function CareerSignalsPage() {
 
       {!hasAnySignals ? (
         <EmptyState
-          description="No recurring market patterns detected yet. As you discover and evaluate opportunities, Rolevia will aggregate evidence-backed signals here."
-          title="No Active Career Signals Yet"
+          description="No recurring market patterns detected yet. As Rolevia evaluates discovered jobs, evidence-backed insights will appear here."
+          title="No Career Insights Yet"
         />
       ) : (
         <div
@@ -193,7 +193,7 @@ export function CareerSignalsPage() {
               icon="📁"
               id="evidence-gaps"
               signals={signals.evidenceGaps}
-              title="Career Memory Evidence Gaps"
+              title="Career Profile Evidence Gaps"
             />
           )}
 
@@ -320,7 +320,7 @@ function SignalCard({ signal }: { readonly signal: CareerSignal }) {
             className="secondary-text"
             style={{ fontSize: '0.75rem', fontWeight: 500 }}
           >
-            Sample Opportunities:
+            Example jobs:
           </span>
           <div
             style={{
@@ -334,7 +334,7 @@ function SignalCard({ signal }: { readonly signal: CareerSignal }) {
               <Link
                 key={sample.opportunityId}
                 className="chip-link"
-                to={`/opportunities/${sample.opportunityId}`}
+                to={`/discover/${sample.opportunityId}`}
                 style={{
                   fontSize: '0.75rem',
                   padding: '0.2rem 0.5rem',

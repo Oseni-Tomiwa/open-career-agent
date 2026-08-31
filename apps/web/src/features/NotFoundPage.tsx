@@ -23,11 +23,11 @@ export function NotFoundPage({
       <h1>{title}</h1>
       <p>{description}</p>
       <div>
-        <Link className="button button-primary" to="/today">
-          Return to Today
+        <Link className="button button-primary" to="/overview">
+          Return to Overview
         </Link>
-        <Link className="button button-secondary" to="/opportunities">
-          Browse opportunities <Icon name="arrow-right" size={16} />
+        <Link className="button button-secondary" to="/discover">
+          Browse jobs <Icon name="arrow-right" size={16} />
         </Link>
       </div>
     </div>

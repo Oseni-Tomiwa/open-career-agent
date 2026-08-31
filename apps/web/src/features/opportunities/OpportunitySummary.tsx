@@ -42,9 +42,7 @@ export function OpportunitySummary({
             <span>{opportunity.freshness}</span>
           </div>
           <h3>
-            <Link to={`/opportunities/${opportunity.id}`}>
-              {opportunity.role}
-            </Link>
+            <Link to={`/discover/${opportunity.id}`}>{opportunity.role}</Link>
           </h3>
           <div className="opportunity-meta">
             <span>
@@ -102,7 +100,7 @@ export function OpportunitySummary({
           <div className="opportunity-actions">
             <Link
               className="button button-primary"
-              to={`/opportunities/${opportunity.id}`}
+              to={`/discover/${opportunity.id}`}
             >
               View analysis <Icon name="arrow-right" size={16} />
             </Link>
@@ -137,7 +135,7 @@ export function OpportunitySummary({
             <p aria-live="polite" className="session-notice">
               {notice}
               {dataSource === 'api'
-                ? ' The canonical API Decision was not changed.'
+                ? ' The saved API recommendation was not changed.'
                 : ''}
             </p>
           )}

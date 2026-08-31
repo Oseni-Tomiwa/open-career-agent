@@ -142,7 +142,7 @@ export function OpportunityDetailPage() {
       <div className="page" role="alert">
         <h1>Opportunity analysis could not be loaded</h1>
         <p>{detailError}</p>
-        <Link to="/opportunities">Back to opportunities</Link>
+        <Link to="/discover">Back to Discover Jobs</Link>
       </div>
     );
   }
@@ -174,8 +174,8 @@ export function OpportunityDetailPage() {
 
   return (
     <div className="page opportunity-detail-page">
-      <Link className="back-link" to="/opportunities">
-        <Icon name="arrow-left" size={16} /> Back to opportunities
+      <Link className="back-link" to="/discover">
+        <Icon name="arrow-left" size={16} /> Back to Discover Jobs
       </Link>
 
       <header className="detail-header">
@@ -289,7 +289,7 @@ export function OpportunityDetailPage() {
         className="decision-summary"
       >
         <div className="decision-summary-copy">
-          <span className="metric-label">Recommended decision</span>
+          <span className="metric-label">Recommendation</span>
           <div>
             <DecisionBadge decision={opportunity.decision} />
             <h2 id="decision-summary-heading">{opportunity.decisionLabel}</h2>
@@ -540,7 +540,7 @@ function EligibilitySignalRow({
         </div>
         <p>{signal.summary}</p>
         {opportunity.decisiveFindingIds.includes(signal.id) && (
-          <strong className="impact-copy">Referenced by the Decision</strong>
+          <strong className="impact-copy">Supports the recommendation</strong>
         )}
         <small>
           Confidence: {signal.confidence} · Supported by{' '}
@@ -564,7 +564,7 @@ function EligibilitySignalRow({
 function FitAnalysis({ opportunity }: { readonly opportunity: Opportunity }) {
   return (
     <AnalysisSection
-      description="Matches, gaps, and transferable skills remain tied to Career Memory evidence."
+      description="Matches, gaps, and transferable skills remain tied to Career Profile evidence."
       title="How well does the role fit?"
     >
       <div className="analysis-list">
@@ -606,7 +606,7 @@ function FitSignalRow({
         </div>
         <p>{signal.summary}</p>
         {opportunity.decisiveFindingIds.includes(signal.id) && (
-          <strong className="impact-copy">Referenced by the Decision</strong>
+          <strong className="impact-copy">Supports the recommendation</strong>
         )}
         <strong className="impact-copy">Impact: {signal.impact}</strong>
         <EvidenceLinks
@@ -669,7 +669,7 @@ function QualitySignalRow({
         </div>
         <p>{signal.summary}</p>
         {opportunity.decisiveFindingIds.includes(signal.id) && (
-          <strong className="impact-copy">Referenced by the Decision</strong>
+          <strong className="impact-copy">Supports the recommendation</strong>
         )}
         <EvidenceLinks
           ids={signal.evidenceIds ?? []}

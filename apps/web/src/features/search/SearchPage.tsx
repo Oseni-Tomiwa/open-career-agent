@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { useProductData } from '../../app/ProductDataProvider.js';
 import { PageHeader } from '../../components/PageHeader.js';
+import { DiscoveryRunStatus } from '../../components/Status.js';
 import type {
   CreateSearchTargetInput,
   DiscoveryRun,
@@ -139,7 +140,7 @@ export function SearchPage() {
 
   function handleNewTarget() {
     setSelectedTargetId(null);
-    setName('New Search Target');
+    setName('New Search Preference');
     setEnabled(true);
     setTargetRoles('Full Stack Engineer');
     setSkills('TypeScript, React');
@@ -197,17 +198,19 @@ export function SearchPage() {
       if (selectedTargetId) {
         const updated = await updateSearchTarget(selectedTargetId, inputData);
         populateForm(updated);
-        setRunStatusNotice('Search target configuration updated successfully.');
+        setRunStatusNotice('Search preference updated successfully.');
       } else {
         const created = await createSearchTarget(inputData);
         populateForm(created);
-        setRunStatusNotice('New search target created successfully.');
+        setRunStatusNotice('New search preference created successfully.');
       }
       const fetchedTargets = await getSearchTargets();
       setTargets(fetchedTargets);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Failed to save search target.',
+        err instanceof Error
+          ? err.message
+          : 'Failed to save search preference.',
       );
     }
   }
@@ -226,7 +229,7 @@ export function SearchPage() {
       const updatedRuns = await getDiscoveryRuns();
       setRuns(updatedRuns);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Discovery run failed.');
+      setError(err instanceof Error ? err.message : 'Job search failed.');
       setRunStatusNotice('Discovery failed.');
     } finally {
       setIsRunning(false);
@@ -262,12 +265,12 @@ export function SearchPage() {
   return (
     <div className="page search-page">
       <PageHeader
-        description="Configure structured Search Targets to control what opportunities Rolevia discovers and surfaces."
+        description="Configure search preferences to control what jobs Rolevia discovers and surfaces."
         eyebrow="Discovery Configuration V1"
         title="Search & Discovery"
       />
 
-      {loading && <p>Loading Search Targets...</p>}
+      {loading && <p>Loading search preferences...</p>}
       {error && (
         <div className="error-banner" role="alert">
           <p>{error}</p>
@@ -277,7 +280,7 @@ export function SearchPage() {
       <div className="search-layout">
         <main className="preferences-main">
           <div className="target-selector-bar">
-            <h3>Search Targets</h3>
+            <h3>Search Preferences</h3>
             <div className="target-pill-list">
               {targets.map((t) => (
                 <button
@@ -294,7 +297,7 @@ export function SearchPage() {
                 onClick={handleNewTarget}
                 type="button"
               >
-                + New Target
+                + New Preference
               </button>
             </div>
           </div>
@@ -307,16 +310,13 @@ export function SearchPage() {
               <div className="form-section-heading">
                 <span>01</span>
                 <div>
-                  <h2 id="target-name-heading">Target Identity & Scope</h2>
-                  <p>
-                    Candidate-scoped configuration determining search
-                    boundaries.
-                  </p>
+                  <h2 id="target-name-heading">Preference Name & Scope</h2>
+                  <p>Name this search and define the jobs it should include.</p>
                 </div>
               </div>
               <div className="field-row">
                 <label>
-                  <span>Target Name</span>
+                  <span>Preference Name</span>
                   <input
                     onChange={(e) => setName(e.target.value)}
                     required
@@ -329,7 +329,7 @@ export function SearchPage() {
                     onChange={(e) => setEnabled(e.target.checked)}
                     type="checkbox"
                   />
-                  <span>Target Enabled</span>
+                  <span>Search Enabled</span>
                 </label>
               </div>
             </section>
@@ -475,13 +475,13 @@ export function SearchPage() {
               <div className="form-section-heading">
                 <span>05</span>
                 <div>
-                  <h2 id="sources-heading">Sources & ATS Config</h2>
-                  <p>Target ATS source provider and board/site identifier.</p>
+                  <h2 id="sources-heading">Job Sources</h2>
+                  <p>Choose the hiring sites this search should scan.</p>
                 </div>
               </div>
               <div className="field-row">
                 <label>
-                  <span>Source ATS System</span>
+                  <span>Job source</span>
                   <select
                     value={sourceSystem}
                     onChange={(e) =>
@@ -521,8 +521,8 @@ export function SearchPage() {
             <div className="form-actions">
               <button className="button button-primary" type="submit">
                 {selectedTargetId
-                  ? 'Save Search Target'
-                  : 'Create Search Target'}
+                  ? 'Save Search Preference'
+                  : 'Create Search Preference'}
               </button>
 
               {selectedTargetId && (
@@ -548,13 +548,13 @@ export function SearchPage() {
         <aside className="source-status-panel">
           <div>
             <p className="eyebrow">Discovery Audit</p>
-            <h2>Discovery Run History</h2>
-            <p>Provenance of past automated and manual discovery runs.</p>
+            <h2>Search Activity History</h2>
+            <p>Results from past automated and manual job searches.</p>
           </div>
 
           <div className="discovery-run-history-list">
             {runs.length === 0 ? (
-              <p className="empty-notice">No discovery runs executed yet.</p>
+              <p className="empty-notice">No job searches recorded yet.</p>
             ) : (
               runs.map((r) => (
                 <article key={r.id} className="discovery-run-card">
@@ -562,11 +562,7 @@ export function SearchPage() {
                     <strong>
                       {r.sourceSystem} ({r.searchTargetId})
                     </strong>
-                    <span
-                      className={`status-badge status-${r.status.toLowerCase()}`}
-                    >
-                      {r.status}
-                    </span>
+                    <DiscoveryRunStatus status={r.status} />
                   </div>
                   <small>{new Date(r.startedAt).toLocaleString()}</small>
                   <div className="run-counts-grid">

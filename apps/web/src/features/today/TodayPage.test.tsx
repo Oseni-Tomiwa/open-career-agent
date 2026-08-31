@@ -11,7 +11,7 @@ describe('Today experience', () => {
       await screen.findByRole('heading', { name: /Good afternoon, Amara/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: 'Priority opportunities' }),
+      screen.getByRole('heading', { name: 'Priority matches' }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Needs investigation' }),

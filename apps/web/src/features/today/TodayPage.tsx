@@ -34,7 +34,7 @@ export function TodayPage() {
           setError(
             err instanceof Error
               ? err.message
-              : 'Failed to load Today dashboard',
+              : 'Failed to load Overview dashboard',
           );
           setLoading(false);
         }
@@ -52,7 +52,7 @@ export function TodayPage() {
         <PageHeader
           description="Aggregating canonical intelligence and current candidate attention..."
           eyebrow="Loading"
-          title="Today"
+          title="Overview"
         />
         <div
           className="app-loading"
@@ -68,12 +68,12 @@ export function TodayPage() {
     return (
       <div className="page today-page">
         <PageHeader
-          description="Could not load Today candidate dashboard data."
+          description="Could not load candidate dashboard data."
           eyebrow="Error"
-          title="Today"
+          title="Overview"
         />
         <EmptyState
-          description={error ?? 'Today dashboard is currently unavailable.'}
+          description={error ?? 'Overview dashboard is currently unavailable.'}
           title="Error loading dashboard"
         />
       </div>
@@ -152,8 +152,8 @@ export function TodayPage() {
         eyebrow={dateFormatted}
         title={`Good afternoon, ${dashboard.greetingName}`}
         actions={
-          <Link className="button button-secondary" to="/opportunities">
-            Explore all opportunities
+          <Link className="button button-secondary" to="/discover">
+            Explore all jobs
           </Link>
         }
       />
@@ -166,7 +166,7 @@ export function TodayPage() {
         <div className="section-heading">
           <div>
             <p className="section-index">01</p>
-            <h2 id="priority-heading">Priority opportunities</h2>
+            <h2 id="priority-heading">Priority matches</h2>
             <p>Actionable roles ranked with Eligibility before Fit.</p>
           </div>
           <span className="section-count">
@@ -192,8 +192,7 @@ export function TodayPage() {
               color: 'var(--text-muted, #64748b)',
             }}
           >
-            No high-priority opportunities right now. Keep discovering new
-            roles.
+            No high-priority matches right now. Keep discovering new jobs.
           </div>
         )}
       </section>
@@ -207,14 +206,14 @@ export function TodayPage() {
               <p className="section-index">02</p>
               <h2 id="changed-heading">Since your last scan</h2>
             </div>
-            <Link to="/opportunities?sort=freshness">View scan results</Link>
+            <Link to="/discover?sort=freshness">View scan results</Link>
           </div>
           {dashboard.recentChanges.length > 0 ? (
             <div className="change-list">
               {dashboard.recentChanges.map((change) => (
                 <Link
                   key={`${change.opportunityId}-${change.occurredAt}`}
-                  to={`/opportunities/${change.opportunityId}`}
+                  to={`/discover/${change.opportunityId}`}
                 >
                   <CompanyMark
                     company={{
@@ -255,7 +254,7 @@ export function TodayPage() {
               <p className="section-index">03</p>
               <h2 id="investigation-heading">Needs investigation</h2>
             </div>
-            <span className="section-count">Decision-relevant items</span>
+            <span className="section-count">Recommendation-relevant items</span>
           </div>
           {dashboard.needsAttention.length > 0 ? (
             <ul className="investigation-list">
@@ -267,7 +266,7 @@ export function TodayPage() {
                     }
                   />
                   <div>
-                    <Link to={`/opportunities/${item.opportunityId}`}>
+                    <Link to={`/discover/${item.opportunityId}`}>
                       {item.title} · {item.organization ?? 'Organization'}
                     </Link>
                     <p>{item.explanation}</p>
@@ -290,7 +289,7 @@ export function TodayPage() {
               className="empty-copy"
               style={{ color: '#64748b', fontSize: '0.875rem' }}
             >
-              All current opportunities are clear.
+              All current jobs are clear.
             </p>
           )}
         </section>
@@ -343,9 +342,9 @@ export function TodayPage() {
           <div className="section-heading compact">
             <div>
               <p className="section-index">05</p>
-              <h2 id="signals-heading">Career Memory attention</h2>
+              <h2 id="signals-heading">Career Profile attention</h2>
             </div>
-            <Link to="/profile">Review Career Memory</Link>
+            <Link to="/settings">Review Career Profile</Link>
           </div>
           {dashboard.careerMemoryAttention.length > 0 ? (
             <div className="memory-attention-list">
@@ -375,7 +374,8 @@ export function TodayPage() {
               className="empty-copy"
               style={{ color: '#64748b', fontSize: '0.875rem' }}
             >
-              Career Memory is up to date and all candidate claims are resolved.
+              Your Career Profile is up to date and all evidence questions are
+              resolved.
             </p>
           )}
         </section>

@@ -310,6 +310,51 @@ describe('ApiProductRepository', () => {
     expect((await repository.getSnapshot()).applications).toEqual([]);
   });
 
+  it('loads Agent Activity from the repository-bound candidate only', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      response({
+        generatedAt: observedAt,
+        greetingName: 'Ada',
+        summaryText: 'One persisted search run is available.',
+        timeWindowDays: 7,
+        priorityOpportunities: [],
+        needsAttention: [],
+        recentChanges: [],
+        discoveryActivity: [
+          {
+            runId: 'run-candidate-1',
+            searchTargetId: 'target-candidate-1',
+            searchTargetName: 'Backend roles',
+            sourceSystem: 'greenhouse',
+            status: 'COMPLETED',
+            startedAt: observedAt,
+            completedAt: observedAt,
+            discoveredCount: 4,
+            acceptedCount: 2,
+            rejectedCount: 2,
+            errorSummary: null,
+          },
+        ],
+        applicationActivity: [],
+        careerMemoryAttention: [],
+      }),
+    );
+    const repository = new ApiProductRepository(
+      'http://api.test',
+      'candidate-1',
+      fetcher,
+    );
+
+    const dashboard = await repository.getTodayDashboard(7);
+
+    expect(dashboard.discoveryActivity[0]?.runId).toBe('run-candidate-1');
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls[0]?.[0]).toBe(
+      'http://api.test/candidates/candidate-1/today?timeWindowDays=7',
+    );
+    expect(JSON.stringify(fetcher.mock.calls)).not.toContain('candidate-2');
+  });
+
   it('distinguishes application not-found from API unavailability', async () => {
     const notFound = new ApiProductRepository(
       'http://api.test',

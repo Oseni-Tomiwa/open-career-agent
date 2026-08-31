@@ -17,8 +17,8 @@ export function RouteError() {
         <p className="eyebrow">Application error</p>
         <h1>Unable to render this view</h1>
         <p>{message}</p>
-        <Link className="button button-primary" to="/today">
-          Return to Today
+        <Link className="button button-primary" to="/overview">
+          Return to Overview
         </Link>
       </section>
     </main>

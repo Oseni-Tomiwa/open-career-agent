@@ -8,7 +8,7 @@ describe('opportunity exploration', () => {
   it('searches the seeded opportunities', async () => {
     renderProduct(<OpportunitiesPage />, ['/opportunities']);
     const search = await screen.findByRole('searchbox', {
-      name: 'Search opportunities',
+      name: 'Search jobs',
     });
     fireEvent.change(search, { target: { value: 'Kubernetes' } });
     expect(
@@ -32,7 +32,7 @@ describe('opportunity exploration', () => {
     const { container } = renderProduct(<OpportunitiesPage />, [
       '/opportunities',
     ]);
-    fireEvent.change(await screen.findByLabelText('Sort opportunities'), {
+    fireEvent.change(await screen.findByLabelText('Sort jobs'), {
       target: { value: 'fit' },
     });
     const first = container.querySelector('.opportunity-summary');
