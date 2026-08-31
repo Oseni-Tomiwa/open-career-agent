@@ -97,39 +97,46 @@ export interface CreateApiAppOptions {
 export async function createApiApp(
   options: CreateApiAppOptions,
 ): Promise<FastifyInstance> {
+  const loggerOptions =
+    options.logger && typeof options.logger === 'object'
+      ? { redact: [...API_LOG_REDACTION_PATHS], ...(options.logger as object) }
+      : options.logger
+        ? { redact: [...API_LOG_REDACTION_PATHS] }
+        : false;
+
   const app = Fastify({
-    logger:
-      options.logger === false
-        ? false
-        : {
-            redact: {
-              paths: [...API_LOG_REDACTION_PATHS],
-              censor: '[REDACTED]',
-            },
-          },
-    requestIdHeader: 'x-request-id',
+    logger: loggerOptions,
   }).withTypeProvider<TypeBoxTypeProvider>();
+
+  await app.register(cors, {
+    origin: [options.config.webOrigin],
+    credentials: true,
+  });
 
   await app.register(helmet, {
     contentSecurityPolicy: false,
   });
-  await app.register(cors, {
-    origin: (origin, callback) => {
-      callback(null, origin === options.config.webOrigin);
-    },
-    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-    credentials: options.config.identityMode === 'cloud',
-    allowedHeaders: ['authorization', 'content-type', 'x-request-id'],
-  });
+
   await app.register(swagger, {
     openapi: {
-      openapi: '3.0.3',
       info: {
         title: 'Open Career Agent API',
-        version: SERVICE.version,
-        description: 'Programmatic API contract for the application.',
+        description: 'REST API for Open Career Agent monorepo',
+        version: '0.0.0',
       },
     },
+  });
+
+  app.get('/openapi.json', () => app.swagger());
+
+  app.setNotFoundHandler((request, reply) => {
+    return reply.status(404).send({
+      error: {
+        code: 'NOT_FOUND',
+        message: 'The requested resource was not found.',
+        requestId: request.id,
+      },
+    });
   });
 
   app.get(
@@ -137,11 +144,18 @@ export async function createApiApp(
     {
       schema: {
         tags: ['system'],
-        summary: 'Process liveness',
-        response: { 200: HealthResponseSchema },
+        summary: 'Service Liveness Check',
+        response: {
+          200: HealthResponseSchema,
+        },
       },
     },
-    () => ({ status: 'ok' as const, service: SERVICE }),
+    () => {
+      return {
+        status: 'ok' as const,
+        service: SERVICE,
+      };
+    },
   );
 
   app.get(
@@ -149,54 +163,34 @@ export async function createApiApp(
     {
       schema: {
         tags: ['system'],
-        summary: 'Service readiness',
+        summary: 'Service Readiness Check',
         response: {
           200: ReadinessResponseSchema,
           503: ReadinessResponseSchema,
         },
       },
     },
-    (_request, reply) => {
+    async (_request, reply) => {
+      let isReady = false;
       try {
-        if (databaseIsReady(options.database)) {
-          return {
-            status: 'ready' as const,
-            service: SERVICE,
-            resources: { database: 'ready' as const },
-          };
-        }
-      } catch (error) {
-        app.log.warn({ err: error }, 'Database readiness check failed');
+        isReady = await databaseIsReady(options.database);
+      } catch {
+        // Database unavailable
+      }
+      const payload = {
+        status: isReady ? ('ready' as const) : ('not_ready' as const),
+        service: SERVICE,
+        resources: {
+          database: isReady ? ('ready' as const) : ('not_ready' as const),
+        },
+      };
+
+      if (!isReady) {
+        return reply.status(503).send(payload);
       }
 
-      reply.status(503);
-      return {
-        status: 'not_ready' as const,
-        service: SERVICE,
-        resources: { database: 'not_ready' as const },
-      };
+      return payload;
     },
-  );
-
-  app.get(
-    '/openapi.json',
-    {
-      schema: {
-        hide: true,
-        summary: 'Generated OpenAPI document',
-      },
-    },
-    () => app.swagger(),
-  );
-
-  app.setNotFoundHandler((request, reply) =>
-    reply.status(404).send({
-      error: {
-        code: 'NOT_FOUND',
-        message: 'The requested resource was not found.',
-        requestId: request.id,
-      },
-    }),
   );
 
   app.setErrorHandler((error, request, reply) => {
@@ -237,7 +231,7 @@ export async function createApiApp(
     },
     async (request, reply) => {
       const repository = new CareerMemoryRepository(options.database);
-      const profile = repository.getProfile(
+      const profile = await repository.getProfile(
         candidateId(request.params.candidateId),
       );
       if (!profile) {
@@ -272,8 +266,8 @@ export async function createApiApp(
       const repository = new CareerMemoryRepository(options.database);
       const cId = candidateId(request.params.candidateId);
       try {
-        repository.createClaim({ candidateId: cId, ...request.body });
-        const profile = repository.getProfile(cId)!;
+        await repository.createClaim({ candidateId: cId, ...request.body });
+        const profile = (await repository.getProfile(cId))!;
         return await reply.status(201).send({
           ...serializeProfile(profile),
           reevaluationRequested: true,
@@ -311,13 +305,14 @@ export async function createApiApp(
       const repository = new CareerMemoryRepository(options.database);
       const cId = candidateId(request.params.candidateId);
       try {
-        repository.updateClaim({
+        await repository.updateClaim({
           candidateId: cId,
           claimId: claimId(request.params.claimId),
           ...request.body,
         });
+        const profile = (await repository.getProfile(cId))!;
         return {
-          ...serializeProfile(repository.getProfile(cId)!),
+          ...serializeProfile(profile),
           reevaluationRequested: true,
         };
       } catch (error) {
@@ -349,13 +344,14 @@ export async function createApiApp(
       const repository = new CareerMemoryRepository(options.database);
       const cId = candidateId(request.params.candidateId);
       try {
-        repository.attachEvidence({
+        await repository.attachEvidence({
           candidateId: cId,
           claimId: claimId(request.params.claimId),
           ...request.body,
         });
+        const profile = (await repository.getProfile(cId))!;
         return await reply.status(201).send({
-          ...serializeProfile(repository.getProfile(cId)!),
+          ...serializeProfile(profile),
           reevaluationRequested: true,
         });
       } catch (error) {
@@ -387,9 +383,9 @@ export async function createApiApp(
         },
       },
     },
-    (request) => {
+    async (request: any) => {
       const repo = new SearchTargetRepository(options.database);
-      const targets = repo.listSearchTargets(
+      const targets = await repo.listSearchTargets(
         candidateId(request.params.candidateId),
       );
       return { data: targets };
@@ -409,9 +405,9 @@ export async function createApiApp(
         },
       },
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const repo = new SearchTargetRepository(options.database);
-      const created = repo.createSearchTarget(
+      const created = await repo.createSearchTarget(
         candidateId(request.params.candidateId),
         request.body,
       );
@@ -432,9 +428,9 @@ export async function createApiApp(
         },
       },
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const repo = new SearchTargetRepository(options.database);
-      const target = repo.getSearchTarget(
+      const target = await repo.getSearchTarget(
         candidateId(request.params.candidateId),
         searchTargetId(request.params.targetId),
       );
@@ -466,9 +462,9 @@ export async function createApiApp(
         },
       },
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const repo = new SearchTargetRepository(options.database);
-      const updated = repo.updateSearchTarget(
+      const updated = await repo.updateSearchTarget(
         candidateId(request.params.candidateId),
         searchTargetId(request.params.targetId),
         request.body,
@@ -500,9 +496,9 @@ export async function createApiApp(
         },
       },
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const repo = new SearchTargetRepository(options.database);
-      const deleted = repo.deleteSearchTarget(
+      const deleted = await repo.deleteSearchTarget(
         candidateId(request.params.candidateId),
         searchTargetId(request.params.targetId),
       );
@@ -533,12 +529,12 @@ export async function createApiApp(
         },
       },
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const repo = new SearchTargetRepository(options.database);
       const cId = candidateId(request.params.candidateId);
       const tId = searchTargetId(request.params.targetId);
 
-      const target = repo.getSearchTarget(cId, tId);
+      const target = await repo.getSearchTarget(cId, tId);
       if (!target) {
         await reply.status(404).send({
           error: {
@@ -551,7 +547,7 @@ export async function createApiApp(
       }
 
       const runId = discoveryRunId(`dr_${crypto.randomUUID()}`);
-      const runRecord = repo.createDiscoveryRun(
+      const runRecord = await repo.createDiscoveryRun(
         runId,
         cId,
         tId,
@@ -559,7 +555,7 @@ export async function createApiApp(
       );
 
       const taskLedger = new BackgroundTaskLedger(options.database);
-      taskLedger.enqueue({
+      await taskLedger.enqueue({
         taskType: 'discovery.run',
         payload: {
           candidateId: cId,
@@ -591,9 +587,9 @@ export async function createApiApp(
         },
       },
     },
-    (request) => {
+    async (request: any) => {
       const repo = new SearchTargetRepository(options.database);
-      const runs = repo.listDiscoveryRuns(
+      const runs = await repo.listDiscoveryRuns(
         candidateId(request.params.candidateId),
       );
       return {
@@ -620,9 +616,9 @@ export async function createApiApp(
         },
       },
     },
-    (request) => {
+    async (request: any) => {
       const repo = new TodayRepository(options.database);
-      const dashboard = repo.getTodayDashboard(
+      const dashboard = await repo.getTodayDashboard(
         candidateId(request.params.candidateId),
         {
           ...(request.query.timeWindowDays
@@ -646,25 +642,25 @@ export async function createApiApp(
         },
       },
     },
-    (request) => {
+    async (request: any) => {
       const repo = new CareerSignalsRepository(options.database);
-      const signals = repo.getCareerSignals(
+      const signals = await repo.getCareerSignals(
         candidateId(request.params.candidateId),
       );
       return signals;
     },
   );
 
-  function buildApplicationDetail(
-    app: NonNullable<ReturnType<ApplicationRepository['getApplication']>>,
+  async function buildApplicationDetail(
+    app: any,
     appRepo: ApplicationRepository,
     oppRepo: OpportunityRepository,
     evalRepo: EvaluationRepository,
   ) {
     const oppId = opportunityId(app.opportunityId);
-    const snapshot = oppRepo.getLatestSnapshot(oppId);
+    const snapshot = await oppRepo.getLatestSnapshot(oppId);
     const sourceRepo = new SourceListingRepository(options.database);
-    const sourceListing = sourceRepo.findListingByOpportunityId(
+    const sourceListing = await sourceRepo.findListingByOpportunityId(
       app.opportunityId,
     );
 
@@ -674,7 +670,7 @@ export async function createApiApp(
       explanation: string;
     } | null = null;
     if (snapshot) {
-      const dec = evalRepo.getCurrentDecision(
+      const dec = await evalRepo.getCurrentDecision(
         candidateId(app.candidateId),
         snapshotId(snapshot.id),
       );
@@ -687,7 +683,7 @@ export async function createApiApp(
       }
     }
 
-    const events = appRepo.getEvents(
+    const events = await appRepo.getEvents(
       candidateId(app.candidateId),
       applicationId(app.id),
     );
@@ -700,15 +696,19 @@ export async function createApiApp(
       originatingDecisionId: app.originatingDecisionId ?? null,
       originatingDecisionState: app.originatingDecisionState ?? null,
       originatingDecisionAction: app.originatingDecisionAction ?? null,
-      submittedAt: app.submittedAt ? app.submittedAt.toISOString() : null,
-      followUpDueAt: app.followUpDueAt ? app.followUpDueAt.toISOString() : null,
+      submittedAt: app.submittedAt
+        ? new Date(app.submittedAt).toISOString()
+        : null,
+      followUpDueAt: app.followUpDueAt
+        ? new Date(app.followUpDueAt).toISOString()
+        : null,
       followUpNote: app.followUpNote ?? null,
       followUpCompletedAt: app.followUpCompletedAt
-        ? app.followUpCompletedAt.toISOString()
+        ? new Date(app.followUpCompletedAt).toISOString()
         : null,
       note: app.note ?? null,
-      createdAt: app.createdAt.toISOString(),
-      updatedAt: app.updatedAt.toISOString(),
+      createdAt: new Date(app.createdAt).toISOString(),
+      updatedAt: new Date(app.updatedAt).toISOString(),
       opportunity: snapshot
         ? {
             id: app.opportunityId,
@@ -719,12 +719,12 @@ export async function createApiApp(
           }
         : null,
       currentDecision,
-      events: events.map((ev) => ({
+      events: events.map((ev: any) => ({
         id: ev.id,
         applicationId: ev.applicationId,
         eventType: ev.eventType,
         detail: ev.detail,
-        occurredAt: ev.occurredAt.toISOString(),
+        occurredAt: new Date(ev.occurredAt).toISOString(),
         actor: 'Candidate' as const,
       })),
     };
@@ -747,41 +747,46 @@ export async function createApiApp(
         },
       },
     },
-    (request) => {
+    async (request: any) => {
       const cId = candidateId(request.params.candidateId);
       const appRepo = new ApplicationRepository(options.database);
       const oppRepo = new OpportunityRepository(options.database);
       const evalRepo = new EvaluationRepository(options.database);
 
-      const apps = appRepo.listApplications(cId);
-      const data = apps.map((app) => {
-        const oppId = opportunityId(app.opportunityId);
-        const snapshot = oppRepo.getLatestSnapshot(oppId);
-        const dec = snapshot
-          ? evalRepo.getCurrentDecision(cId, snapshotId(snapshot.id))
-          : null;
-        const events = appRepo.getEvents(cId, applicationId(app.id));
-        const lastEvent = events.length > 0 ? events[events.length - 1] : null;
+      const apps = await appRepo.listApplications(cId);
+      const data = await Promise.all(
+        apps.map(async (app: any) => {
+          const oppId = opportunityId(app.opportunityId);
+          const snapshot = await oppRepo.getLatestSnapshot(oppId);
+          const dec = snapshot
+            ? await evalRepo.getCurrentDecision(cId, snapshotId(snapshot.id))
+            : null;
+          const events = await appRepo.getEvents(cId, applicationId(app.id));
+          const lastEvent =
+            events.length > 0 ? events[events.length - 1] : null;
 
-        return {
-          id: app.id,
-          opportunityId: app.opportunityId,
-          title: snapshot?.title ?? 'Opportunity',
-          organization: snapshot?.organization ?? null,
-          location: snapshot?.location ?? null,
-          status: app.status,
-          currentDecision: dec ? dec.priority : null,
-          submittedAt: app.submittedAt ? app.submittedAt.toISOString() : null,
-          followUpDueAt: app.followUpDueAt
-            ? app.followUpDueAt.toISOString()
-            : null,
-          lastEventAt: lastEvent
-            ? lastEvent.occurredAt.toISOString()
-            : app.updatedAt.toISOString(),
-          createdAt: app.createdAt.toISOString(),
-          updatedAt: app.updatedAt.toISOString(),
-        };
-      });
+          return {
+            id: app.id,
+            opportunityId: app.opportunityId,
+            title: snapshot?.title ?? 'Opportunity',
+            organization: snapshot?.organization ?? null,
+            location: snapshot?.location ?? null,
+            status: app.status,
+            currentDecision: dec ? dec.priority : null,
+            submittedAt: app.submittedAt
+              ? new Date(app.submittedAt).toISOString()
+              : null,
+            followUpDueAt: app.followUpDueAt
+              ? new Date(app.followUpDueAt).toISOString()
+              : null,
+            lastEventAt: lastEvent
+              ? new Date(lastEvent.occurredAt).toISOString()
+              : new Date(app.updatedAt).toISOString(),
+            createdAt: new Date(app.createdAt).toISOString(),
+            updatedAt: new Date(app.updatedAt).toISOString(),
+          };
+        }),
+      );
 
       return { data };
     },
@@ -803,14 +808,14 @@ export async function createApiApp(
         },
       },
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const cId = candidateId(request.params.candidateId);
       const appRepo = new ApplicationRepository(options.database);
       const oppRepo = new OpportunityRepository(options.database);
       const evalRepo = new EvaluationRepository(options.database);
 
       try {
-        const app = appRepo.createApplication({
+        const app = await appRepo.createApplication({
           candidateId: cId,
           opportunityId: opportunityId(request.body.opportunityId),
           ...(request.body.status ? { status: request.body.status } : {}),
@@ -824,7 +829,7 @@ export async function createApiApp(
         });
 
         reply.status(201);
-        return buildApplicationDetail(app, appRepo, oppRepo, evalRepo);
+        return await buildApplicationDetail(app, appRepo, oppRepo, evalRepo);
       } catch (err: unknown) {
         if (
           err instanceof Error &&
@@ -865,14 +870,14 @@ export async function createApiApp(
         },
       },
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const cId = candidateId(request.params.candidateId);
       const appId = applicationId(request.params.applicationId);
       const appRepo = new ApplicationRepository(options.database);
       const oppRepo = new OpportunityRepository(options.database);
       const evalRepo = new EvaluationRepository(options.database);
 
-      const app = appRepo.getApplication(cId, appId);
+      const app = await appRepo.getApplication(cId, appId);
       if (!app) {
         await reply.status(404).send({
           error: {
@@ -884,7 +889,7 @@ export async function createApiApp(
         return;
       }
 
-      return buildApplicationDetail(app, appRepo, oppRepo, evalRepo);
+      return await buildApplicationDetail(app, appRepo, oppRepo, evalRepo);
     },
   );
 
@@ -905,14 +910,14 @@ export async function createApiApp(
         },
       },
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const cId = candidateId(request.params.candidateId);
       const appId = applicationId(request.params.applicationId);
       const appRepo = new ApplicationRepository(options.database);
       const oppRepo = new OpportunityRepository(options.database);
       const evalRepo = new EvaluationRepository(options.database);
 
-      if (!appRepo.getApplication(cId, appId)) {
+      if (!(await appRepo.getApplication(cId, appId))) {
         await reply.status(404).send({
           error: {
             code: 'NOT_FOUND',
@@ -924,7 +929,7 @@ export async function createApiApp(
       }
 
       try {
-        const updated = appRepo.updateApplication({
+        const updated = await appRepo.updateApplication({
           id: appId,
           candidateId: cId,
           ...(request.body.status ? { status: request.body.status } : {}),
@@ -953,7 +958,12 @@ export async function createApiApp(
             : {}),
         });
 
-        return buildApplicationDetail(updated, appRepo, oppRepo, evalRepo);
+        return await buildApplicationDetail(
+          updated,
+          appRepo,
+          oppRepo,
+          evalRepo,
+        );
       } catch (err: unknown) {
         if (
           err instanceof Error &&
@@ -993,14 +1003,14 @@ export async function createApiApp(
         },
       },
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const cId = candidateId(request.params.candidateId);
       const appId = applicationId(request.params.applicationId);
       const appRepo = new ApplicationRepository(options.database);
       const oppRepo = new OpportunityRepository(options.database);
       const evalRepo = new EvaluationRepository(options.database);
 
-      const app = appRepo.getApplication(cId, appId);
+      const app = await appRepo.getApplication(cId, appId);
       if (!app) {
         await reply.status(404).send({
           error: {
@@ -1012,14 +1022,14 @@ export async function createApiApp(
         return;
       }
 
-      appRepo.appendEvent({
+      await appRepo.appendEvent({
         candidateId: cId,
         applicationId: appId,
         eventType: request.body.eventType,
         detail: request.body.detail,
       });
 
-      return buildApplicationDetail(app, appRepo, oppRepo, evalRepo);
+      return await buildApplicationDetail(app, appRepo, oppRepo, evalRepo);
     },
   );
 
@@ -1036,12 +1046,12 @@ export async function createApiApp(
         },
       },
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const cId = candidateId(request.params.candidateId);
       const appId = applicationId(request.params.applicationId);
       const appRepo = new ApplicationRepository(options.database);
 
-      const app = appRepo.getApplication(cId, appId);
+      const app = await appRepo.getApplication(cId, appId);
       if (!app) {
         await reply.status(404).send({
           error: {
@@ -1053,14 +1063,14 @@ export async function createApiApp(
         return;
       }
 
-      const events = appRepo.getEvents(cId, appId);
+      const events = await appRepo.getEvents(cId, appId);
       return {
-        data: events.map((ev) => ({
+        data: events.map((ev: any) => ({
           id: ev.id,
           applicationId: ev.applicationId,
           eventType: ev.eventType,
           detail: ev.detail,
-          occurredAt: ev.occurredAt.toISOString(),
+          occurredAt: new Date(ev.occurredAt).toISOString(),
           actor: 'Candidate' as const,
         })),
       };
@@ -1077,48 +1087,52 @@ export async function createApiApp(
         querystring: Type.Object({ candidateId: Type.Optional(Type.String()) }),
       },
     },
-    (request) => {
+    async (request: any) => {
       const repo = new OpportunityRepository(options.database);
       const evaluationRepository = new EvaluationRepository(options.database);
       const searchTargetRepo = new SearchTargetRepository(options.database);
 
-      let summaries = repo.getOpportunitySummaries();
+      let summaries = await repo.getOpportunitySummaries();
 
       if (request.query.candidateId) {
         const cId = candidateId(request.query.candidateId);
-        const matchedOppIds = searchTargetRepo.getMatchedOpportunityIds(cId);
+        const matchedOppIds =
+          await searchTargetRepo.getMatchedOpportunityIds(cId);
         const matchedSet = new Set(matchedOppIds);
-        summaries = summaries.filter((item) =>
+        summaries = summaries.filter((item: any) =>
           matchedSet.has(opportunityId(item.id)),
         );
       }
 
-      const data = summaries.map((item) => {
-        if (!item.latestSnapshotId) return item;
-        const sId = snapshotId(item.latestSnapshotId);
-        const evaluation = request.query.candidateId
-          ? evaluationRepository.getCurrentEvaluation(
-              candidateId(request.query.candidateId),
-              sId,
-            )
-          : null;
-        const decision = evaluation
-          ? evaluationRepository.getCurrentDecisionForEvaluation(
-              evaluationId(evaluation.id),
-            )
-          : null;
-        return {
-          ...item,
-          ...(evaluation?.eligibilityState
-            ? { eligibilityState: evaluation.eligibilityState }
-            : {}),
-          ...(evaluation?.fitLevel ? { fitLevel: evaluation.fitLevel } : {}),
-          ...(evaluation?.qualityLevel
-            ? { qualityLevel: evaluation.qualityLevel }
-            : {}),
-          ...(decision?.priority ? { decisionState: decision.priority } : {}),
-        };
-      });
+      const data = await Promise.all(
+        summaries.map(async (item: any) => {
+          if (!item.latestSnapshotId) return item;
+          const sId = snapshotId(item.latestSnapshotId);
+          const evaluation = request.query.candidateId
+            ? await evaluationRepository.getCurrentEvaluation(
+                candidateId(request.query.candidateId),
+                sId,
+              )
+            : null;
+          const decision = evaluation
+            ? await evaluationRepository.getCurrentDecisionForEvaluation(
+                evaluationId(evaluation.id),
+              )
+            : null;
+          return {
+            ...item,
+            ...(evaluation?.eligibilityState
+              ? { eligibilityState: evaluation.eligibilityState }
+              : {}),
+            ...(evaluation?.fitLevel ? { fitLevel: evaluation.fitLevel } : {}),
+            ...(evaluation?.qualityLevel
+              ? { qualityLevel: evaluation.qualityLevel }
+              : {}),
+            ...(decision?.priority ? { decisionState: decision.priority } : {}),
+          };
+        }),
+      );
+
       return {
         data: data as unknown as Static<
           typeof OpportunityListResponseSchema
@@ -1141,11 +1155,11 @@ export async function createApiApp(
         },
       },
     },
-    async (request, reply) => {
+    async (request: any, reply: any) => {
       const repo = new OpportunityRepository(options.database);
       const { id: idRaw } = request.params;
       const id = opportunityId(idRaw);
-      const opportunity = repo.getOpportunity(id);
+      const opportunity = await repo.getOpportunity(id);
 
       if (!opportunity) {
         await reply.status(404).send({
@@ -1158,160 +1172,201 @@ export async function createApiApp(
         return;
       }
 
-      const snapshots = repo.getSnapshots(id);
+      const snapshots = await repo.getSnapshots(id);
       const evaluationRepository = new EvaluationRepository(options.database);
       const evidenceRepository = new EvidenceRepository(options.database);
 
-      const snapshotsWithEvaluations = snapshots.map((snapshot) => {
-        const sId = snapshotId(snapshot.id);
-        const evaluation = request.query.candidateId
-          ? evaluationRepository.getCurrentEvaluation(
-              candidateId(request.query.candidateId),
-              sId,
-            )
-          : null;
-        const fit = evaluation;
-        const quality = evaluation;
-        const decision = evaluation
-          ? evaluationRepository.getCurrentDecisionForEvaluation(
-              evaluationId(evaluation.id),
-            )
-          : null;
+      const snapshotsWithEvaluations = await Promise.all(
+        snapshots.map(async (snapshot: any) => {
+          const sId = snapshotId(snapshot.id);
+          const isCloud = options.config.identityMode === 'cloud';
+          const evaluation = request.query.candidateId
+            ? await evaluationRepository.getCurrentEvaluation(
+                candidateId(request.query.candidateId),
+                sId,
+              )
+            : null;
+          const fit = request.query.candidateId
+            ? evaluation
+            : isCloud
+              ? null
+              : await evaluationRepository.getLatestFitForSnapshot(sId);
+          const quality = request.query.candidateId
+            ? evaluation
+            : isCloud
+              ? null
+              : await evaluationRepository.getLatestQualityForSnapshot(sId);
+          const decision = request.query.candidateId
+            ? evaluation
+              ? await evaluationRepository.getCurrentDecisionForEvaluation(
+                  evaluationId(evaluation.id),
+                )
+              : null
+            : isCloud
+              ? null
+              : await evaluationRepository.getLatestDecisionForSnapshot(sId);
 
-        let fitResult = undefined;
-        let eligibilityResult = undefined;
-        if (
-          evaluation?.eligibilityState &&
-          evaluation.eligibilityEngineVersion
-        ) {
-          eligibilityResult = {
-            state: evaluation.eligibilityState,
-            engineVersion: evaluation.eligibilityEngineVersion,
-            findings: evaluationRepository
-              .getEligibilityFindings(evaluationId(evaluation.id))
-              .map((item) => ({
-                id: item.id,
-                dimension: item.dimensionKey,
-                state: item.state,
-                summary: item.summary,
-                confidence: item.confidence ?? undefined,
-                evidence: evidenceRepository
-                  .getFindingEvidence(findingId(item.id))
-                  .map((evidence) => ({
-                    id: evidence.id,
-                    evidenceType: evidence.evidenceType,
-                    sourceReference: evidence.sourceReference,
-                    excerpt: evidence.excerpt,
-                    state: evidence.state,
+          let fitResult = undefined;
+          let eligibilityResult = undefined;
+          if (
+            evaluation?.eligibilityState &&
+            evaluation.eligibilityEngineVersion
+          ) {
+            const eligibilityFindings =
+              await evaluationRepository.getEligibilityFindings(
+                evaluationId(evaluation.id),
+              );
+            const findingsWithEvidence = await Promise.all(
+              eligibilityFindings.map(async (item: any) => {
+                const evidences = await evidenceRepository.getFindingEvidence(
+                  findingId(item.id),
+                );
+                return {
+                  id: item.id,
+                  dimension: item.dimensionKey,
+                  state: item.state,
+                  summary: item.summary,
+                  confidence: item.confidence ?? undefined,
+                  evidence: evidences.map((ev: any) => ({
+                    id: ev.id,
+                    evidenceType: ev.evidenceType,
+                    sourceReference: ev.sourceReference,
+                    excerpt: ev.excerpt,
+                    state: ev.state,
                   })),
-              })),
-          };
-        }
-        if (fit?.fitLevel && fit.fitEngineVersion && fit.fitSummary) {
-          const findings = evaluationRepository
-            .getFitFindings(evaluationId(fit.id))
-            .map((item) => ({
-              id: item.id,
-              dimension: item.dimensionKey.split(':')[0] ?? item.dimensionKey,
-              label: item.label ?? item.dimensionKey,
-              state: item.state,
-              modality: item.modality,
-              requirement: item.requirementText,
-              explanation: item.explanation ?? item.summary,
-              confidence: item.confidence,
-              evidence: evidenceRepository
-                .getFindingEvidence(findingId(item.id))
-                .map((evidence) => ({
-                  id: evidence.id,
-                  evidenceType: evidence.evidenceType,
-                  sourceReference: evidence.sourceReference,
-                  excerpt: evidence.excerpt,
-                  state: evidence.state,
-                })),
-            }));
-          fitResult = {
-            level: fit.fitLevel,
-            summary: fit.fitSummary,
-            engineVersion: fit.fitEngineVersion,
-            findings,
-          };
-        }
+                };
+              }),
+            );
 
-        let qualityResult = undefined;
-        if (
-          quality?.qualityLevel &&
-          quality.qualityEngineVersion &&
-          quality.qualitySummary
-        ) {
-          const findings = evaluationRepository
-            .getQualityFindings(evaluationId(quality.id))
-            .map((item) => ({
-              id: item.id,
-              dimension: item.dimensionKey,
-              label: item.label ?? item.dimensionKey,
-              state: item.state,
-              importance: item.confidence ?? 'important',
-              explanation: item.explanation ?? item.summary,
-              evidence: evidenceRepository
-                .getFindingEvidence(findingId(item.id))
-                .map((evidence) => ({
-                  id: evidence.id,
-                  evidenceType: evidence.evidenceType,
-                  sourceReference: evidence.sourceReference,
-                  excerpt: evidence.excerpt,
-                  state: evidence.state,
-                })),
-            }));
-          qualityResult = {
-            level: quality.qualityLevel,
-            summary: quality.qualitySummary,
-            engineVersion: quality.qualityEngineVersion,
-            freshnessBucket: quality.qualityFreshnessBucket ?? 'recent',
-            evaluatedAt: quality.qualityEvaluatedAt
-              ? new Date(quality.qualityEvaluatedAt).toISOString()
-              : undefined,
-            findings,
-          };
-        }
-
-        let decisionResult = undefined;
-        if (decision?.priority && decision.explanation) {
-          const reasonCodes = JSON.parse(
-            decision.reasonCodes ?? '[]',
-          ) as string[];
-          const reasons = evaluationRepository.getDecisionReasons(
-            decisionId(decision.id),
-          );
-          const reasonGroups = new Map<string, string[]>();
-          for (const reason of reasons) {
-            const ids = reasonGroups.get(reason.reasonCode) ?? [];
-            ids.push(reason.findingId);
-            reasonGroups.set(reason.reasonCode, ids);
+            eligibilityResult = {
+              state: evaluation.eligibilityState,
+              engineVersion: evaluation.eligibilityEngineVersion,
+              findings: findingsWithEvidence,
+            };
           }
-          decisionResult = {
-            id: decision.id,
-            state: decision.priority,
-            action: decision.action,
-            explanation: decision.explanation,
-            engineVersion: decision.engineVersion!,
-            inputFingerprint: decision.inputFingerprint!,
-            reasonCodes,
-            reasons: reasonCodes.map((code) => ({
-              code,
-              findingIds: reasonGroups.get(code) ?? [],
-            })),
-            evaluatedAt: new Date(decision.evaluatedAt!).toISOString(),
-          };
-        }
 
-        return {
-          ...snapshot,
-          ...(eligibilityResult ? { eligibility: eligibilityResult } : {}),
-          ...(fitResult ? { fit: fitResult } : {}),
-          ...(qualityResult ? { quality: qualityResult } : {}),
-          ...(decisionResult ? { decision: decisionResult } : {}),
-        };
-      });
+          if (fit?.fitLevel && fit.fitEngineVersion && fit.fitSummary) {
+            const rawFitFindings = await evaluationRepository.getFitFindings(
+              evaluationId(fit.id),
+            );
+            const fitFindingsWithEvidence = await Promise.all(
+              rawFitFindings.map(async (item: any) => {
+                const evidences = await evidenceRepository.getFindingEvidence(
+                  findingId(item.id),
+                );
+                return {
+                  id: item.id,
+                  dimension:
+                    item.dimensionKey.split(':')[0] ?? item.dimensionKey,
+                  label: item.label ?? item.dimensionKey,
+                  state: item.state,
+                  modality: item.modality,
+                  requirement: item.requirementText,
+                  explanation: item.explanation ?? item.summary,
+                  confidence: item.confidence,
+                  evidence: evidences.map((ev: any) => ({
+                    id: ev.id,
+                    evidenceType: ev.evidenceType,
+                    sourceReference: ev.sourceReference,
+                    excerpt: ev.excerpt,
+                    state: ev.state,
+                  })),
+                };
+              }),
+            );
+
+            fitResult = {
+              level: fit.fitLevel,
+              summary: fit.fitSummary,
+              engineVersion: fit.fitEngineVersion,
+              findings: fitFindingsWithEvidence,
+            };
+          }
+
+          let qualityResult = undefined;
+          if (
+            quality?.qualityLevel &&
+            quality.qualityEngineVersion &&
+            quality.qualitySummary
+          ) {
+            const rawQualityFindings =
+              await evaluationRepository.getQualityFindings(
+                evaluationId(quality.id),
+              );
+            const qualityFindingsWithEvidence = await Promise.all(
+              rawQualityFindings.map(async (item: any) => {
+                const evidences = await evidenceRepository.getFindingEvidence(
+                  findingId(item.id),
+                );
+                return {
+                  id: item.id,
+                  dimension: item.dimensionKey,
+                  label: item.label ?? item.dimensionKey,
+                  state: item.state,
+                  importance: item.confidence ?? 'important',
+                  explanation: item.explanation ?? item.summary,
+                  evidence: evidences.map((ev: any) => ({
+                    id: ev.id,
+                    evidenceType: ev.evidenceType,
+                    sourceReference: ev.sourceReference,
+                    excerpt: ev.excerpt,
+                    state: ev.state,
+                  })),
+                };
+              }),
+            );
+
+            qualityResult = {
+              level: quality.qualityLevel,
+              summary: quality.qualitySummary,
+              engineVersion: quality.qualityEngineVersion,
+              freshnessBucket: quality.qualityFreshnessBucket ?? 'recent',
+              evaluatedAt: quality.qualityEvaluatedAt
+                ? new Date(quality.qualityEvaluatedAt).toISOString()
+                : undefined,
+              findings: qualityFindingsWithEvidence,
+            };
+          }
+
+          let decisionResult = undefined;
+          if (decision?.priority && decision.explanation) {
+            const reasonCodes = JSON.parse(
+              decision.reasonCodes ?? '[]',
+            ) as string[];
+            const reasons = await evaluationRepository.getDecisionReasons(
+              decisionId(decision.id),
+            );
+            const reasonGroups = new Map<string, string[]>();
+            for (const reason of reasons) {
+              const ids = reasonGroups.get(reason.reasonCode) ?? [];
+              ids.push(reason.findingId);
+              reasonGroups.set(reason.reasonCode, ids);
+            }
+            decisionResult = {
+              id: decision.id,
+              state: decision.priority,
+              action: decision.action,
+              explanation: decision.explanation,
+              engineVersion: decision.engineVersion!,
+              inputFingerprint: decision.inputFingerprint!,
+              reasonCodes,
+              reasons: reasonCodes.map((code) => ({
+                code,
+                findingIds: reasonGroups.get(code) ?? [],
+              })),
+              evaluatedAt: new Date(decision.evaluatedAt).toISOString(),
+            };
+          }
+
+          return {
+            ...snapshot,
+            ...(eligibilityResult ? { eligibility: eligibilityResult } : {}),
+            ...(fitResult ? { fit: fitResult } : {}),
+            ...(qualityResult ? { quality: qualityResult } : {}),
+            ...(decisionResult ? { decision: decisionResult } : {}),
+          };
+        }),
+      );
 
       return {
         opportunity: {
@@ -1326,35 +1381,33 @@ export async function createApiApp(
   );
 
   if (options.closeDatabaseOnClose ?? true) {
-    app.addHook('onClose', () => {
-      options.database.close();
+    app.addHook('onClose', async () => {
+      await options.database.close();
     });
   }
 
   return app;
 }
 
-function serializeProfile(
-  profile: NonNullable<ReturnType<CareerMemoryRepository['getProfile']>>,
-) {
+function serializeProfile(profile: any) {
   return {
     candidate: {
       id: profile.candidate.id,
-      createdAt: profile.candidate.createdAt.toISOString(),
-      updatedAt: profile.candidate.updatedAt.toISOString(),
+      createdAt: new Date(profile.candidate.createdAt).toISOString(),
+      updatedAt: new Date(profile.candidate.updatedAt).toISOString(),
     },
-    claims: profile.claims.map((claim) => ({
+    claims: profile.claims.map((claim: any) => ({
       id: claim.id,
       kind: claim.kind,
       value: claim.value,
       scope: claim.scope,
       state: claim.state,
       confidence: claim.confidence,
-      createdAt: claim.createdAt.toISOString(),
-      updatedAt: claim.updatedAt.toISOString(),
-      evidence: claim.evidence.map((item) => ({
+      createdAt: new Date(claim.createdAt).toISOString(),
+      updatedAt: new Date(claim.updatedAt).toISOString(),
+      evidence: claim.evidence.map((item: any) => ({
         ...item,
-        createdAt: item.createdAt.toISOString(),
+        createdAt: new Date(item.createdAt).toISOString(),
       })),
     })),
   };

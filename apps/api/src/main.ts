@@ -9,10 +9,14 @@ import { createApiApp } from './app.js';
 async function main(): Promise<void> {
   const config = parseApiConfig(process.env);
   const workspaceRoot = fileURLToPath(new URL('../../..', import.meta.url));
-  const database = openDatabase(resolve(workspaceRoot, config.databasePath));
+  const database = openDatabase({
+    engine: config.databaseEngine,
+    ...(config.databaseUrl ? { databaseUrl: config.databaseUrl } : {}),
+    databasePath: resolve(workspaceRoot, config.databasePath),
+  });
 
   try {
-    if (config.migrationMode === 'auto') applyMigrations(database);
+    if (config.migrationMode === 'auto') await applyMigrations(database);
     const app = await createApiApp({ config, database });
     let shuttingDown = false;
 
@@ -28,7 +32,7 @@ async function main(): Promise<void> {
 
     await app.listen({ host: config.host, port: config.port });
   } catch (error) {
-    database.close();
+    await database.close();
     throw error;
   }
 }

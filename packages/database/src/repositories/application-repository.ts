@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type {
   ApplicationId,
   CandidateId,
@@ -9,12 +9,7 @@ import type {
 import type { ApplicationStatus } from '@oca/schemas';
 
 import type { DatabaseHandle } from '../client.js';
-import {
-  applicationEvents,
-  applications,
-  decisions,
-  opportunitySnapshots,
-} from '../schema.js';
+import { getTables } from '../schema-helper.js';
 
 export class ApplicationError extends Error {
   public readonly statusCode: number;
@@ -80,17 +75,18 @@ export function validateTransition(
 export class ApplicationRepository {
   public constructor(private readonly handle: DatabaseHandle) {}
 
-  private findApplication(id: ApplicationId) {
-    return (
-      this.handle.db
-        .select()
-        .from(applications)
-        .where(eq(applications.id, id))
-        .get() ?? null
-    );
+  private async findApplication(id: ApplicationId): Promise<any | null> {
+    const { applications } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    const rows = await db
+      .select()
+      .from(applications)
+      .where(eq(applications.id, id));
+    return rows[0] ?? null;
   }
 
-  public createApplication(
+  public async createApplication(
     input: {
       id?: ApplicationId;
       candidateId: CandidateId;
@@ -101,8 +97,12 @@ export class ApplicationRepository {
       appliedAt?: Date | null;
     },
     timestamp: number = Date.now(),
-  ) {
-    const existing = this.handle.db
+  ): Promise<any> {
+    const { applications, decisions, opportunitySnapshots, applicationEvents } =
+      getTables(this.handle);
+    const db = this.handle.db as any;
+
+    const existingRows = await db
       .select()
       .from(applications)
       .where(
@@ -110,10 +110,9 @@ export class ApplicationRepository {
           eq(applications.candidateId, input.candidateId),
           eq(applications.opportunityId, input.opportunityId),
         ),
-      )
-      .get();
+      );
 
-    if (existing) {
+    if (existingRows.length > 0) {
       throw new ApplicationError(
         `An application already exists for candidate '${input.candidateId}' and opportunity '${input.opportunityId}'.`,
         'DUPLICATE_APPLICATION',
@@ -134,22 +133,24 @@ export class ApplicationRepository {
     let originatingAction: string | null = null;
 
     if (input.originatingDecisionId) {
-      const dec = this.handle.db
+      const decRows = await db
         .select()
         .from(decisions)
-        .where(eq(decisions.id, input.originatingDecisionId))
-        .get();
+        .where(eq(decisions.id, input.originatingDecisionId));
+      const dec = decRows[0];
+
       if (!dec || dec.candidateId !== input.candidateId) {
         throw new ApplicationError(
           'The originating Decision does not belong to this candidate.',
           'UNAUTHORIZED',
         );
       }
-      const decisionSnapshot = this.handle.db
+      const snapRows = await db
         .select({ opportunityId: opportunitySnapshots.opportunityId })
         .from(opportunitySnapshots)
-        .where(eq(opportunitySnapshots.id, dec.snapshotId))
-        .get();
+        .where(eq(opportunitySnapshots.id, dec.snapshotId));
+      const decisionSnapshot = snapRows[0];
+
       if (decisionSnapshot?.opportunityId !== input.opportunityId) {
         throw new ApplicationError(
           'The originating Decision does not belong to this opportunity.',
@@ -163,82 +164,86 @@ export class ApplicationRepository {
     const submittedAt =
       appStatus === 'Applied' ? (input.appliedAt ?? now) : null;
 
-    return this.handle.db.transaction((tx) => {
-      tx.insert(applications)
-        .values({
-          id: appId,
-          candidateId: input.candidateId,
-          opportunityId: input.opportunityId,
-          status: appStatus,
-          originatingDecisionId: input.originatingDecisionId ?? null,
-          originatingDecisionState: originatingState,
-          originatingDecisionAction: originatingAction,
-          submittedAt,
-          followUpDueAt: null,
-          followUpNote: null,
-          followUpCompletedAt: null,
-          note: input.note ?? null,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .run();
+    return await db.transaction(async (tx: any) => {
+      await tx.insert(applications).values({
+        id: appId,
+        candidateId: input.candidateId,
+        opportunityId: input.opportunityId,
+        status: appStatus,
+        originatingDecisionId: input.originatingDecisionId ?? null,
+        originatingDecisionState: originatingState,
+        originatingDecisionAction: originatingAction,
+        submittedAt,
+        followUpDueAt: null,
+        followUpNote: null,
+        followUpCompletedAt: null,
+        note: input.note ?? null,
+        createdAt: now,
+        updatedAt: now,
+      });
 
       const createEvId = `app-ev-${randomUUID()}` as EventId;
-      tx.insert(applicationEvents)
-        .values({
-          id: createEvId,
-          applicationId: appId,
-          eventType: 'application_created',
-          detail: `Application created with status ${appStatus}`,
-          occurredAt: now,
-        })
-        .run();
+      await tx.insert(applicationEvents).values({
+        id: createEvId,
+        applicationId: appId,
+        eventType: 'application_created',
+        detail: `Application created with status ${appStatus}`,
+        occurredAt: now,
+      });
 
       if (appStatus === 'Applied') {
         const submitEvId = `app-ev-${randomUUID()}` as EventId;
-        tx.insert(applicationEvents)
-          .values({
-            id: submitEvId,
-            applicationId: appId,
-            eventType: 'application_submitted',
-            detail: 'Application submitted to employer',
-            occurredAt: submittedAt!,
-          })
-          .run();
+        await tx.insert(applicationEvents).values({
+          id: submitEvId,
+          applicationId: appId,
+          eventType: 'application_submitted',
+          detail: 'Application submitted to employer',
+          occurredAt: submittedAt!,
+        });
       }
 
       if (input.note) {
         const noteEvId = `app-ev-${randomUUID()}` as EventId;
-        tx.insert(applicationEvents)
-          .values({
-            id: noteEvId,
-            applicationId: appId,
-            eventType: 'note_added',
-            detail: `Note added: ${input.note}`,
-            occurredAt: now,
-          })
-          .run();
+        await tx.insert(applicationEvents).values({
+          id: noteEvId,
+          applicationId: appId,
+          eventType: 'note_added',
+          detail: `Note added: ${input.note}`,
+          occurredAt: now,
+        });
       }
 
-      return this.findApplication(appId)!;
+      const rows = await tx
+        .select()
+        .from(applications)
+        .where(eq(applications.id, appId));
+      return rows[0] ?? null;
     });
   }
 
-  public getApplication(cId: CandidateId, id: ApplicationId) {
-    const result = this.handle.db
+  public async getApplication(
+    cId: CandidateId,
+    id: ApplicationId,
+  ): Promise<any | null> {
+    const { applications } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    const rows = await db
       .select()
       .from(applications)
-      .where(and(eq(applications.id, id), eq(applications.candidateId, cId)))
-      .get();
+      .where(and(eq(applications.id, id), eq(applications.candidateId, cId)));
 
-    return result ?? null;
+    return rows[0] ?? null;
   }
 
-  public getApplicationByCandidateAndOpportunity(
+  public async getApplicationByCandidateAndOpportunity(
     cId: CandidateId,
     oppId: OpportunityId,
-  ) {
-    const result = this.handle.db
+  ): Promise<any | null> {
+    const { applications } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    const rows = await db
       .select()
       .from(applications)
       .where(
@@ -246,21 +251,22 @@ export class ApplicationRepository {
           eq(applications.candidateId, cId),
           eq(applications.opportunityId, oppId),
         ),
-      )
-      .get();
+      );
 
-    return result ?? null;
+    return rows[0] ?? null;
   }
 
-  public listApplications(cId: CandidateId) {
-    return this.handle.db
+  public async listApplications(cId: CandidateId): Promise<readonly any[]> {
+    const { applications } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    return await db
       .select()
       .from(applications)
-      .where(eq(applications.candidateId, cId))
-      .all();
+      .where(eq(applications.candidateId, cId));
   }
 
-  public updateApplication(
+  public async updateApplication(
     input: {
       id: ApplicationId;
       candidateId: CandidateId;
@@ -272,8 +278,8 @@ export class ApplicationRepository {
       followUpCompletedAt?: Date | null;
     },
     timestamp: number = Date.now(),
-  ) {
-    const current = this.findApplication(input.id);
+  ): Promise<any> {
+    const current = await this.findApplication(input.id);
     if (!current) {
       throw new ApplicationError(
         `Application '${input.id}' not found.`,
@@ -288,9 +294,14 @@ export class ApplicationRepository {
       );
     }
 
+    const currentUpdatedAtDate =
+      current.updatedAt instanceof Date
+        ? current.updatedAt
+        : new Date(current.updatedAt);
+
     if (input.expectedUpdatedAt) {
       const expectedMs = new Date(input.expectedUpdatedAt).getTime();
-      if (expectedMs !== current.updatedAt.getTime()) {
+      if (expectedMs !== currentUpdatedAtDate.getTime()) {
         throw new ApplicationError(
           `Stale write conflict on application '${input.id}'.`,
           'STALE_WRITE_CONFLICT',
@@ -303,7 +314,9 @@ export class ApplicationRepository {
       validateTransition(current.status, nextStatus);
     }
 
-    const now = new Date(Math.max(timestamp, current.updatedAt.getTime() + 1));
+    const now = new Date(
+      Math.max(timestamp, currentUpdatedAtDate.getTime() + 1),
+    );
     const transitionToApplied =
       current.status !== 'Applied' && nextStatus === 'Applied';
     const submittedAt = transitionToApplied ? now : current.submittedAt;
@@ -329,20 +342,31 @@ export class ApplicationRepository {
         ? input.followUpCompletedAt
         : (current.followUpCompletedAt ?? null);
 
+    const currentFollowUpDueMs = current.followUpDueAt
+      ? current.followUpDueAt instanceof Date
+        ? current.followUpDueAt.getTime()
+        : new Date(current.followUpDueAt).getTime()
+      : null;
+    const currentFollowUpCompletedMs = current.followUpCompletedAt
+      ? current.followUpCompletedAt instanceof Date
+        ? current.followUpCompletedAt.getTime()
+        : new Date(current.followUpCompletedAt).getTime()
+      : null;
+
     const statusChanged = nextStatus !== current.status;
     const noteChanged =
       input.note !== undefined && input.note !== (current.note ?? null);
     const followUpDueChanged =
       input.followUpDueAt !== undefined &&
-      input.followUpDueAt?.getTime() !== current.followUpDueAt?.getTime();
+      input.followUpDueAt?.getTime() !== currentFollowUpDueMs;
     const followUpNoteChanged =
       input.followUpNote !== undefined &&
       input.followUpNote !== (current.followUpNote ?? null);
     const followUpCompletionChanged =
       input.followUpCompletedAt !== undefined &&
       !repeatedCompletion &&
-      input.followUpCompletedAt?.getTime() !==
-        current.followUpCompletedAt?.getTime();
+      input.followUpCompletedAt?.getTime() !== currentFollowUpCompletedMs;
+
     if (
       !statusChanged &&
       !noteChanged &&
@@ -353,8 +377,15 @@ export class ApplicationRepository {
       return current;
     }
 
-    return this.handle.db.transaction((tx) => {
-      const updateResult = tx
+    const expectedDate = input.expectedUpdatedAt
+      ? new Date(input.expectedUpdatedAt)
+      : currentUpdatedAtDate;
+
+    const { applications, applicationEvents } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    return await db.transaction(async (tx: any) => {
+      const updateResult = await tx
         .update(applications)
         .set({
           status: nextStatus,
@@ -369,12 +400,14 @@ export class ApplicationRepository {
           and(
             eq(applications.id, input.id),
             eq(applications.candidateId, input.candidateId),
-            eq(applications.updatedAt, current.updatedAt),
+            this.handle.engine === 'postgres'
+              ? sql`date_trunc('milliseconds', ${applications.updatedAt}) = date_trunc('milliseconds', ${expectedDate.toISOString()}::timestamptz)`
+              : eq(applications.updatedAt, expectedDate),
           ),
         )
-        .run();
+        .returning();
 
-      if (updateResult.changes !== 1) {
+      if (updateResult.length !== 1) {
         throw new ApplicationError(
           `Stale write conflict on application '${input.id}'.`,
           'STALE_WRITE_CONFLICT',
@@ -383,56 +416,48 @@ export class ApplicationRepository {
 
       if (statusChanged) {
         const evId = `app-ev-${randomUUID()}` as EventId;
-        tx.insert(applicationEvents)
-          .values({
-            id: evId,
-            applicationId: input.id,
-            eventType: 'status_changed',
-            detail: `Status changed from ${current.status} to ${nextStatus}`,
-            occurredAt: now,
-          })
-          .run();
+        await tx.insert(applicationEvents).values({
+          id: evId,
+          applicationId: input.id,
+          eventType: 'status_changed',
+          detail: `Status changed from ${current.status} to ${nextStatus}`,
+          occurredAt: now,
+        });
 
         if (transitionToApplied) {
           const submitEvId = `app-ev-${randomUUID()}` as EventId;
-          tx.insert(applicationEvents)
-            .values({
-              id: submitEvId,
-              applicationId: input.id,
-              eventType: 'application_submitted',
-              detail: 'Application submitted to employer',
-              occurredAt: now,
-            })
-            .run();
+          await tx.insert(applicationEvents).values({
+            id: submitEvId,
+            applicationId: input.id,
+            eventType: 'application_submitted',
+            detail: 'Application submitted to employer',
+            occurredAt: now,
+          });
         }
       }
 
       if (noteChanged) {
         const evId = `app-ev-${randomUUID()}` as EventId;
-        tx.insert(applicationEvents)
-          .values({
-            id: evId,
-            applicationId: input.id,
-            eventType: 'note_added',
-            detail: input.note ? `Note updated: ${input.note}` : 'Note cleared',
-            occurredAt: now,
-          })
-          .run();
+        await tx.insert(applicationEvents).values({
+          id: evId,
+          applicationId: input.id,
+          eventType: 'note_added',
+          detail: input.note ? `Note updated: ${input.note}` : 'Note cleared',
+          occurredAt: now,
+        });
       }
 
       if (followUpDueChanged || followUpNoteChanged) {
         const evId = `app-ev-${randomUUID()}` as EventId;
-        tx.insert(applicationEvents)
-          .values({
-            id: evId,
-            applicationId: input.id,
-            eventType: 'follow_up_set',
-            detail: updatedFollowUpDueAt
-              ? `Follow-up scheduled for ${updatedFollowUpDueAt.toISOString()}${updatedFollowUpNote ? `: ${updatedFollowUpNote}` : ''}`
-              : 'Follow-up cleared',
-            occurredAt: now,
-          })
-          .run();
+        await tx.insert(applicationEvents).values({
+          id: evId,
+          applicationId: input.id,
+          eventType: 'follow_up_set',
+          detail: updatedFollowUpDueAt
+            ? `Follow-up scheduled for ${updatedFollowUpDueAt.toISOString()}${updatedFollowUpNote ? `: ${updatedFollowUpNote}` : ''}`
+            : 'Follow-up cleared',
+          occurredAt: now,
+        });
       }
 
       if (
@@ -440,22 +465,20 @@ export class ApplicationRepository {
         current.followUpCompletedAt == null
       ) {
         const evId = `app-ev-${randomUUID()}` as EventId;
-        tx.insert(applicationEvents)
-          .values({
-            id: evId,
-            applicationId: input.id,
-            eventType: 'follow_up_completed',
-            detail: 'Follow-up marked completed',
-            occurredAt: now,
-          })
-          .run();
+        await tx.insert(applicationEvents).values({
+          id: evId,
+          applicationId: input.id,
+          eventType: 'follow_up_completed',
+          detail: 'Follow-up marked completed',
+          occurredAt: now,
+        });
       }
 
-      return this.findApplication(input.id)!;
+      return (await this.findApplication(input.id))!;
     });
   }
 
-  public appendEvent(
+  public async appendEvent(
     event: {
       id?: EventId;
       candidateId: CandidateId;
@@ -464,8 +487,11 @@ export class ApplicationRepository {
       detail: string;
     },
     timestamp: number = Date.now(),
-  ) {
-    const app = this.getApplication(event.candidateId, event.applicationId);
+  ): Promise<EventId> {
+    const app = await this.getApplication(
+      event.candidateId,
+      event.applicationId,
+    );
     if (!app) {
       throw new ApplicationError(
         `Application '${event.applicationId}' not found for candidate.`,
@@ -474,44 +500,53 @@ export class ApplicationRepository {
     }
     const evId = event.id ?? (`app-ev-${randomUUID()}` as EventId);
     const now = new Date(timestamp);
-    this.handle.db
-      .insert(applicationEvents)
-      .values({
-        id: evId,
-        applicationId: event.applicationId,
-        eventType: event.eventType,
-        detail: event.detail,
-        occurredAt: now,
-      })
-      .run();
+    const { applicationEvents } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    await db.insert(applicationEvents).values({
+      id: evId,
+      applicationId: event.applicationId,
+      eventType: event.eventType,
+      detail: event.detail,
+      occurredAt: now,
+    });
+
     return evId;
   }
 
-  public getEvents(cId: CandidateId, appId: ApplicationId) {
-    if (!this.getApplication(cId, appId)) {
+  public async getEvents(
+    cId: CandidateId,
+    appId: ApplicationId,
+  ): Promise<readonly any[]> {
+    if (!(await this.getApplication(cId, appId))) {
       throw new ApplicationError(
         `Application '${appId}' not found for candidate.`,
         'NOT_FOUND',
       );
     }
-    return this.handle.db
+    const { applicationEvents } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    return await db
       .select()
       .from(applicationEvents)
       .where(eq(applicationEvents.applicationId, appId))
-      .orderBy(applicationEvents.occurredAt)
-      .all();
+      .orderBy(applicationEvents.occurredAt);
   }
 
-  public updateStatus(
+  public async updateStatus(
     candidate: CandidateId,
     id: ApplicationId,
     status: ApplicationStatus,
     timestamp: number = Date.now(),
-  ): void {
-    const app = this.getApplication(candidate, id);
+  ): Promise<void> {
+    const app = await this.getApplication(candidate, id);
     if (!app) {
       throw new ApplicationError(`Application ${id} not found`, 'NOT_FOUND');
     }
-    this.updateApplication({ id, candidateId: candidate, status }, timestamp);
+    await this.updateApplication(
+      { id, candidateId: candidate, status },
+      timestamp,
+    );
   }
 }

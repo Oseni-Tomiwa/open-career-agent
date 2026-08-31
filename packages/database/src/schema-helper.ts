@@ -1,0 +1,65 @@
+import type { DatabaseHandle } from './client.js';
+import * as sqliteSchema from './schema.js';
+import * as pgSchema from './schema-pg.js';
+
+export function getTables(handle: DatabaseHandle) {
+  if (handle.engine === 'postgres') {
+    return {
+      backgroundTasks: pgSchema.backgroundTasksPg,
+      backgroundTaskEvents: pgSchema.backgroundTaskEventsPg,
+      candidates: pgSchema.candidatesPg,
+      users: pgSchema.usersPg,
+      userCandidates: pgSchema.userCandidatesPg,
+      sessions: pgSchema.sessionsPg,
+      candidateClaims: pgSchema.candidateClaimsPg,
+      opportunities: pgSchema.opportunitiesPg,
+      opportunitySnapshots: pgSchema.opportunitySnapshotsPg,
+      sourceListings: pgSchema.sourceListingsPg,
+      sourceObservations: pgSchema.sourceObservationsPg,
+      opportunitySnapshotSources: pgSchema.opportunitySnapshotSourcesPg,
+      evidence: pgSchema.evidencePg,
+      candidateClaimEvidence: pgSchema.candidateClaimEvidencePg,
+      opportunitySnapshotEvidence: pgSchema.opportunitySnapshotEvidencePg,
+      evaluations: pgSchema.evaluationsPg,
+      evaluationFindings: pgSchema.evaluationFindingsPg,
+      evaluationFindingEvidence: pgSchema.evaluationFindingEvidencePg,
+      evaluationEvidence: pgSchema.evaluationEvidencePg,
+      decisions: pgSchema.decisionsPg,
+      decisionReasons: pgSchema.decisionReasonsPg,
+      applications: pgSchema.applicationsPg,
+      applicationEvents: pgSchema.applicationEventsPg,
+      searchTargets: pgSchema.searchTargetsPg,
+      discoveryRuns: pgSchema.discoveryRunsPg,
+      discoveryMatches: pgSchema.discoveryMatchesPg,
+    };
+  }
+
+  return {
+    backgroundTasks: sqliteSchema.backgroundTasks,
+    backgroundTaskEvents: sqliteSchema.backgroundTaskEvents,
+    candidates: sqliteSchema.candidates,
+    users: sqliteSchema.users,
+    userCandidates: sqliteSchema.userCandidates,
+    sessions: sqliteSchema.sessions,
+    candidateClaims: sqliteSchema.candidateClaims,
+    opportunities: sqliteSchema.opportunities,
+    opportunitySnapshots: sqliteSchema.opportunitySnapshots,
+    sourceListings: sqliteSchema.sourceListings,
+    sourceObservations: sqliteSchema.sourceObservations,
+    opportunitySnapshotSources: sqliteSchema.opportunitySnapshotSources,
+    evidence: sqliteSchema.evidence,
+    candidateClaimEvidence: sqliteSchema.candidateClaimEvidence,
+    opportunitySnapshotEvidence: sqliteSchema.opportunitySnapshotEvidence,
+    evaluations: sqliteSchema.evaluations,
+    evaluationFindings: sqliteSchema.evaluationFindings,
+    evaluationFindingEvidence: sqliteSchema.evaluationFindingEvidence,
+    evaluationEvidence: sqliteSchema.evaluationEvidence,
+    decisions: sqliteSchema.decisions,
+    decisionReasons: sqliteSchema.decisionReasons,
+    applications: sqliteSchema.applications,
+    applicationEvents: sqliteSchema.applicationEvents,
+    searchTargets: sqliteSchema.searchTargets,
+    discoveryRuns: sqliteSchema.discoveryRuns,
+    discoveryMatches: sqliteSchema.discoveryMatches,
+  };
+}

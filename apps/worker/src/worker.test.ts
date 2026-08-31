@@ -20,20 +20,20 @@ describe('background worker', () => {
   let database: DatabaseHandle;
   let ledger: BackgroundTaskLedger;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     directory = mkdtempSync(join(tmpdir(), 'oca-worker-'));
     database = openDatabase(join(directory, 'worker.sqlite'));
-    applyMigrations(database);
+    await applyMigrations(database);
     ledger = new BackgroundTaskLedger(database);
   });
 
-  afterEach(() => {
-    database.close();
+  afterEach(async () => {
+    await database.close();
     rmSync(directory, { recursive: true, force: true });
   });
 
   it('claims and completes the harmless system task', async () => {
-    const task = ledger.enqueue({ taskType: 'system.noop' });
+    const task = await ledger.enqueue({ taskType: 'system.noop' });
     const worker = new BackgroundWorker({
       ledger,
       handlers: createTaskHandlers({
@@ -47,11 +47,15 @@ describe('background worker', () => {
     });
 
     expect(await worker.runOnce()).toBe(true);
-    expect(ledger.findById(task.id)?.state).toBe('SUCCEEDED');
+    const found = await ledger.findById(task.id);
+    expect(found?.state).toBe('SUCCEEDED');
   });
 
   it('schedules a retry after a handler error', async () => {
-    const task = ledger.enqueue({ taskType: 'system.retry', maxAttempts: 2 });
+    const task = await ledger.enqueue({
+      taskType: 'system.retry',
+      maxAttempts: 2,
+    });
     const worker = new BackgroundWorker({
       ledger,
       handlers: {
@@ -67,7 +71,8 @@ describe('background worker', () => {
     });
 
     expect(await worker.runOnce()).toBe(true);
-    expect(ledger.findById(task.id)).toMatchObject({
+    const found = await ledger.findById(task.id);
+    expect(found).toMatchObject({
       state: 'PENDING',
       attempts: 1,
       lastError: 'temporary failure',

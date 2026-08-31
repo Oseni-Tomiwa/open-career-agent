@@ -33,14 +33,14 @@ export function createTaskHandlers(deps: {
 
       for (const board of boards) {
         for await (const record of adapter.discover(board)) {
-          let existingListing = sourceRepo.findListingByExternalId(
+          let existingListing = await sourceRepo.findListingByExternalId(
             record.sourceSystem,
             record.sourceExternalId,
           );
 
           const listingId = existingListing?.id ?? `sl_${randomUUID()}`;
 
-          sourceRepo.persistListing(
+          await sourceRepo.persistListing(
             listingId,
             {
               sourceSystem: record.sourceSystem,
@@ -51,15 +51,13 @@ export function createTaskHandlers(deps: {
             record.observedAt.getTime(),
           );
 
-          // We do an immediate lookup to get the opportunity association if it just got generated elsewhere,
-          // though typically it would be null here if new.
-          existingListing = sourceRepo.getListing(listingId);
+          existingListing = await sourceRepo.getListing(listingId);
           let oppId = existingListing?.opportunityId ?? null;
 
           if (!oppId) {
             oppId = opportunityId(`opp_${randomUUID()}`);
-            oppRepo.createOpportunity(opportunityId(oppId));
-            sourceRepo.associateListingWithOpportunity(
+            await oppRepo.createOpportunity(opportunityId(oppId));
+            await sourceRepo.associateListingWithOpportunity(
               listingId,
               opportunityId(oppId),
             );
@@ -72,21 +70,18 @@ export function createTaskHandlers(deps: {
             continue; // Skip malformed payloads
           }
 
-          // Using same hash function for simplicity, or we could hash raw.
-          // The prompt says "content fingerprint if useful... deterministic fingerprinting of raw payload". Let's hash raw payload.
-
           const rawHash = createHash('sha256')
             .update(record.rawPayload)
             .digest('hex');
 
-          const existingObs = sourceRepo.findObservationByFingerprint(
+          const existingObs = await sourceRepo.findObservationByFingerprint(
             listingId,
             rawHash,
           );
           const obsId = existingObs?.id ?? `so_${randomUUID()}`;
 
           if (!existingObs) {
-            sourceRepo.persistObservation(
+            await sourceRepo.persistObservation(
               obsId,
               listingId,
               {
@@ -98,7 +93,7 @@ export function createTaskHandlers(deps: {
           }
 
           const snapshotFingerprint = normalizer.hash(normalized);
-          const latestSnapshot = oppRepo.getLatestSnapshot(
+          const latestSnapshot = await oppRepo.getLatestSnapshot(
             opportunityId(oppId),
           );
 
@@ -107,7 +102,7 @@ export function createTaskHandlers(deps: {
             latestSnapshot.fingerprint !== snapshotFingerprint
           ) {
             const snapId = snapshotId(`snap_${randomUUID()}`);
-            oppRepo.appendSnapshot({
+            await oppRepo.appendSnapshot({
               id: snapId,
               opportunityId: opportunityId(oppId),
               title: normalized.title,
@@ -126,7 +121,7 @@ export function createTaskHandlers(deps: {
                 : {}),
               ...(obsId ? { sourceObservationId: obsId } : {}),
             });
-            taskLedger.enqueue({
+            await taskLedger.enqueue({
               taskType: 'eligibility.evaluate',
               payload: { snapshotId: snapId },
               idempotencyKey: `eligibility-${snapId}`,

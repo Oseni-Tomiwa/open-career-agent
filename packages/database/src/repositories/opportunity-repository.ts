@@ -1,31 +1,24 @@
 import { eq } from 'drizzle-orm';
 import type { DatabaseHandle } from '../client.js';
-import {
-  opportunities,
-  opportunitySnapshots,
-  opportunitySnapshotSources,
-  sourceListings,
-  sourceObservations,
-} from '../schema.js';
+import { getTables } from '../schema-helper.js';
 import type { OpportunityId, SnapshotId } from '@oca/domain';
 
 export class OpportunityRepository {
   public constructor(private readonly db: DatabaseHandle) {}
 
-  public createOpportunity(
+  public async createOpportunity(
     id: OpportunityId,
     timestamp: number = Date.now(),
-  ): void {
-    this.db.db
-      .insert(opportunities)
-      .values({
-        id,
-        createdAt: new Date(timestamp),
-      })
-      .run();
+  ): Promise<void> {
+    const { opportunities } = getTables(this.db);
+    const db = this.db.db as any;
+    await db.insert(opportunities).values({
+      id,
+      createdAt: new Date(timestamp),
+    });
   }
 
-  public appendSnapshot(
+  public async appendSnapshot(
     snapshot: {
       id: SnapshotId;
       opportunityId: OpportunityId;
@@ -40,74 +33,90 @@ export class OpportunityRepository {
       sourceObservationId?: string;
     },
     timestamp: number = Date.now(),
-  ): void {
-    this.db.db.transaction((tx) => {
-      tx.insert(opportunitySnapshots)
-        .values({
-          id: snapshot.id,
-          opportunityId: snapshot.opportunityId,
-          title: snapshot.title,
-          organization: snapshot.organization,
-          location: snapshot.location,
-          workModel: snapshot.workModel,
-          employmentType: snapshot.employmentType,
-          compensation: snapshot.compensation,
-          content: snapshot.content,
-          fingerprint: snapshot.fingerprint,
-          observedAt: new Date(timestamp),
-          createdAt: new Date(timestamp),
-        })
-        .run();
+  ): Promise<void> {
+    const { opportunitySnapshots, opportunitySnapshotSources } = getTables(
+      this.db,
+    );
+    const db = this.db.db as any;
+
+    await db.transaction(async (tx: any) => {
+      await tx.insert(opportunitySnapshots).values({
+        id: snapshot.id,
+        opportunityId: snapshot.opportunityId,
+        title: snapshot.title,
+        organization: snapshot.organization,
+        location: snapshot.location,
+        workModel: snapshot.workModel,
+        employmentType: snapshot.employmentType,
+        compensation: snapshot.compensation,
+        content: snapshot.content,
+        fingerprint: snapshot.fingerprint,
+        observedAt: new Date(timestamp),
+        createdAt: new Date(timestamp),
+      });
 
       if (snapshot.sourceObservationId) {
-        tx.insert(opportunitySnapshotSources)
-          .values({
-            snapshotId: snapshot.id,
-            sourceObservationId: snapshot.sourceObservationId,
-          })
-          .run();
+        await tx.insert(opportunitySnapshotSources).values({
+          snapshotId: snapshot.id,
+          sourceObservationId: snapshot.sourceObservationId,
+        });
       }
     });
   }
 
-  public getLatestSnapshot(opportunityId: OpportunityId) {
-    const result = this.db.db
+  public async getLatestSnapshot(
+    opportunityId: OpportunityId,
+  ): Promise<any | null> {
+    const { opportunitySnapshots } = getTables(this.db);
+    const db = this.db.db as any;
+    const result = await db
       .select()
       .from(opportunitySnapshots)
       .where(eq(opportunitySnapshots.opportunityId, opportunityId))
-      .orderBy(opportunitySnapshots.observedAt)
-      .all();
+      .orderBy(opportunitySnapshots.observedAt);
     return result[result.length - 1] ?? null;
   }
 
-  public getSnapshot(snapshotId: SnapshotId) {
-    return (
-      this.db.db
-        .select()
-        .from(opportunitySnapshots)
-        .where(eq(opportunitySnapshots.id, snapshotId))
-        .get() ?? null
-    );
-  }
-
-  public getSnapshots(opportunityId: OpportunityId) {
-    return this.db.db
+  public async getSnapshot(snapshotId: SnapshotId): Promise<any | null> {
+    const { opportunitySnapshots } = getTables(this.db);
+    const db = this.db.db as any;
+    const rows = await db
       .select()
       .from(opportunitySnapshots)
-      .where(eq(opportunitySnapshots.opportunityId, opportunityId))
-      .all();
+      .where(eq(opportunitySnapshots.id, snapshotId));
+    return rows[0] ?? null;
   }
 
-  public getSnapshotSources(snapshotId: SnapshotId) {
-    return this.db.db
+  public async getSnapshots(
+    opportunityId: OpportunityId,
+  ): Promise<readonly any[]> {
+    const { opportunitySnapshots } = getTables(this.db);
+    const db = this.db.db as any;
+    return await db
+      .select()
+      .from(opportunitySnapshots)
+      .where(eq(opportunitySnapshots.opportunityId, opportunityId));
+  }
+
+  public async getSnapshotSources(
+    snapshotId: SnapshotId,
+  ): Promise<readonly any[]> {
+    const { opportunitySnapshotSources } = getTables(this.db);
+    const db = this.db.db as any;
+    return await db
       .select()
       .from(opportunitySnapshotSources)
-      .where(eq(opportunitySnapshotSources.snapshotId, snapshotId))
-      .all();
+      .where(eq(opportunitySnapshotSources.snapshotId, snapshotId));
   }
 
-  public getObservationsForSnapshot(snapshotId: SnapshotId) {
-    const direct = this.db.db
+  public async getObservationsForSnapshot(
+    snapshotId: SnapshotId,
+  ): Promise<readonly any[]> {
+    const { opportunitySnapshotSources, sourceObservations, sourceListings } =
+      getTables(this.db);
+    const db = this.db.db as any;
+
+    const direct = await db
       .select({
         id: sourceObservations.id,
         sourceListingId: sourceObservations.sourceListingId,
@@ -131,21 +140,25 @@ export class OpportunityRepository {
         sourceListings,
         eq(sourceObservations.sourceListingId, sourceListings.id),
       )
-      .where(eq(opportunitySnapshotSources.snapshotId, snapshotId))
-      .all();
+      .where(eq(opportunitySnapshotSources.snapshotId, snapshotId));
 
     if (direct.length > 0) return direct;
 
-    const snapshot = this.getSnapshot(snapshotId);
+    const snapshot = await this.getSnapshot(snapshotId);
     if (!snapshot) return [];
 
-    return this.getObservationsForOpportunity(
+    return await this.getObservationsForOpportunity(
       snapshot.opportunityId as OpportunityId,
     );
   }
 
-  public getObservationsForOpportunity(opportunityId: OpportunityId) {
-    return this.db.db
+  public async getObservationsForOpportunity(
+    opportunityId: OpportunityId,
+  ): Promise<readonly any[]> {
+    const { sourceListings, sourceObservations } = getTables(this.db);
+    const db = this.db.db as any;
+
+    return await db
       .select({
         id: sourceObservations.id,
         sourceListingId: sourceObservations.sourceListingId,
@@ -162,48 +175,51 @@ export class OpportunityRepository {
         sourceObservations,
         eq(sourceObservations.sourceListingId, sourceListings.id),
       )
-      .where(eq(sourceListings.opportunityId, opportunityId))
-      .all();
+      .where(eq(sourceListings.opportunityId, opportunityId));
   }
 
-  public getOpportunities() {
-    return this.db.db.select().from(opportunities).all();
+  public async getOpportunities(): Promise<readonly any[]> {
+    const { opportunities } = getTables(this.db);
+    const db = this.db.db as any;
+    return await db.select().from(opportunities);
   }
 
-  public getOpportunitySummaries() {
-    const opps = this.getOpportunities();
-    return opps.map((opp) => {
-      const latest = this.getLatestSnapshot(opp.id as OpportunityId);
-      const sourceSystems: string[] = [];
-      if (latest) {
-        sourceSystems.push(
-          ...new Set(
-            this.getObservationsForSnapshot(latest.id as SnapshotId).map(
-              (observation) => observation.sourceSystem,
-            ),
-          ),
-        );
-      }
-      return {
-        id: opp.id,
-        latestTitle: latest?.title,
-        latestOrganization: latest?.organization,
-        latestLocation: latest?.location,
-        latestWorkModel: latest?.workModel,
-        latestCompensation: latest?.compensation,
-        latestObservedAt: latest?.observedAt,
-        latestSnapshotId: latest?.id,
-        sourceSystems: sourceSystems,
-      };
-    });
+  public async getOpportunitySummaries(): Promise<readonly any[]> {
+    const opps = await this.getOpportunities();
+    return await Promise.all(
+      opps.map(async (opp: any) => {
+        const latest = await this.getLatestSnapshot(opp.id as OpportunityId);
+        const sourceSystems: string[] = [];
+        if (latest) {
+          const obsList = await this.getObservationsForSnapshot(
+            latest.id as SnapshotId,
+          );
+          sourceSystems.push(
+            ...new Set(obsList.map((observation) => observation.sourceSystem)),
+          );
+        }
+        return {
+          id: opp.id,
+          latestTitle: latest?.title,
+          latestOrganization: latest?.organization,
+          latestLocation: latest?.location,
+          latestWorkModel: latest?.workModel,
+          latestCompensation: latest?.compensation,
+          latestObservedAt: latest?.observedAt,
+          latestSnapshotId: latest?.id,
+          sourceSystems: sourceSystems,
+        };
+      }),
+    );
   }
 
-  public getOpportunity(id: OpportunityId) {
-    const result = this.db.db
+  public async getOpportunity(id: OpportunityId): Promise<any | null> {
+    const { opportunities } = getTables(this.db);
+    const db = this.db.db as any;
+    const rows = await db
       .select()
       .from(opportunities)
-      .where(eq(opportunities.id, id))
-      .get();
-    return result ?? null;
+      .where(eq(opportunities.id, id));
+    return rows[0] ?? null;
   }
 }

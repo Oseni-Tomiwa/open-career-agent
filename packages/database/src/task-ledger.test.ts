@@ -21,54 +21,54 @@ describe('background task ledger', () => {
   let database: DatabaseHandle;
   let ledger: BackgroundTaskLedger;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     directory = mkdtempSync(join(tmpdir(), 'oca-database-'));
     database = openDatabase(join(directory, 'test.sqlite'));
-    applyMigrations(database);
+    await applyMigrations(database);
     ledger = new BackgroundTaskLedger(database);
   });
 
-  afterEach(() => {
-    database.close();
+  afterEach(async () => {
+    await database.close();
     rmSync(directory, { recursive: true, force: true });
   });
 
-  it('opens a migrated database', () => {
-    expect(databaseIsReady(database)).toBe(true);
+  it('opens a migrated database', async () => {
+    expect(await databaseIsReady(database)).toBe(true);
     expect(
-      database.sqlite
-        .prepare(
+      database
+        .sqlite!.prepare(
           "select name from sqlite_master where type = 'table' and name = 'background_tasks'",
         )
         .get(),
     ).toBeDefined();
   });
 
-  it('enqueues idempotently and rejects conflicting reuse', () => {
-    const first = ledger.enqueue({
+  it('enqueues idempotently and rejects conflicting reuse', async () => {
+    const first = await ledger.enqueue({
       taskType: 'system.noop',
       payload: { probe: true },
       idempotencyKey: 'probe-1',
     });
-    const repeated = ledger.enqueue({
+    const repeated = await ledger.enqueue({
       taskType: 'system.noop',
       payload: { probe: true },
       idempotencyKey: 'probe-1',
     });
 
     expect(repeated.id).toBe(first.id);
-    expect(ledger.eventsFor(first.id)).toHaveLength(1);
-    expect(() =>
+    expect(await ledger.eventsFor(first.id)).toHaveLength(1);
+    await expect(
       ledger.enqueue({
         taskType: 'system.other',
         idempotencyKey: 'probe-1',
       }),
-    ).toThrow(IdempotencyConflictError);
+    ).rejects.toThrow(IdempotencyConflictError);
   });
 
-  it('claims an eligible task once and records success', () => {
-    const task = ledger.enqueue({ taskType: 'system.noop' });
-    const claimed = ledger.claimNext({
+  it('claims an eligible task once and records success', async () => {
+    const task = await ledger.enqueue({ taskType: 'system.noop' });
+    const claimed = await ledger.claimNext({
       leaseOwner: 'worker-a',
       leaseDurationMs: 30_000,
     });
@@ -76,45 +76,52 @@ describe('background task ledger', () => {
     expect(claimed?.id).toBe(task.id);
     expect(claimed?.attempts).toBe(1);
     expect(
-      ledger.claimNext({ leaseOwner: 'worker-b', leaseDurationMs: 30_000 }),
+      await ledger.claimNext({
+        leaseOwner: 'worker-b',
+        leaseDurationMs: 30_000,
+      }),
     ).toBeNull();
 
-    const succeeded = ledger.markSucceeded(task.id, 'worker-a');
+    const succeeded = await ledger.markSucceeded(task.id, 'worker-a');
     expect(succeeded.state).toBe('SUCCEEDED');
-    expect(ledger.eventsFor(task.id).map((event) => event.toState)).toEqual([
+    const events = await ledger.eventsFor(task.id);
+    expect(events.map((event) => event.toState)).toEqual([
       'PENDING',
       'RUNNING',
       'SUCCEEDED',
     ]);
   });
 
-  it('records terminal failure and protects lease ownership', () => {
-    const task = ledger.enqueue({ taskType: 'system.noop' });
-    ledger.claimNext({ leaseOwner: 'worker-a', leaseDurationMs: 30_000 });
+  it('records terminal failure and protects lease ownership', async () => {
+    const task = await ledger.enqueue({ taskType: 'system.noop' });
+    await ledger.claimNext({ leaseOwner: 'worker-a', leaseDurationMs: 30_000 });
 
-    expect(() => ledger.markSucceeded(task.id, 'worker-b')).toThrow(
+    await expect(ledger.markSucceeded(task.id, 'worker-b')).rejects.toThrow(
       TaskLeaseError,
     );
-    expect(ledger.markFailed(task.id, 'worker-a', 'invalid input').state).toBe(
-      'FAILED',
+    const failed = await ledger.markFailed(
+      task.id,
+      'worker-a',
+      'invalid input',
     );
+    expect(failed.state).toBe('FAILED');
   });
 
-  it('schedules retry and fails when attempts are exhausted', () => {
+  it('schedules retry and fails when attempts are exhausted', async () => {
     const start = new Date('2026-01-01T00:00:00.000Z');
     const retryAt = new Date('2026-01-01T00:01:00.000Z');
-    const task = ledger.enqueue({
+    const task = await ledger.enqueue({
       taskType: 'system.noop',
       maxAttempts: 2,
       availableAt: start,
     });
 
-    ledger.claimNext({
+    await ledger.claimNext({
       leaseOwner: 'worker-a',
       leaseDurationMs: 30_000,
       now: start,
     });
-    const pending = ledger.scheduleRetry(
+    const pending = await ledger.scheduleRetry(
       task.id,
       'worker-a',
       'temporary',
@@ -123,19 +130,19 @@ describe('background task ledger', () => {
     );
     expect(pending.state).toBe('PENDING');
     expect(
-      ledger.claimNext({
+      await ledger.claimNext({
         leaseOwner: 'worker-a',
         leaseDurationMs: 30_000,
         now: start,
       }),
     ).toBeNull();
 
-    ledger.claimNext({
+    await ledger.claimNext({
       leaseOwner: 'worker-a',
       leaseDurationMs: 30_000,
       now: retryAt,
     });
-    const failed = ledger.scheduleRetry(
+    const failed = await ledger.scheduleRetry(
       task.id,
       'worker-a',
       'still failing',
@@ -145,37 +152,37 @@ describe('background task ledger', () => {
     expect(failed.state).toBe('FAILED');
   });
 
-  it('recovers expired leases for another worker', () => {
+  it('recovers expired leases for another worker', async () => {
     const start = new Date('2026-01-01T00:00:00.000Z');
-    const task = ledger.enqueue({
+    const task = await ledger.enqueue({
       taskType: 'system.noop',
       availableAt: start,
     });
-    ledger.claimNext({
+    await ledger.claimNext({
       leaseOwner: 'worker-a',
       leaseDurationMs: 1000,
       now: start,
     });
 
-    expect(() =>
+    await expect(
       ledger.markSucceeded(
         task.id,
         'worker-a',
         new Date(start.getTime() + 1001),
       ),
-    ).toThrow(TaskLeaseError);
+    ).rejects.toThrow(TaskLeaseError);
 
-    const recovered = ledger.recoverExpiredLeases(
+    const recovered = await ledger.recoverExpiredLeases(
       new Date(start.getTime() + 1001),
     );
     expect(recovered).toHaveLength(1);
     expect(recovered[0]?.state).toBe('PENDING');
-    expect(
-      ledger.claimNext({
-        leaseOwner: 'worker-b',
-        leaseDurationMs: 1000,
-        now: new Date(start.getTime() + 1001),
-      })?.id,
-    ).toBe(task.id);
+
+    const nextClaimed = await ledger.claimNext({
+      leaseOwner: 'worker-b',
+      leaseDurationMs: 1000,
+      now: new Date(start.getTime() + 1001),
+    });
+    expect(nextClaimed?.id).toBe(task.id);
   });
 });

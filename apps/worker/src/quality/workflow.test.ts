@@ -63,14 +63,14 @@ describe('quality.evaluate durable workflow', () => {
   const listingId = 'sl_greenhouse_123';
   const observationId = 'so_greenhouse_123';
 
-  beforeEach(() => {
+  beforeEach(async () => {
     directory = mkdtempSync(join(tmpdir(), 'oca-qual-worker-'));
     database = openDatabase(join(directory, 'qual.sqlite'));
-    applyMigrations(database);
+    await applyMigrations(database);
 
     const candidateRepository = new CandidateRepository(database);
-    candidateRepository.createCandidate(candidate);
-    candidateRepository.addClaim({
+    await candidateRepository.createCandidate(candidate);
+    await candidateRepository.addClaim({
       id: claimId('claim-ts'),
       candidateId: candidate,
       kind: 'skill',
@@ -79,10 +79,10 @@ describe('quality.evaluate durable workflow', () => {
     });
 
     const opportunityRepository = new OpportunityRepository(database);
-    opportunityRepository.createOpportunity(opportunity);
+    await opportunityRepository.createOpportunity(opportunity);
 
     const sourceListingRepo = new SourceListingRepository(database);
-    sourceListingRepo.persistListing(
+    await sourceListingRepo.persistListing(
       listingId,
       {
         sourceSystem: 'greenhouse',
@@ -92,7 +92,7 @@ describe('quality.evaluate durable workflow', () => {
       opportunity,
       Date.now() - 5 * DAY_MS,
     );
-    sourceListingRepo.persistObservation(
+    await sourceListingRepo.persistObservation(
       observationId,
       listingId,
       {
@@ -112,7 +112,7 @@ describe('quality.evaluate durable workflow', () => {
       Date.now() - 5 * DAY_MS,
     );
 
-    opportunityRepository.appendSnapshot({
+    await opportunityRepository.appendSnapshot({
       id: snapshot,
       opportunityId: opportunity,
       title: 'Senior TypeScript Engineer',
@@ -128,15 +128,15 @@ describe('quality.evaluate durable workflow', () => {
     });
   });
 
-  afterEach(() => {
-    database.close();
+  afterEach(async () => {
+    await database.close();
     rmSync(directory, { recursive: true, force: true });
     vi.restoreAllMocks();
   });
 
-  function createEvaluation(id: string) {
+  async function createEvaluation(id: string) {
     const repository = new EvaluationRepository(database);
-    repository.persistEvaluation({
+    await repository.persistEvaluation({
       id: evaluationId(id),
       candidateId: candidate,
       snapshotId: snapshot,
@@ -150,7 +150,7 @@ describe('quality.evaluate durable workflow', () => {
   }
 
   it('populates Quality without modifying Eligibility or Fit', async () => {
-    const evaluation = createEvaluation('eval-populates-quality');
+    const evaluation = await createEvaluation('eval-populates-quality');
     const handlers = createQualityHandlers({ db: database });
 
     await handlers['quality.evaluate']!(
@@ -162,7 +162,7 @@ describe('quality.evaluate durable workflow', () => {
     );
 
     const repository = new EvaluationRepository(database);
-    const updated = repository.getEvaluation(evaluation);
+    const updated = await repository.getEvaluation(evaluation);
     expect(updated).toMatchObject({
       eligibilityState: 'eligible',
       eligibilityEngineVersion: 'eligibility-v1',
@@ -174,7 +174,7 @@ describe('quality.evaluate durable workflow', () => {
       qualityFreshnessBucket: 'recent',
     });
 
-    const findings = repository.getQualityFindings(evaluation);
+    const findings = await repository.getQualityFindings(evaluation);
     expect(findings.length).toBeGreaterThanOrEqual(10);
 
     const freshnessFinding = findings.find(
@@ -188,7 +188,7 @@ describe('quality.evaluate durable workflow', () => {
     expect(sourceConfidenceFinding?.state).toBe('STRONG');
 
     const evidenceRepo = new EvidenceRepository(database);
-    const evidenceList = evidenceRepo.getFindingEvidence(
+    const evidenceList = await evidenceRepo.getFindingEvidence(
       findingId(freshnessFinding!.id),
     );
     expect(evidenceList.length).toBeGreaterThanOrEqual(1);
@@ -198,7 +198,7 @@ describe('quality.evaluate durable workflow', () => {
   });
 
   it('treats Quality evaluation as write-once against older/stale writes', async () => {
-    const evaluation = createEvaluation('eval-stale-protection');
+    const evaluation = await createEvaluation('eval-stale-protection');
     const handlers = createQualityHandlers({ db: database });
 
     const newerTime = new Date('2026-08-30T14:00:00Z');
@@ -214,11 +214,10 @@ describe('quality.evaluate durable workflow', () => {
     );
 
     const repository = new EvaluationRepository(database);
-    const before = repository.getEvaluation(evaluation);
+    const before = await repository.getEvaluation(evaluation);
     expect(before?.qualityLevel).toBe('strong');
 
-    // Attempt stale write with older evaluatedAt
-    const rejected = repository.persistQualityResult({
+    const rejected = await repository.persistQualityResult({
       evaluationId: evaluation,
       quality: {
         level: 'weak',
@@ -232,11 +231,13 @@ describe('quality.evaluate durable workflow', () => {
     });
 
     expect(rejected).toBe(false);
-    expect(repository.getEvaluation(evaluation)?.qualityLevel).toBe('strong');
+    expect((await repository.getEvaluation(evaluation))?.qualityLevel).toBe(
+      'strong',
+    );
   });
 
   it('behaves idempotently when evaluated multiple times with identical inputs', async () => {
-    const evaluation = createEvaluation('eval-idempotent');
+    const evaluation = await createEvaluation('eval-idempotent');
     const handlers = createQualityHandlers({ db: database });
 
     await handlers['quality.evaluate']!(
@@ -248,9 +249,8 @@ describe('quality.evaluate durable workflow', () => {
     );
 
     const repository = new EvaluationRepository(database);
-    const findingsBefore = repository.getQualityFindings(evaluation);
+    const findingsBefore = await repository.getQualityFindings(evaluation);
 
-    // Second evaluation run
     await handlers['quality.evaluate']!(
       task('quality.evaluate', {
         evaluationId: evaluation,
@@ -259,15 +259,14 @@ describe('quality.evaluate durable workflow', () => {
       }),
     );
 
-    const findingsAfter = repository.getQualityFindings(evaluation);
+    const findingsAfter = await repository.getQualityFindings(evaluation);
     expect(findingsAfter.length).toBe(findingsBefore.length);
   });
 
   it('schedules next freshness boundary reevaluation and updates freshness upon reevaluation', async () => {
-    const evaluation = createEvaluation('eval-freshness-schedule');
+    const evaluation = await createEvaluation('eval-freshness-schedule');
     const handlers = createQualityHandlers({ db: database });
 
-    // Initial evaluation at day 5 (recent bucket)
     const baseTime = new Date('2026-08-30T10:00:00Z');
     await handlers['quality.evaluate']!(
       task('quality.evaluate', {
@@ -279,23 +278,22 @@ describe('quality.evaluate durable workflow', () => {
     );
 
     const ledger = new BackgroundTaskLedger(database);
-    const firstTask = ledger.claimNext({
+    const firstTask = await ledger.claimNext({
       leaseOwner: 'test-worker',
       leaseDurationMs: 30_000,
       now: new Date(baseTime.getTime() + 100 * DAY_MS),
     });
     expect(firstTask?.taskType).toBe('decision.evaluate');
 
-    const scheduled = ledger.claimNext({
+    const scheduled = await ledger.claimNext({
       leaseOwner: 'test-worker',
       leaseDurationMs: 30_000,
-      now: new Date(baseTime.getTime() + 100 * DAY_MS), // check future scheduled task
+      now: new Date(baseTime.getTime() + 100 * DAY_MS),
     });
 
     expect(scheduled).not.toBeNull();
     expect(scheduled?.taskType).toBe('quality.evaluate');
 
-    // Advance time to 40 days old (stale bucket) and reevaluate
     const advancedTime = new Date(baseTime.getTime() + 35 * DAY_MS);
     await handlers['quality.evaluate']!(
       task('quality.evaluate', {
@@ -307,14 +305,17 @@ describe('quality.evaluate durable workflow', () => {
     );
 
     const repository = new EvaluationRepository(database);
-    const updatedEval = repository.getCurrentEvaluation(candidate, snapshot);
+    const updatedEval = await repository.getCurrentEvaluation(
+      candidate,
+      snapshot,
+    );
     expect(updatedEval?.qualityFreshnessBucket).toBe('stale');
 
-    expect(repository.getEvaluation(evaluation)?.qualityFreshnessBucket).toBe(
-      'recent',
-    );
+    expect(
+      (await repository.getEvaluation(evaluation))?.qualityFreshnessBucket,
+    ).toBe('recent');
     expect(updatedEval?.supersedesEvaluationId).toBe(evaluation);
-    const findings = repository.getQualityFindings(
+    const findings = await repository.getQualityFindings(
       evaluationId(updatedEval!.id),
     );
     const freshnessFinding = findings.find(
@@ -326,7 +327,7 @@ describe('quality.evaluate durable workflow', () => {
   it('propagates a freshness revision through the queued Decision workflow without duplicate current Decisions', async () => {
     const repository = new EvaluationRepository(database);
     const evaluation = evaluationId('eval-freshness-decision');
-    repository.persistEvaluation({
+    await repository.persistEvaluation({
       id: evaluation,
       candidateId: candidate,
       snapshotId: snapshot,
@@ -351,16 +352,16 @@ describe('quality.evaluate durable workflow', () => {
         evaluatedAt: baseTime.toISOString(),
       }),
     );
-    const firstDecisionTask = ledger.claimNext({
+    const firstDecisionTask = await ledger.claimNext({
       leaseOwner: 'test-worker',
       leaseDurationMs: 30_000,
       now: new Date(Date.now() + 1),
     });
     expect(firstDecisionTask?.taskType).toBe('decision.evaluate');
     await decisionHandlers['decision.evaluate']!(firstDecisionTask!);
-    ledger.markSucceeded(firstDecisionTask!.id, 'test-worker');
+    await ledger.markSucceeded(firstDecisionTask!.id, 'test-worker');
     expect(
-      repository.getLatestDecisionForEvaluation(evaluation)?.priority,
+      (await repository.getLatestDecisionForEvaluation(evaluation))?.priority,
     ).toBe('high-priority');
 
     const advancedTime = new Date(baseTime.getTime() + 100 * DAY_MS);
@@ -372,14 +373,17 @@ describe('quality.evaluate durable workflow', () => {
         evaluatedAt: advancedTime.toISOString(),
       }),
     );
-    const current = repository.getCurrentEvaluation(candidate, snapshot)!;
+    const current = (await repository.getCurrentEvaluation(
+      candidate,
+      snapshot,
+    ))!;
     expect(current.id).not.toBe(evaluation);
     expect(current.supersedesEvaluationId).toBe(evaluation);
-    expect(repository.getEvaluation(evaluation)?.qualityFreshnessBucket).toBe(
-      'recent',
-    );
+    expect(
+      (await repository.getEvaluation(evaluation))?.qualityFreshnessBucket,
+    ).toBe('recent');
 
-    const secondDecisionTask = ledger.claimNext({
+    const secondDecisionTask = await ledger.claimNext({
       leaseOwner: 'test-worker',
       leaseDurationMs: 30_000,
       now: new Date(Date.now() + 1),
@@ -388,26 +392,27 @@ describe('quality.evaluate durable workflow', () => {
     expect(
       (secondDecisionTask?.payload as { evaluationId?: string }).evaluationId,
     ).toBe(current.id);
-    // Quality's aggregate can remain strong; Decision V1 nevertheless treats
-    // a very-stale RISK finding as unresolved operational currency.
+
     expect(current.qualityLevel).toBe('strong');
     await decisionHandlers['decision.evaluate']!(secondDecisionTask!);
-    ledger.markSucceeded(secondDecisionTask!.id, 'test-worker');
-    expect(repository.getCurrentDecision(candidate, snapshot)).toMatchObject({
+    await ledger.markSucceeded(secondDecisionTask!.id, 'test-worker');
+    expect(
+      await repository.getCurrentDecision(candidate, snapshot),
+    ).toMatchObject({
       evaluationId: current.id,
       priority: 'investigate',
       action: 'investigate',
     });
     expect(
       JSON.parse(
-        repository.getCurrentDecision(candidate, snapshot)?.reasonCodes ?? '[]',
+        (await repository.getCurrentDecision(candidate, snapshot))
+          ?.reasonCodes ?? '[]',
       ),
     ).toEqual(['LISTING_STALE']);
     expect(
-      repository.getLatestDecisionForEvaluation(evaluation)?.priority,
+      (await repository.getLatestDecisionForEvaluation(evaluation))?.priority,
     ).toBe('high-priority');
 
-    // Replaying the same scheduled quality task cannot create another current Decision.
     await qualityHandlers['quality.evaluate']!(
       task('quality.evaluate', {
         evaluationId: current.id,
@@ -417,7 +422,7 @@ describe('quality.evaluate durable workflow', () => {
       }),
     );
     expect(
-      repository.getCurrentDecision(candidate, snapshot)?.evaluationId,
+      (await repository.getCurrentDecision(candidate, snapshot))?.evaluationId,
     ).toBe(current.id);
   });
 
@@ -426,7 +431,6 @@ describe('quality.evaluate durable workflow', () => {
     const fitHandlers = createFitHandlers({ db: database });
     const qualityHandlers = createQualityHandlers({ db: database });
 
-    // Step 1: Run eligibility
     await eligibilityHandlers['eligibility.evaluate']!(
       task('eligibility.evaluate', {
         snapshotId: snapshot,
@@ -435,30 +439,28 @@ describe('quality.evaluate durable workflow', () => {
     );
 
     const ledger = new BackgroundTaskLedger(database);
-    const fitTask = ledger.claimNext({
+    const fitTask = await ledger.claimNext({
       leaseOwner: 'worker-1',
       leaseDurationMs: 30_000,
     });
     expect(fitTask?.taskType).toBe('fit.evaluate');
 
-    // Step 2: Run fit
     await fitHandlers['fit.evaluate']!(fitTask!);
-    ledger.markSucceeded(fitTask!.id, 'worker-1');
+    await ledger.markSucceeded(fitTask!.id, 'worker-1');
 
-    const qualityTask = ledger.claimNext({
+    const qualityTask = await ledger.claimNext({
       leaseOwner: 'worker-1',
       leaseDurationMs: 30_000,
     });
     expect(qualityTask?.taskType).toBe('quality.evaluate');
 
-    // Step 3: Run quality
     await qualityHandlers['quality.evaluate']!(qualityTask!);
-    ledger.markSucceeded(qualityTask!.id, 'worker-1');
+    await ledger.markSucceeded(qualityTask!.id, 'worker-1');
 
     const repository = new EvaluationRepository(database);
     const evalId = (qualityTask!.payload as { evaluationId: string })
       .evaluationId;
-    const finalEval = repository.getEvaluation(evaluationId(evalId));
+    const finalEval = await repository.getEvaluation(evaluationId(evalId));
 
     expect(finalEval?.eligibilityState).toBe('investigate');
     expect(finalEval?.fitLevel).toBe('weak');
@@ -486,6 +488,7 @@ describe('quality.evaluate durable workflow', () => {
 
     const config = {
       environment: 'test' as const,
+      databaseEngine: 'sqlite' as const,
       databasePath: join(directory, 'qual.sqlite'),
       migrationMode: 'auto' as const,
       pollIntervalMs: 1000,
@@ -498,48 +501,44 @@ describe('quality.evaluate durable workflow', () => {
     const fitHandlers = createFitHandlers({ db: database });
     const qualityHandlers = createQualityHandlers({ db: database });
 
-    // Ingest
     await taskHandlers['source.greenhouse.discover']!(
       task('source.greenhouse.discover', { boardId: 'stripe' }),
     );
 
     const ledger = new BackgroundTaskLedger(database);
 
-    // Eligibility task
-    const eligTask = ledger.claimNext({
+    const eligTask = await ledger.claimNext({
       leaseOwner: 'worker-1',
       leaseDurationMs: 30_000,
     });
     expect(eligTask?.taskType).toBe('eligibility.evaluate');
     await eligibilityHandlers['eligibility.evaluate']!(eligTask!);
-    ledger.markSucceeded(eligTask!.id, 'worker-1');
+    await ledger.markSucceeded(eligTask!.id, 'worker-1');
 
-    // Fit task
-    const fitTask = ledger.claimNext({
+    const fitTask = await ledger.claimNext({
       leaseOwner: 'worker-1',
       leaseDurationMs: 30_000,
     });
     expect(fitTask?.taskType).toBe('fit.evaluate');
     await fitHandlers['fit.evaluate']!(fitTask!);
-    ledger.markSucceeded(fitTask!.id, 'worker-1');
+    await ledger.markSucceeded(fitTask!.id, 'worker-1');
 
-    // Quality task
-    const qualTask = ledger.claimNext({
+    const qualTask = await ledger.claimNext({
       leaseOwner: 'worker-1',
       leaseDurationMs: 30_000,
     });
     expect(qualTask?.taskType).toBe('quality.evaluate');
     await qualityHandlers['quality.evaluate']!(qualTask!);
-    ledger.markSucceeded(qualTask!.id, 'worker-1');
+    await ledger.markSucceeded(qualTask!.id, 'worker-1');
 
     const evalId = (qualTask!.payload as { evaluationId: string }).evaluationId;
     const evalRepo = new EvaluationRepository(database);
-    const evaluation = evalRepo.getEvaluation(evaluationId(evalId));
+    const evaluation = await evalRepo.getEvaluation(evaluationId(evalId));
 
     expect(evaluation?.qualityLevel).toBe('strong');
     expect(evaluation?.qualityFreshnessBucket).toBe('recent');
 
-    const findings = evalRepo.getQualityFindings(evaluationId(evalId));
+    const findings = await evalRepo.getQualityFindings(evaluationId(evalId));
     expect(findings.length).toBeGreaterThan(0);
 
     const sourceConf = findings.find(

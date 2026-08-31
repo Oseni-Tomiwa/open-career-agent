@@ -7,15 +7,7 @@ import type {
 } from '@oca/schemas';
 
 import type { DatabaseHandle } from '../client.js';
-import {
-  candidateClaims,
-  decisions,
-  discoveryMatches,
-  evaluationFindings,
-  evaluations,
-  opportunitySnapshots,
-  sourceListings,
-} from '../schema.js';
+import { getTables } from '../schema-helper.js';
 
 export interface CareerSignalsOptions {
   now?: Date;
@@ -26,27 +18,37 @@ export interface CareerSignalsOptions {
 export class CareerSignalsRepository {
   public constructor(private readonly db: DatabaseHandle) {}
 
-  public getCareerSignals(
+  public async getCareerSignals(
     cId: CandidateId,
     options: CareerSignalsOptions = {},
-  ): CareerSignalsResponse {
+  ): Promise<CareerSignalsResponse> {
     const now = options.now ?? new Date();
     const minRepeatedThreshold = options.minRepeatedThreshold ?? 2;
     const minBlockerThreshold = options.minBlockerThreshold ?? 1;
 
+    const {
+      discoveryMatches,
+      opportunitySnapshots,
+      decisions,
+      evaluations,
+      sourceListings,
+      evaluationFindings,
+      candidateClaims,
+    } = getTables(this.db);
+    const db = this.db.db as any;
+
     // 1. Fetch Candidate's Discovered Matches
-    const matches = this.db.db
+    const matches = await db
       .select({
         opportunityId: discoveryMatches.opportunityId,
         searchTargetId: discoveryMatches.searchTargetId,
       })
       .from(discoveryMatches)
-      .where(eq(discoveryMatches.candidateId, cId))
-      .all();
+      .where(eq(discoveryMatches.candidateId, cId));
 
     // 2. Collect unique canonical opportunity IDs to prevent double-counting
     const uniqueOppIds = Array.from(
-      new Set(matches.map((m) => m.opportunityId)),
+      new Set(matches.map((m: any) => m.opportunityId)),
     );
 
     if (uniqueOppIds.length === 0) {
@@ -76,19 +78,19 @@ export class CareerSignalsRepository {
       evaluationId: string;
     }> = [];
 
-    for (const oppIdStr of uniqueOppIds) {
+    for (const oppIdStr of uniqueOppIds as string[]) {
       // Latest Snapshot
-      const snapshots = this.db.db
+      const snapshots = await db
         .select()
         .from(opportunitySnapshots)
-        .where(eq(opportunitySnapshots.opportunityId, oppIdStr))
-        .all();
+        .where(eq(opportunitySnapshots.opportunityId, oppIdStr));
+
       if (snapshots.length === 0) continue;
       const latestSnapshot = snapshots[snapshots.length - 1];
       if (!latestSnapshot) continue;
 
       // Check if opportunity decision indicates listing is explicitly closed
-      const candDecisions = this.db.db
+      const candDecisions = await db
         .select()
         .from(decisions)
         .where(
@@ -96,8 +98,8 @@ export class CareerSignalsRepository {
             eq(decisions.candidateId, cId),
             eq(decisions.snapshotId, latestSnapshot.id),
           ),
-        )
-        .all();
+        );
+
       const latestDecision = candDecisions[candDecisions.length - 1];
 
       if (
@@ -109,7 +111,7 @@ export class CareerSignalsRepository {
       }
 
       // Latest Unsuperseded Evaluation
-      const evals = this.db.db
+      const evals = await db
         .select()
         .from(evaluations)
         .where(
@@ -118,18 +120,18 @@ export class CareerSignalsRepository {
             eq(evaluations.snapshotId, latestSnapshot.id),
             isNull(evaluations.supersededAt),
           ),
-        )
-        .all();
+        );
+
       if (evals.length === 0) continue;
       const currentEval = evals[evals.length - 1];
       if (!currentEval) continue;
 
       // Source System provenance
-      const listings = this.db.db
+      const listings = await db
         .select()
         .from(sourceListings)
-        .where(eq(sourceListings.opportunityId, oppIdStr))
-        .all();
+        .where(eq(sourceListings.opportunityId, oppIdStr));
+
       const sourceSystem = listings[0]?.sourceSystem ?? 'unknown';
 
       activeOpps.push({
@@ -166,23 +168,21 @@ export class CareerSignalsRepository {
 
     // 4. Fetch all evaluation findings for current unsuperseded evaluations
     const evalIds = activeOpps.map((o) => o.evaluationId);
-    const allFindings = this.db.db
+    const allFindings = await db
       .select()
       .from(evaluationFindings)
-      .where(inArray(evaluationFindings.evaluationId, evalIds))
-      .all();
+      .where(inArray(evaluationFindings.evaluationId, evalIds));
 
     // Fetch Candidate Memory claims for evidence gap comparison
-    const candidateClaimRecords = this.db.db
+    const candidateClaimRecords = await db
       .select()
       .from(candidateClaims)
-      .where(eq(candidateClaims.candidateId, cId))
-      .all();
+      .where(eq(candidateClaims.candidateId, cId));
 
     const establishedClaimTypes = new Set(
       candidateClaimRecords
-        .filter((c) => c.state === 'SUPPORTED')
-        .map((c) => c.kind.toLowerCase()),
+        .filter((c: any) => c.state === 'SUPPORTED')
+        .map((c: any) => c.kind.toLowerCase()),
     );
 
     // 5. Aggregate Findings by Dimension Key & Signal Family

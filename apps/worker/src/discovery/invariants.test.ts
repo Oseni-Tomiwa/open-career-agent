@@ -21,7 +21,6 @@ import {
   searchTargetId,
   snapshotId,
 } from '@oca/domain';
-import { isSafeHttpUrl } from '@oca/sources';
 import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -31,8 +30,9 @@ import { createFitHandlers } from '../fit/workflow.js';
 import { createQualityHandlers } from '../quality/workflow.js';
 import { BackgroundWorker } from '../worker.js';
 import { createDiscoveryHandlers } from './workflow.js';
+import { isSafeHttpUrl } from '@oca/sources';
 
-describe('Adversarial Invariant Freeze Review Matrix', () => {
+describe('Multi-Source Discovery V1 Invariants Audit', () => {
   let directory: string;
   let db: DatabaseHandle;
   let ledger: BackgroundTaskLedger;
@@ -46,10 +46,10 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
   const candidateA = candidateId('cand-inv-a');
   const candidateB = candidateId('cand-inv-b');
 
-  beforeEach(() => {
+  beforeEach(async () => {
     directory = mkdtempSync(join(tmpdir(), 'oca-inv-worker-test-'));
     db = openDatabase(join(directory, 'test.sqlite'));
-    applyMigrations(db);
+    await applyMigrations(db);
 
     ledger = new BackgroundTaskLedger(db);
     targetRepo = new SearchTargetRepository(db);
@@ -58,8 +58,8 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
     evalRepo = new EvaluationRepository(db);
     sourceRepo = new SourceListingRepository(db);
 
-    candRepo.createCandidate(candidateA);
-    candRepo.createCandidate(candidateB);
+    await candRepo.createCandidate(candidateA);
+    await candRepo.createCandidate(candidateB);
 
     worker = new BackgroundWorker({
       ledger,
@@ -77,14 +77,14 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
-    db.close();
+    await db.close();
     rmSync(directory, { recursive: true, force: true });
   });
 
   it('1. SAME-SOURCE IDEMPOTENCY: repeated discovery reuses listing identity and avoids duplicate canonical opportunities or discovery matches', async () => {
-    const target = targetRepo.createSearchTarget(candidateA, {
+    const target = await targetRepo.createSearchTarget(candidateA, {
       name: 'Idempotency Target',
       targetRoles: ['Backend Engineer'],
       sources: [{ sourceSystem: 'lever', boardId: 'acme' }],
@@ -106,15 +106,14 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       ),
     );
 
-    // Run 1
     const run1 = discoveryRunId('dr-idem-1');
-    targetRepo.createDiscoveryRun(
+    await targetRepo.createDiscoveryRun(
       run1,
       candidateA,
       searchTargetId(target.id),
       'lever',
     );
-    ledger.enqueue({
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -127,15 +126,14 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       // Drain worker queue
     }
 
-    // Run 2 (Same listing rediscovered)
     const run2 = discoveryRunId('dr-idem-2');
-    targetRepo.createDiscoveryRun(
+    await targetRepo.createDiscoveryRun(
       run2,
       candidateA,
       searchTargetId(target.id),
       'lever',
     );
-    ledger.enqueue({
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -148,29 +146,24 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       // Drain worker queue
     }
 
-    // ASSERTIONS:
-    // Exactly 1 canonical Opportunity created
-    const summaries = oppRepo.getOpportunitySummaries();
+    const summaries = await oppRepo.getOpportunitySummaries();
     expect(summaries).toHaveLength(1);
 
-    // Exactly 1 SourceListing exists for (lever, lever-idem-100)
-    const listing = sourceRepo.findListingByExternalId(
+    const listing = await sourceRepo.findListingByExternalId(
       'lever',
       'lever-idem-100',
     );
     expect(listing).not.toBeNull();
 
-    // SourceObservations recorded
-    const obsList = sourceRepo.listObservationsForListing(listing!.id);
+    const obsList = await sourceRepo.listObservationsForListing(listing!.id);
     expect(obsList.length).toBeGreaterThanOrEqual(1);
 
-    // DiscoveryMatch for (candidateA, target.id, opportunityId) is deduped / single record per candidate target match
-    const matches = targetRepo.listDiscoveryMatches(candidateA);
+    const matches = await targetRepo.listDiscoveryMatches(candidateA);
     expect(matches).toHaveLength(1);
   });
 
   it('2. CROSS-SOURCE NON-MERGING: weakly similar roles from Greenhouse and Lever remain separate canonical Opportunities', async () => {
-    const target = targetRepo.createSearchTarget(candidateA, {
+    const target = await targetRepo.createSearchTarget(candidateA, {
       name: 'Cross-Source Non-Merging Target',
       targetRoles: ['Backend Engineer'],
       sources: [
@@ -222,8 +215,12 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
     });
 
     const runId = discoveryRunId('dr-cross-merge');
-    targetRepo.createDiscoveryRun(runId, candidateA, searchTargetId(target.id));
-    ledger.enqueue({
+    await targetRepo.createDiscoveryRun(
+      runId,
+      candidateA,
+      searchTargetId(target.id),
+    );
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -236,20 +233,19 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       // Drain worker queue
     }
 
-    // ASSERTION: Must produce TWO distinct canonical Opportunities
-    const summaries = oppRepo.getOpportunitySummaries();
+    const summaries = await oppRepo.getOpportunitySummaries();
     expect(summaries).toHaveLength(2);
     expect(summaries[0]?.id).not.toBe(summaries[1]?.id);
   });
 
   it('3. MULTI-CANDIDATE SAME SOURCE LISTING: two candidates discovering exact same listing share ONE Opportunity with TWO candidate matches and independent evaluations', async () => {
-    const targetA = targetRepo.createSearchTarget(candidateA, {
+    const targetA = await targetRepo.createSearchTarget(candidateA, {
       name: 'Target A',
       targetRoles: ['Frontend Engineer'],
       sources: [{ sourceSystem: 'ashby', boardId: 'linear' }],
     });
 
-    const targetB = targetRepo.createSearchTarget(candidateB, {
+    const targetB = await targetRepo.createSearchTarget(candidateB, {
       name: 'Target B',
       targetRoles: ['Frontend Engineer'],
       sources: [{ sourceSystem: 'ashby', boardId: 'linear' }],
@@ -274,15 +270,14 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       ),
     );
 
-    // Candidate A Discovery
     const runA = discoveryRunId('dr-shared-cand-a');
-    targetRepo.createDiscoveryRun(
+    await targetRepo.createDiscoveryRun(
       runA,
       candidateA,
       searchTargetId(targetA.id),
       'ashby',
     );
-    ledger.enqueue({
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -295,15 +290,14 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       // Drain worker queue
     }
 
-    // Candidate B Discovery
     const runB = discoveryRunId('dr-shared-cand-b');
-    targetRepo.createDiscoveryRun(
+    await targetRepo.createDiscoveryRun(
       runB,
       candidateB,
       searchTargetId(targetB.id),
       'ashby',
     );
-    ledger.enqueue({
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateB,
@@ -316,29 +310,25 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       // Drain worker queue
     }
 
-    // ASSERTIONS:
-    // ONE canonical Opportunity
-    const summaries = oppRepo.getOpportunitySummaries();
+    const summaries = await oppRepo.getOpportunitySummaries();
     expect(summaries).toHaveLength(1);
 
-    // TWO Candidate-owned Discovery Matches
-    const matchesA = targetRepo.listDiscoveryMatches(candidateA);
-    const matchesB = targetRepo.listDiscoveryMatches(candidateB);
+    const matchesA = await targetRepo.listDiscoveryMatches(candidateA);
+    const matchesB = await targetRepo.listDiscoveryMatches(candidateB);
     expect(matchesA).toHaveLength(1);
     expect(matchesB).toHaveLength(1);
     expect(matchesA[0]?.opportunityId).toBe(matchesB[0]?.opportunityId);
     expect(matchesA[0]?.candidateId).toBe(candidateA);
     expect(matchesB[0]?.candidateId).toBe(candidateB);
 
-    // Independent Evaluation lineages
     const oppId = opportunityId(summaries[0]!.id);
-    const snap = oppRepo.getLatestSnapshot(oppId)!;
+    const snap = (await oppRepo.getLatestSnapshot(oppId))!;
 
-    const evalA = evalRepo.getCurrentEvaluation(
+    const evalA = await evalRepo.getCurrentEvaluation(
       candidateA,
       snapshotId(snap.id),
     );
-    const evalB = evalRepo.getCurrentEvaluation(
+    const evalB = await evalRepo.getCurrentEvaluation(
       candidateB,
       snapshotId(snap.id),
     );
@@ -348,18 +338,17 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
   });
 
   it('4. INTELLIGENCE SOURCE NEUTRALITY: equivalent snapshots from Greenhouse, Lever, and Ashby yield identical Eligibility, Fit, and Decision outcomes', async () => {
-    // Construct 3 targets for Candidate A targeting 3 different sources
-    const targetGh = targetRepo.createSearchTarget(candidateA, {
+    const targetGh = await targetRepo.createSearchTarget(candidateA, {
       name: 'Greenhouse Target',
       targetRoles: ['Software Engineer'],
       sources: [{ sourceSystem: 'greenhouse', boardId: 'co-gh' }],
     });
-    const targetLev = targetRepo.createSearchTarget(candidateA, {
+    const targetLev = await targetRepo.createSearchTarget(candidateA, {
       name: 'Lever Target',
       targetRoles: ['Software Engineer'],
       sources: [{ sourceSystem: 'lever', boardId: 'co-lev' }],
     });
-    const targetAsh = targetRepo.createSearchTarget(candidateA, {
+    const targetAsh = await targetRepo.createSearchTarget(candidateA, {
       name: 'Ashby Target',
       targetRoles: ['Software Engineer'],
       sources: [{ sourceSystem: 'ashby', boardId: 'co-ash' }],
@@ -370,7 +359,6 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
     const content = 'TypeScript and Distributed Systems experience required.';
     const location = 'Remote';
 
-    // Fixtures
     const ghFixture = {
       jobs: [
         {
@@ -426,14 +414,13 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       return Promise.reject(new Error('Unknown URL'));
     });
 
-    // Run GH
     const runGh = discoveryRunId('dr-neut-gh');
-    targetRepo.createDiscoveryRun(
+    await targetRepo.createDiscoveryRun(
       runGh,
       candidateA,
       searchTargetId(targetGh.id),
     );
-    ledger.enqueue({
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -446,14 +433,13 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       // Drain worker queue
     }
 
-    // Run Lever
     const runLev = discoveryRunId('dr-neut-lev');
-    targetRepo.createDiscoveryRun(
+    await targetRepo.createDiscoveryRun(
       runLev,
       candidateA,
       searchTargetId(targetLev.id),
     );
-    ledger.enqueue({
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -466,14 +452,13 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       // Drain worker queue
     }
 
-    // Run Ashby
     const runAsh = discoveryRunId('dr-neut-ash');
-    targetRepo.createDiscoveryRun(
+    await targetRepo.createDiscoveryRun(
       runAsh,
       candidateA,
       searchTargetId(targetAsh.id),
     );
-    ledger.enqueue({
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -486,22 +471,25 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       // Drain worker queue
     }
 
-    const matches = targetRepo.listDiscoveryMatches(candidateA);
+    const matches = await targetRepo.listDiscoveryMatches(candidateA);
     expect(matches).toHaveLength(3);
 
-    const evals = matches.map((m) => {
-      const snap = oppRepo.getLatestSnapshot(opportunityId(m.opportunityId))!;
-      const ev = evalRepo.getCurrentEvaluation(
-        candidateA,
-        snapshotId(snap.id),
-      )!;
-      const dec = evalRepo.getCurrentDecisionForEvaluation(
-        evaluationId(ev.id),
-      )!;
-      return { ev, dec };
-    });
+    const evals = await Promise.all(
+      matches.map(async (m) => {
+        const snap = (await oppRepo.getLatestSnapshot(
+          opportunityId(m.opportunityId),
+        ))!;
+        const ev = (await evalRepo.getCurrentEvaluation(
+          candidateA,
+          snapshotId(snap.id),
+        ))!;
+        const dec = (await evalRepo.getCurrentDecisionForEvaluation(
+          evaluationId(ev.id),
+        ))!;
+        return { ev, dec };
+      }),
+    );
 
-    // ASSERTIONS: Eligibility, Fit, Quality, and Decision outcomes are IDENTICAL across ATS origins
     expect(evals[0]?.ev.eligibilityState).toBe(evals[1]?.ev.eligibilityState);
     expect(evals[1]?.ev.eligibilityState).toBe(evals[2]?.ev.eligibilityState);
 
@@ -512,9 +500,8 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
     expect(evals[1]?.dec.priority).toBe(evals[2]?.dec.priority);
   });
 
-  it('5. MIGRATION & EXISTING GREENHOUSE COMPATIBILITY: pre-multi-source targets and listings map seamlessly', () => {
-    // Create target without explicit sources array (simulating pre-multi-source database row)
-    const legacyTarget = targetRepo.createSearchTarget(candidateA, {
+  it('5. MIGRATION & EXISTING GREENHOUSE COMPATIBILITY: pre-multi-source targets and listings map seamlessly', async () => {
+    const legacyTarget = await targetRepo.createSearchTarget(candidateA, {
       name: 'Legacy Greenhouse Target',
       targetRoles: ['Backend Engineer'],
     });
@@ -525,7 +512,6 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
   });
 
   it('6. SOURCE CONFIG VALIDATION & SSRF SAFETY: invalid board identifiers and unsafe URLs fail or sanitize honestly', async () => {
-    // Unsafe URL check
     expect(isSafeHttpUrl('javascript:alert(1)')).toBe(false);
     expect(isSafeHttpUrl('data:text/html,<script>alert(1)</script>')).toBe(
       false,
@@ -535,20 +521,19 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       true,
     );
 
-    // Path traversal in boardId
-    const targetBad = targetRepo.createSearchTarget(candidateA, {
+    const targetBad = await targetRepo.createSearchTarget(candidateA, {
       name: 'SSRF Target',
       sources: [{ sourceSystem: 'lever', boardId: '../../admin' }],
     });
 
     const runId = discoveryRunId('dr-ssrf');
-    targetRepo.createDiscoveryRun(
+    await targetRepo.createDiscoveryRun(
       runId,
       candidateA,
       searchTargetId(targetBad.id),
       'lever',
     );
-    ledger.enqueue({
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -561,14 +546,13 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       // Drain worker queue
     }
 
-    const runRecord = targetRepo.getDiscoveryRun(runId);
+    const runRecord = await targetRepo.getDiscoveryRun(runId);
     expect(runRecord?.status).toBe('FAILED');
     expect(runRecord?.errorSummary).toContain('Invalid Lever site identifier');
   });
 
   it('7. FAILURE SEMANTICS: valid empty board completes clean; HTTP 500/network error fails honestly', async () => {
-    // Test Valid Empty Board
-    const targetEmpty = targetRepo.createSearchTarget(candidateA, {
+    const targetEmpty = await targetRepo.createSearchTarget(candidateA, {
       name: 'Empty Target',
       sources: [{ sourceSystem: 'ashby', boardId: 'empty-board' }],
     });
@@ -578,13 +562,13 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
     );
 
     const runEmptyId = discoveryRunId('dr-empty');
-    targetRepo.createDiscoveryRun(
+    await targetRepo.createDiscoveryRun(
       runEmptyId,
       candidateA,
       searchTargetId(targetEmpty.id),
       'ashby',
     );
-    ledger.enqueue({
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -597,13 +581,12 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       // Drain worker queue
     }
 
-    const runEmpty = targetRepo.getDiscoveryRun(runEmptyId);
+    const runEmpty = await targetRepo.getDiscoveryRun(runEmptyId);
     expect(runEmpty?.status).toBe('COMPLETED');
     expect(runEmpty?.discoveredCount).toBe(0);
     expect(runEmpty?.errorSummary).toBeNull();
 
-    // Test Network Error
-    const targetNetworkErr = targetRepo.createSearchTarget(candidateA, {
+    const targetNetworkErr = await targetRepo.createSearchTarget(candidateA, {
       name: 'Network Error Target',
       sources: [{ sourceSystem: 'lever', boardId: 'network-down' }],
     });
@@ -616,13 +599,13 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
     );
 
     const runNetId = discoveryRunId('dr-net-err');
-    targetRepo.createDiscoveryRun(
+    await targetRepo.createDiscoveryRun(
       runNetId,
       candidateA,
       searchTargetId(targetNetworkErr.id),
       'lever',
     );
-    ledger.enqueue({
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -635,7 +618,7 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       // Drain worker queue
     }
 
-    const runNet = targetRepo.getDiscoveryRun(runNetId);
+    const runNet = await targetRepo.getDiscoveryRun(runNetId);
     expect(runNet?.status).toBe('FAILED');
     expect(runNet?.errorSummary).toContain(
       'Lever API returned 504 Gateway Timeout',
@@ -643,7 +626,7 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
   });
 
   it('9. GREENHOUSE REGRESSION: existing Greenhouse search target executes through generalized discovery workflow', async () => {
-    const targetGh = targetRepo.createSearchTarget(candidateA, {
+    const targetGh = await targetRepo.createSearchTarget(candidateA, {
       name: 'Greenhouse Reg Target',
       targetRoles: ['Backend Engineer'],
       sources: [{ sourceSystem: 'greenhouse', boardId: 'figma' }],
@@ -666,13 +649,13 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
     );
 
     const runId = discoveryRunId('dr-gh-reg');
-    targetRepo.createDiscoveryRun(
+    await targetRepo.createDiscoveryRun(
       runId,
       candidateA,
       searchTargetId(targetGh.id),
       'greenhouse',
     );
-    ledger.enqueue({
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -685,7 +668,7 @@ describe('Adversarial Invariant Freeze Review Matrix', () => {
       // Drain worker queue
     }
 
-    const runRecord = targetRepo.getDiscoveryRun(runId);
+    const runRecord = await targetRepo.getDiscoveryRun(runId);
     expect(runRecord?.status).toBe('COMPLETED');
     expect(runRecord?.discoveredCount).toBe(1);
     expect(runRecord?.acceptedCount).toBe(1);

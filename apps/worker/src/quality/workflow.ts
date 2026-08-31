@@ -106,7 +106,7 @@ export function createQualityHandlers(deps: {
   const taskLedger = new BackgroundTaskLedger(deps.db);
   const engine = new QualityEngine();
 
-  const handleEvaluate = (task: BackgroundTask) => {
+  const handleEvaluate = async (task: BackgroundTask) => {
     const payload = task.payload as {
       evaluationId?: string;
       snapshotId?: string;
@@ -120,7 +120,7 @@ export function createQualityHandlers(deps: {
 
     let evaluationId = payload.evaluationId as EvaluationId;
     const snapshotId = payload.snapshotId as SnapshotId;
-    const evaluation = evaluationRepository.getEvaluation(evaluationId);
+    const evaluation = await evaluationRepository.getEvaluation(evaluationId);
     if (!evaluation) {
       throw new Error(`Evaluation not found: ${payload.evaluationId}`);
     }
@@ -131,7 +131,7 @@ export function createQualityHandlers(deps: {
       throw new Error('Quality task input does not match its Evaluation');
     }
 
-    const snapshot = opportunityRepository.getSnapshot(snapshotId);
+    const snapshot = await opportunityRepository.getSnapshot(snapshotId);
     if (!snapshot) {
       throw new Error(`Snapshot not found: ${payload.snapshotId}`);
     }
@@ -141,11 +141,30 @@ export function createQualityHandlers(deps: {
       : new Date();
 
     const rawObservations =
-      opportunityRepository.getObservationsForSnapshot(snapshotId);
-    const mappedObservations = rawObservations.map(mapObservation);
+      await opportunityRepository.getObservationsForSnapshot(snapshotId);
+    const mappedObservations = rawObservations.map((obs: any) =>
+      mapObservation({
+        ...obs,
+        observedAt:
+          obs.observedAt instanceof Date
+            ? obs.observedAt
+            : new Date(obs.observedAt),
+        sourceUpdatedAt: obs.sourceUpdatedAt
+          ? obs.sourceUpdatedAt instanceof Date
+            ? obs.sourceUpdatedAt
+            : new Date(obs.sourceUpdatedAt)
+          : null,
+      }),
+    );
 
     const anchor = qualityFreshnessAnchor({
-      snapshot,
+      snapshot: {
+        ...snapshot,
+        observedAt:
+          snapshot.observedAt instanceof Date
+            ? snapshot.observedAt
+            : new Date(snapshot.observedAt),
+      },
       sourceObservations: mappedObservations,
       evaluatedAt: evalDate,
     });
@@ -162,20 +181,18 @@ export function createQualityHandlers(deps: {
       sourceObservations: mappedObservations,
     });
 
-    const existing = evaluationRepository.findQualityEvaluation({
+    const existing = await evaluationRepository.findQualityEvaluation({
       snapshotId,
       engineVersion: engine.version,
       inputFingerprint,
     });
 
-    // Freshness and source changes create a new Evaluation revision.  Never
-    // replace Quality findings that an existing Decision may reference.
     if (
       evaluation.qualityInputFingerprint &&
       evaluation.qualityInputFingerprint !== inputFingerprint
     ) {
       const replacementId = randomUUID() as EvaluationId;
-      evaluationRepository.forkEvaluation({
+      await evaluationRepository.forkEvaluation({
         id: replacementId,
         sourceEvaluationId: evaluationId,
         copy: ['eligibility', 'fit'],
@@ -184,7 +201,7 @@ export function createQualityHandlers(deps: {
     }
 
     if (existing && existing.id !== evaluationId) {
-      evaluationRepository.copyAssessment({
+      await evaluationRepository.copyAssessment({
         sourceEvaluationId: existing.id as EvaluationId,
         targetEvaluationId: evaluationId,
         category: 'quality',
@@ -194,7 +211,10 @@ export function createQualityHandlers(deps: {
         snapshot: {
           id: snapshot.id,
           fingerprint: snapshot.fingerprint,
-          observedAt: snapshot.observedAt,
+          observedAt:
+            snapshot.observedAt instanceof Date
+              ? snapshot.observedAt
+              : new Date(snapshot.observedAt),
           title: snapshot.title,
           organization: snapshot.organization,
           content: snapshot.content,
@@ -207,7 +227,7 @@ export function createQualityHandlers(deps: {
         evaluatedAt: evalDate,
       });
 
-      evaluationRepository.persistQualityResult({
+      await evaluationRepository.persistQualityResult({
         evaluationId,
         quality: {
           level: result.overallLevel,
@@ -236,7 +256,7 @@ export function createQualityHandlers(deps: {
       });
     }
 
-    taskLedger.enqueue({
+    await taskLedger.enqueue({
       taskType: 'decision.evaluate',
       payload: {
         evaluationId,
@@ -248,7 +268,7 @@ export function createQualityHandlers(deps: {
 
     const nextBoundary = nextFreshnessBoundary(anchor, evalDate);
     if (nextBoundary && nextBoundary.getTime() > evalDate.getTime()) {
-      taskLedger.enqueue({
+      await taskLedger.enqueue({
         taskType: 'quality.evaluate',
         payload: {
           evaluationId,

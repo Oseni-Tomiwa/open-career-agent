@@ -37,20 +37,20 @@ describe('ApplicationRepository & State Machine Matrix', () => {
   const opp1 = opportunityId('opp-app-1');
   const snap1 = snapshotId('snap-app-1');
 
-  beforeEach(() => {
+  beforeEach(async () => {
     directory = mkdtempSync(join(tmpdir(), 'oca-app-repo-test-'));
     database = openDatabase(join(directory, 'test.sqlite'));
-    applyMigrations(database);
+    await applyMigrations(database);
 
     candRepo = new CandidateRepository(database);
     oppRepo = new OpportunityRepository(database);
     evalRepo = new EvaluationRepository(database);
     appRepo = new ApplicationRepository(database);
 
-    candRepo.createCandidate(candidateA);
-    candRepo.createCandidate(candidateB);
-    oppRepo.createOpportunity(opp1);
-    oppRepo.appendSnapshot({
+    await candRepo.createCandidate(candidateA);
+    await candRepo.createCandidate(candidateB);
+    await oppRepo.createOpportunity(opp1);
+    await oppRepo.appendSnapshot({
       id: snap1,
       opportunityId: opp1,
       title: 'Senior Distributed Systems Engineer',
@@ -60,8 +60,8 @@ describe('ApplicationRepository & State Machine Matrix', () => {
     });
   });
 
-  afterEach(() => {
-    database.close();
+  afterEach(async () => {
+    await database.close();
     rmSync(directory, { recursive: true, force: true });
   });
 
@@ -153,14 +153,17 @@ describe('ApplicationRepository & State Machine Matrix', () => {
     );
   });
 
-  it('treats Interview -> Interview as an idempotent no-op', () => {
-    const app = appRepo.createApplication({
+  it('treats Interview -> Interview as an idempotent no-op', async () => {
+    const app = await appRepo.createApplication({
       candidateId: candidateA,
       opportunityId: opp1,
       status: 'Interview',
     });
-    const beforeEvents = appRepo.getEvents(candidateA, app.id as ApplicationId);
-    const repeated = appRepo.updateApplication({
+    const beforeEvents = await appRepo.getEvents(
+      candidateA,
+      app.id as ApplicationId,
+    );
+    const repeated = await appRepo.updateApplication({
       id: app.id as ApplicationId,
       candidateId: candidateA,
       expectedUpdatedAt: app.updatedAt,
@@ -168,13 +171,13 @@ describe('ApplicationRepository & State Machine Matrix', () => {
     });
 
     expect(repeated.updatedAt).toEqual(app.updatedAt);
-    expect(appRepo.getEvents(candidateA, app.id as ApplicationId)).toEqual(
-      beforeEvents,
-    );
+    expect(
+      await appRepo.getEvents(candidateA, app.id as ApplicationId),
+    ).toEqual(beforeEvents);
   });
 
-  it('creates an application and logs initial creation event', () => {
-    const app = appRepo.createApplication({
+  it('creates an application and logs initial creation event', async () => {
+    const app = await appRepo.createApplication({
       candidateId: candidateA,
       opportunityId: opp1,
       status: 'Preparing',
@@ -186,36 +189,36 @@ describe('ApplicationRepository & State Machine Matrix', () => {
     expect(app.opportunityId).toBe(opp1);
     expect(app.note).toBe('Tailoring résumé for Cloud platform role');
 
-    const events = appRepo.getEvents(candidateA, app.id as ApplicationId);
+    const events = await appRepo.getEvents(candidateA, app.id as ApplicationId);
     expect(events).toHaveLength(2);
     expect(events[0]!.eventType).toBe('application_created');
     expect(events[1]!.eventType).toBe('note_added');
   });
 
-  it('enforces uniqueness per (candidateId, opportunityId)', () => {
-    appRepo.createApplication({
+  it('enforces uniqueness per (candidateId, opportunityId)', async () => {
+    await appRepo.createApplication({
       candidateId: candidateA,
       opportunityId: opp1,
       status: 'Saved',
     });
 
-    expect(() =>
+    await expect(
       appRepo.createApplication({
         candidateId: candidateA,
         opportunityId: opp1,
         status: 'Preparing',
       }),
-    ).toThrowError(/already exists/i);
+    ).rejects.toThrowError(/already exists/i);
   });
 
-  it('allows Candidate A and Candidate B to track applications to the same Opportunity independently', () => {
-    const appA = appRepo.createApplication({
+  it('allows Candidate A and Candidate B to track applications to the same Opportunity independently', async () => {
+    const appA = await appRepo.createApplication({
       candidateId: candidateA,
       opportunityId: opp1,
       status: 'Applied',
     });
 
-    const appB = appRepo.createApplication({
+    const appB = await appRepo.createApplication({
       candidateId: candidateB,
       opportunityId: opp1,
       status: 'Saved',
@@ -227,23 +230,23 @@ describe('ApplicationRepository & State Machine Matrix', () => {
     expect(appB.candidateId).toBe(candidateB);
     expect(appB.status).toBe('Saved');
 
-    const listA = appRepo.listApplications(candidateA);
+    const listA = await appRepo.listApplications(candidateA);
     expect(listA).toHaveLength(1);
     expect(listA[0]!.id).toBe(appA.id);
 
-    const listB = appRepo.listApplications(candidateB);
+    const listB = await appRepo.listApplications(candidateB);
     expect(listB).toHaveLength(1);
     expect(listB[0]!.id).toBe(appB.id);
   });
 
-  it('atomically updates status and appends status_changed event', () => {
-    const app = appRepo.createApplication({
+  it('atomically updates status and appends status_changed event', async () => {
+    const app = await appRepo.createApplication({
       candidateId: candidateA,
       opportunityId: opp1,
       status: 'Preparing',
     });
 
-    const updated = appRepo.updateApplication({
+    const updated = await appRepo.updateApplication({
       id: app.id as ApplicationId,
       candidateId: candidateA,
       status: 'Applied',
@@ -252,13 +255,13 @@ describe('ApplicationRepository & State Machine Matrix', () => {
     expect(updated.status).toBe('Applied');
     expect(updated.submittedAt).not.toBeNull();
 
-    const events = appRepo.getEvents(candidateA, app.id as ApplicationId);
+    const events = await appRepo.getEvents(candidateA, app.id as ApplicationId);
     expect(events.map((e) => e.eventType)).toContain('status_changed');
     expect(events.map((e) => e.eventType)).toContain('application_submitted');
   });
 
-  it('prevents stale-write race conditions with expectedUpdatedAt optimistic locking', () => {
-    const app = appRepo.createApplication({
+  it('prevents stale-write race conditions with expectedUpdatedAt optimistic locking', async () => {
+    const app = await appRepo.createApplication({
       candidateId: candidateA,
       opportunityId: opp1,
       status: 'Preparing',
@@ -266,25 +269,25 @@ describe('ApplicationRepository & State Machine Matrix', () => {
 
     const staleTimestamp = new Date(Date.now() - 100000).toISOString();
 
-    expect(() =>
+    await expect(
       appRepo.updateApplication({
         id: app.id as ApplicationId,
         candidateId: candidateA,
         status: 'Applied',
         expectedUpdatedAt: staleTimestamp,
       }),
-    ).toThrowError(ApplicationError);
+    ).rejects.toThrowError(ApplicationError);
   });
 
-  it('keeps exactly one valid sequence when two stale views attempt updates', () => {
-    const app = appRepo.createApplication({
+  it('keeps exactly one valid sequence when two stale views attempt updates', async () => {
+    const app = await appRepo.createApplication({
       candidateId: candidateA,
       opportunityId: opp1,
       status: 'Preparing',
     });
     const staleVersion = app.updatedAt.toISOString();
 
-    appRepo.updateApplication(
+    await appRepo.updateApplication(
       {
         id: app.id as ApplicationId,
         candidateId: candidateA,
@@ -294,89 +297,92 @@ describe('ApplicationRepository & State Machine Matrix', () => {
       app.updatedAt.getTime(),
     );
 
-    expect(() =>
+    await expect(
       appRepo.updateApplication({
         id: app.id as ApplicationId,
         candidateId: candidateA,
         status: 'Withdrawn',
         expectedUpdatedAt: staleVersion,
       }),
-    ).toThrowError(/stale write conflict/i);
+    ).rejects.toThrowError(/stale write conflict/i);
+
+    const updatedApp = await appRepo.getApplication(
+      candidateA,
+      app.id as ApplicationId,
+    );
+    expect(updatedApp?.status).toBe('Applied');
+    const events = await appRepo.getEvents(candidateA, app.id as ApplicationId);
     expect(
-      appRepo.getApplication(candidateA, app.id as ApplicationId)?.status,
-    ).toBe('Applied');
-    expect(
-      appRepo
-        .getEvents(candidateA, app.id as ApplicationId)
-        .filter((event) => event.eventType === 'status_changed'),
+      events.filter((event) => event.eventType === 'status_changed'),
     ).toHaveLength(1);
   });
 
-  it('completes a follow-up idempotently and removes its due state', () => {
-    const app = appRepo.createApplication({
+  it('completes a follow-up idempotently and removes its due state', async () => {
+    const app = await appRepo.createApplication({
       candidateId: candidateA,
       opportunityId: opp1,
       status: 'Applied',
     });
     const dueAt = new Date('2026-09-01T09:00:00.000Z');
-    const scheduled = appRepo.updateApplication({
+    const scheduled = await appRepo.updateApplication({
       id: app.id as ApplicationId,
       candidateId: candidateA,
       followUpDueAt: dueAt,
       followUpNote: 'Email the recruiter',
     });
     const completedAt = new Date('2026-09-01T10:00:00.000Z');
-    const completed = appRepo.updateApplication({
+    const completed = await appRepo.updateApplication({
       id: app.id as ApplicationId,
       candidateId: candidateA,
       expectedUpdatedAt: scheduled.updatedAt,
       followUpCompletedAt: completedAt,
     });
-    const repeated = appRepo.updateApplication({
+    const repeated = await appRepo.updateApplication({
       id: app.id as ApplicationId,
       candidateId: candidateA,
       expectedUpdatedAt: completed.updatedAt,
       followUpCompletedAt: new Date('2026-09-01T11:00:00.000Z'),
     });
 
-    const current = appRepo.getApplication(candidateA, app.id as ApplicationId);
+    const current = await appRepo.getApplication(
+      candidateA,
+      app.id as ApplicationId,
+    );
     expect(current?.followUpCompletedAt).toEqual(completedAt);
     expect(repeated.updatedAt).toEqual(completed.updatedAt);
+    const events = await appRepo.getEvents(candidateA, app.id as ApplicationId);
     expect(
-      appRepo
-        .getEvents(candidateA, app.id as ApplicationId)
-        .filter((event) => event.eventType === 'follow_up_completed'),
+      events.filter((event) => event.eventType === 'follow_up_completed'),
     ).toHaveLength(1);
   });
 
-  it('enforces candidate ownership for detail, history, and appended events', () => {
-    const app = appRepo.createApplication({
+  it('enforces candidate ownership for detail, history, and appended events', async () => {
+    const app = await appRepo.createApplication({
       candidateId: candidateA,
       opportunityId: opp1,
     });
     expect(
-      appRepo.getApplication(candidateB, app.id as ApplicationId),
+      await appRepo.getApplication(candidateB, app.id as ApplicationId),
     ).toBeNull();
-    expect(() =>
+    await expect(
       appRepo.getEvents(candidateB, app.id as ApplicationId),
-    ).toThrowError(/not found for candidate/i);
-    expect(() =>
+    ).rejects.toThrowError(/not found for candidate/i);
+    await expect(
       appRepo.appendEvent({
         candidateId: candidateB,
         applicationId: app.id as ApplicationId,
         eventType: 'candidate_activity',
         detail: 'Must not be appended',
       }),
-    ).toThrowError(/not found for candidate/i);
-    expect(appRepo.getEvents(candidateA, app.id as ApplicationId)).toHaveLength(
-      1,
-    );
+    ).rejects.toThrowError(/not found for candidate/i);
+    const events = await appRepo.getEvents(candidateA, app.id as ApplicationId);
+    expect(events).toHaveLength(1);
   });
 
-  it('keeps Decision and intelligence records unchanged across lifecycle and notes', () => {
+  it('keeps Decision and intelligence records unchanged across lifecycle and notes', async () => {
     const evalId = evaluationId('eval-reverse-non-interference');
     const decId = decisionId('dec-reverse-non-interference');
-    evalRepo.persistEvaluation({
+    await evalRepo.persistEvaluation({
       id: evalId,
       candidateId: candidateA,
       snapshotId: snap1,
@@ -387,7 +393,7 @@ describe('ApplicationRepository & State Machine Matrix', () => {
       qualityLevel: 'strong',
       qualityInputFingerprint: 'quality-reverse',
     });
-    evalRepo.persistDecision({
+    await evalRepo.persistDecision({
       id: decId,
       evaluationId: evalId,
       candidateId: candidateA,
@@ -405,48 +411,48 @@ describe('ApplicationRepository & State Machine Matrix', () => {
       evaluatedAt: new Date('2026-08-31T10:00:00.000Z'),
     });
     const before = {
-      evaluation: evalRepo.getEvaluation(evalId),
-      decision: evalRepo.getLatestDecisionForEvaluation(evalId),
-      claims: database.sqlite.prepare('select * from candidate_claims').all(),
-      evidence: database.sqlite.prepare('select * from evidence').all(),
+      evaluation: await evalRepo.getEvaluation(evalId),
+      decision: await evalRepo.getLatestDecisionForEvaluation(evalId),
+      claims: database.sqlite!.prepare('select * from candidate_claims').all(),
+      evidence: database.sqlite!.prepare('select * from evidence').all(),
     };
 
-    let app = appRepo.createApplication({
+    let app = await appRepo.createApplication({
       candidateId: candidateA,
       opportunityId: opp1,
       status: 'Preparing',
       originatingDecisionId: decId,
     });
-    app = appRepo.updateApplication({
+    app = await appRepo.updateApplication({
       id: app.id as ApplicationId,
       candidateId: candidateA,
       expectedUpdatedAt: app.updatedAt,
       status: 'Applied',
       note: 'Candidate-authored private note',
     });
-    appRepo.updateApplication({
+    await appRepo.updateApplication({
       id: app.id as ApplicationId,
       candidateId: candidateA,
       expectedUpdatedAt: app.updatedAt,
       status: 'Assessment',
     });
 
-    expect(evalRepo.getEvaluation(evalId)).toEqual(before.evaluation);
-    expect(evalRepo.getLatestDecisionForEvaluation(evalId)).toEqual(
+    expect(await evalRepo.getEvaluation(evalId)).toEqual(before.evaluation);
+    expect(await evalRepo.getLatestDecisionForEvaluation(evalId)).toEqual(
       before.decision,
     );
     expect(
-      database.sqlite.prepare('select * from candidate_claims').all(),
+      database.sqlite!.prepare('select * from candidate_claims').all(),
     ).toEqual(before.claims);
-    expect(database.sqlite.prepare('select * from evidence').all()).toEqual(
+    expect(database.sqlite!.prepare('select * from evidence').all()).toEqual(
       before.evidence,
     );
   });
 
-  it('rejects cross-candidate originating Decision provenance', () => {
+  it('rejects cross-candidate originating Decision provenance', async () => {
     const evalId = evaluationId('eval-candidate-b-origin');
     const decId = decisionId('dec-candidate-b-origin');
-    evalRepo.persistEvaluation({
+    await evalRepo.persistEvaluation({
       id: evalId,
       candidateId: candidateB,
       snapshotId: snap1,
@@ -455,7 +461,7 @@ describe('ApplicationRepository & State Machine Matrix', () => {
       fitInputFingerprint: 'fit-b',
       qualityInputFingerprint: 'quality-b',
     });
-    evalRepo.persistDecision({
+    await evalRepo.persistDecision({
       id: decId,
       evaluationId: evalId,
       candidateId: candidateB,
@@ -473,18 +479,18 @@ describe('ApplicationRepository & State Machine Matrix', () => {
       evaluatedAt: new Date('2026-08-31T11:00:00.000Z'),
     });
 
-    expect(() =>
+    await expect(
       appRepo.createApplication({
         candidateId: candidateA,
         opportunityId: opp1,
         originatingDecisionId: decId,
       }),
-    ).toThrowError(/does not belong to this candidate/i);
-    expect(appRepo.listApplications(candidateA)).toEqual([]);
+    ).rejects.toThrowError(/does not belong to this candidate/i);
+    expect(await appRepo.listApplications(candidateA)).toEqual([]);
   });
 
-  it('verifies Decision state changes do NOT mutate Application status', () => {
-    const app = appRepo.createApplication({
+  it('verifies Decision state changes do NOT mutate Application status', async () => {
+    const app = await appRepo.createApplication({
       candidateId: candidateA,
       opportunityId: opp1,
       status: 'Applied',
@@ -492,14 +498,14 @@ describe('ApplicationRepository & State Machine Matrix', () => {
 
     // Evaluate Decision to BLOCKED
     const evalId = evaluationId('eval-app-1');
-    evalRepo.persistEvaluation({
+    await evalRepo.persistEvaluation({
       id: evalId,
       candidateId: candidateA,
       snapshotId: snap1,
       eligibilityState: 'ineligible',
     });
 
-    evalRepo.persistDecision({
+    await evalRepo.persistDecision({
       id: decisionId('dec-app-1'),
       evaluationId: evalId,
       candidateId: candidateA,
@@ -518,7 +524,7 @@ describe('ApplicationRepository & State Machine Matrix', () => {
     });
 
     // Application status must remain APPLIED
-    const currentApp = appRepo.getApplication(
+    const currentApp = await appRepo.getApplication(
       candidateA,
       app.id as ApplicationId,
     );

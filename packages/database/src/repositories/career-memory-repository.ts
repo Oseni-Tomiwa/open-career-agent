@@ -11,15 +11,8 @@ import {
 } from '@oca/domain';
 
 import type { DatabaseHandle } from '../client.js';
-import {
-  candidateClaimEvidence,
-  candidateClaims,
-  candidates,
-  evidence,
-  opportunitySnapshots,
-  type CLAIM_CONFIDENCE_LEVELS,
-  type EVIDENCE_STATES,
-} from '../schema.js';
+import { getTables } from '../schema-helper.js';
+import type { CLAIM_CONFIDENCE_LEVELS, EVIDENCE_STATES } from '../schema.js';
 import { BackgroundTaskLedger } from '../task-ledger.js';
 
 type ClaimConfidence = (typeof CLAIM_CONFIDENCE_LEVELS)[number];
@@ -55,27 +48,33 @@ export class CareerMemoryRepository {
     this.ledger = new BackgroundTaskLedger(handle);
   }
 
-  public getProfile(candidateId: CandidateId) {
-    const candidate = this.handle.db
+  public async getProfile(candidateId: CandidateId): Promise<any | null> {
+    const { candidates, candidateClaims } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    const candRows = await db
       .select()
       .from(candidates)
-      .where(eq(candidates.id, candidateId))
-      .get();
+      .where(eq(candidates.id, candidateId));
+    const candidate = candRows[0];
     if (!candidate) return null;
 
-    const claims = this.handle.db
+    const claimRows = await db
       .select()
       .from(candidateClaims)
-      .where(eq(candidateClaims.candidateId, candidateId))
-      .all()
-      .map((claim) => ({
+      .where(eq(candidateClaims.candidateId, candidateId));
+
+    const claims = await Promise.all(
+      claimRows.map(async (claim: any) => ({
         ...claim,
-        evidence: this.getClaimEvidence(claim.id as ClaimId),
-      }));
+        evidence: await this.getClaimEvidence(claim.id as ClaimId),
+      })),
+    );
+
     return { candidate, claims };
   }
 
-  public createClaim(
+  public async createClaim(
     input: {
       readonly candidateId: CandidateId;
       readonly kind: string;
@@ -86,8 +85,8 @@ export class CareerMemoryRepository {
       readonly evidence?: ManualEvidenceInput;
     },
     timestamp = Date.now(),
-  ) {
-    this.requireCandidate(input.candidateId);
+  ): Promise<any> {
+    await this.requireCandidate(input.candidateId);
     if (input.state === 'SUPPORTED') {
       if (!input.evidence || !isTrusted(input.evidence.state)) {
         throw new CareerMemoryError(
@@ -102,23 +101,25 @@ export class CareerMemoryRepository {
       ? (`evidence-${randomUUID()}` as EvidenceId)
       : null;
     const now = new Date(timestamp);
-    this.handle.db.transaction((transaction) => {
-      transaction
-        .insert(candidateClaims)
-        .values({
-          id: claimId,
-          candidateId: input.candidateId,
-          kind: normalize(input.kind, 'Claim kind'),
-          value: normalize(input.value, 'Claim value'),
-          scope: optional(input.scope),
-          state: input.state,
-          confidence: input.confidence ?? null,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .run();
+    const { candidateClaims, candidates } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    await db.transaction(async (transaction: any) => {
+      await transaction.insert(candidateClaims).values({
+        id: claimId,
+        candidateId: input.candidateId,
+        kind: normalize(input.kind, 'Claim kind'),
+        value: normalize(input.value, 'Claim value'),
+        scope: optional(input.scope),
+        state: input.state,
+        confidence: input.confidence ?? null,
+        createdAt: now,
+        updatedAt: now,
+      });
+
       if (input.evidence && evidenceId) {
-        insertManualEvidence(
+        await insertManualEvidence(
+          this.handle,
           transaction,
           claimId,
           evidenceId,
@@ -126,17 +127,18 @@ export class CareerMemoryRepository {
           now,
         );
       }
-      transaction
+
+      await transaction
         .update(candidates)
         .set({ updatedAt: now })
-        .where(eq(candidates.id, input.candidateId))
-        .run();
+        .where(eq(candidates.id, input.candidateId));
     });
-    this.enqueueReevaluation(input.candidateId, claimId);
-    return this.requireClaim(input.candidateId, claimId);
+
+    await this.enqueueReevaluation(input.candidateId, claimId);
+    return await this.requireClaim(input.candidateId, claimId);
   }
 
-  public updateClaim(
+  public async updateClaim(
     input: {
       readonly candidateId: CandidateId;
       readonly claimId: ClaimId;
@@ -146,8 +148,8 @@ export class CareerMemoryRepository {
       readonly confidence?: ClaimConfidence | null;
     },
     timestamp = Date.now(),
-  ) {
-    const current = this.requireClaim(input.candidateId, input.claimId);
+  ): Promise<any> {
+    const current = await this.requireClaim(input.candidateId, input.claimId);
     const nextState = input.state ?? current.state;
     if (!canTransitionClaimState(current.state, nextState)) {
       throw new CareerMemoryError(
@@ -168,7 +170,11 @@ export class CareerMemoryRepository {
         'IMMUTABLE_SUPPORTED_CONTENT',
       );
     }
-    this.requireTransitionEvidence(current.state, nextState, input.claimId);
+    await this.requireTransitionEvidence(
+      current.state,
+      nextState,
+      input.claimId,
+    );
 
     const next = {
       value:
@@ -190,8 +196,11 @@ export class CareerMemoryRepository {
     }
 
     const now = new Date(timestamp);
-    this.handle.db.transaction((transaction) => {
-      transaction
+    const { candidateClaims, candidates } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    await db.transaction(async (transaction: any) => {
+      await transaction
         .update(candidateClaims)
         .set({ ...next, updatedAt: now })
         .where(
@@ -199,19 +208,18 @@ export class CareerMemoryRepository {
             eq(candidateClaims.id, input.claimId),
             eq(candidateClaims.candidateId, input.candidateId),
           ),
-        )
-        .run();
-      transaction
+        );
+      await transaction
         .update(candidates)
         .set({ updatedAt: now })
-        .where(eq(candidates.id, input.candidateId))
-        .run();
+        .where(eq(candidates.id, input.candidateId));
     });
-    this.enqueueReevaluation(input.candidateId, input.claimId);
-    return this.requireClaim(input.candidateId, input.claimId);
+
+    await this.enqueueReevaluation(input.candidateId, input.claimId);
+    return await this.requireClaim(input.candidateId, input.claimId);
   }
 
-  public attachEvidence(
+  public async attachEvidence(
     input: {
       readonly candidateId: CandidateId;
       readonly claimId: ClaimId;
@@ -219,10 +227,11 @@ export class CareerMemoryRepository {
       readonly transitionTo?: CareerMemoryClaimState;
     },
     timestamp = Date.now(),
-  ) {
-    const current = this.requireClaim(input.candidateId, input.claimId);
+  ): Promise<{ claim: any; evidence: any }> {
+    const current = await this.requireClaim(input.candidateId, input.claimId);
     validateManualEvidence(input.evidence);
-    const existing = this.getClaimEvidence(input.claimId).find(
+    const existingList = await this.getClaimEvidence(input.claimId);
+    const existing = existingList.find(
       (item) =>
         item.evidenceType ===
           normalize(input.evidence.evidenceType, 'Evidence type') &&
@@ -245,7 +254,7 @@ export class CareerMemoryRepository {
     if (
       required === 'trusted' &&
       !isTrusted(input.evidence.state) &&
-      !this.hasEvidence(input.claimId, 'trusted')
+      !(await this.hasEvidence(input.claimId, 'trusted'))
     ) {
       throw new CareerMemoryError(
         'This transition requires candidate-confirmed Evidence.',
@@ -255,7 +264,7 @@ export class CareerMemoryRepository {
     if (
       required === 'disputed' &&
       input.evidence.state !== 'disputed' &&
-      !this.hasEvidence(input.claimId, 'disputed')
+      !(await this.hasEvidence(input.claimId, 'disputed'))
     ) {
       throw new CareerMemoryError(
         'A conflicting claim requires disputed Evidence.',
@@ -270,9 +279,13 @@ export class CareerMemoryRepository {
       ? (existing.id as EvidenceId)
       : (`evidence-${randomUUID()}` as EvidenceId);
     const now = new Date(timestamp);
-    this.handle.db.transaction((transaction) => {
+    const { candidateClaims, candidates } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    await db.transaction(async (transaction: any) => {
       if (!existing) {
-        insertManualEvidence(
+        await insertManualEvidence(
+          this.handle,
           transaction,
           input.claimId,
           evidenceId,
@@ -281,7 +294,7 @@ export class CareerMemoryRepository {
         );
       }
       if (nextState !== current.state) {
-        transaction
+        await transaction
           .update(candidateClaims)
           .set({ state: nextState, updatedAt: now })
           .where(
@@ -289,30 +302,37 @@ export class CareerMemoryRepository {
               eq(candidateClaims.id, input.claimId),
               eq(candidateClaims.candidateId, input.candidateId),
             ),
-          )
-          .run();
+          );
       }
-      transaction
+      await transaction
         .update(candidates)
         .set({ updatedAt: now })
-        .where(eq(candidates.id, input.candidateId))
-        .run();
+        .where(eq(candidates.id, input.candidateId));
     });
-    this.enqueueReevaluation(input.candidateId, input.claimId);
+
+    await this.enqueueReevaluation(input.candidateId, input.claimId);
+    const updatedClaim = await this.requireClaim(
+      input.candidateId,
+      input.claimId,
+    );
+    const updatedEvidence = (await this.getClaimEvidence(input.claimId)).find(
+      (item) => item.id === evidenceId,
+    )!;
+
     return {
-      claim: this.requireClaim(input.candidateId, input.claimId),
-      evidence: this.getClaimEvidence(input.claimId).find(
-        (item) => item.id === evidenceId,
-      )!,
+      claim: updatedClaim,
+      evidence: updatedEvidence,
     };
   }
 
-  private requireCandidate(candidateId: CandidateId) {
-    const candidate = this.handle.db
+  private async requireCandidate(candidateId: CandidateId): Promise<any> {
+    const { candidates } = getTables(this.handle);
+    const db = this.handle.db as any;
+    const rows = await db
       .select()
       .from(candidates)
-      .where(eq(candidates.id, candidateId))
-      .get();
+      .where(eq(candidates.id, candidateId));
+    const candidate = rows[0];
     if (!candidate) {
       throw new CareerMemoryError(
         'Candidate not found.',
@@ -322,9 +342,14 @@ export class CareerMemoryRepository {
     return candidate;
   }
 
-  private requireClaim(candidateId: CandidateId, claimId: ClaimId) {
-    this.requireCandidate(candidateId);
-    const claim = this.handle.db
+  private async requireClaim(
+    candidateId: CandidateId,
+    claimId: ClaimId,
+  ): Promise<any> {
+    await this.requireCandidate(candidateId);
+    const { candidateClaims } = getTables(this.handle);
+    const db = this.handle.db as any;
+    const rows = await db
       .select()
       .from(candidateClaims)
       .where(
@@ -332,16 +357,19 @@ export class CareerMemoryRepository {
           eq(candidateClaims.id, claimId),
           eq(candidateClaims.candidateId, candidateId),
         ),
-      )
-      .get();
+      );
+    const claim = rows[0];
     if (!claim) {
       throw new CareerMemoryError('Claim not found.', 'CLAIM_NOT_FOUND');
     }
     return claim;
   }
 
-  private getClaimEvidence(claimId: ClaimId) {
-    return this.handle.db
+  private async getClaimEvidence(claimId: ClaimId): Promise<readonly any[]> {
+    const { evidence, candidateClaimEvidence } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    return await db
       .select({
         id: evidence.id,
         evidenceType: evidence.evidenceType,
@@ -356,25 +384,28 @@ export class CareerMemoryRepository {
         eq(evidence.id, candidateClaimEvidence.evidenceId),
       )
       .where(eq(candidateClaimEvidence.claimId, claimId))
-      .orderBy(asc(evidence.createdAt))
-      .all();
+      .orderBy(asc(evidence.createdAt));
   }
 
-  private hasEvidence(claimId: ClaimId, required: 'trusted' | 'disputed') {
-    return this.getClaimEvidence(claimId).some((item) =>
+  private async hasEvidence(
+    claimId: ClaimId,
+    required: 'trusted' | 'disputed',
+  ): Promise<boolean> {
+    const list = await this.getClaimEvidence(claimId);
+    return list.some((item) =>
       required === 'trusted'
         ? isTrusted(item.state)
         : item.state === 'disputed',
     );
   }
 
-  private requireTransitionEvidence(
+  private async requireTransitionEvidence(
     from: CareerMemoryClaimState,
     to: CareerMemoryClaimState,
     claimId: ClaimId,
-  ) {
+  ): Promise<void> {
     const required = claimStateTransitionRequiresEvidence(from, to);
-    if (required && !this.hasEvidence(claimId, required)) {
+    if (required && !(await this.hasEvidence(claimId, required))) {
       throw new CareerMemoryError(
         required === 'trusted'
           ? 'This transition requires candidate-confirmed Evidence.'
@@ -384,15 +415,20 @@ export class CareerMemoryRepository {
     }
   }
 
-  private enqueueReevaluation(candidateId: CandidateId, claimId: ClaimId) {
-    const claim = this.requireClaim(candidateId, claimId);
+  private async enqueueReevaluation(
+    candidateId: CandidateId,
+    claimId: ClaimId,
+  ): Promise<void> {
+    const claim = await this.requireClaim(candidateId, claimId);
+    const claimEvidences = await this.getClaimEvidence(claimId);
+
     const semanticInput = {
       kind: claim.kind,
       value: claim.value,
       scope: claim.scope,
       state: claim.state,
       confidence: claim.confidence,
-      evidence: this.getClaimEvidence(claimId).map((item) => ({
+      evidence: claimEvidences.map((item) => ({
         evidenceType: item.evidenceType,
         sourceReference: item.sourceReference,
         excerpt: item.excerpt,
@@ -403,11 +439,16 @@ export class CareerMemoryRepository {
       .update(JSON.stringify(semanticInput))
       .digest('hex')
       .slice(0, 20);
-    for (const snapshot of this.handle.db
+
+    const { opportunitySnapshots } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    const snapshots = await db
       .select({ id: opportunitySnapshots.id })
-      .from(opportunitySnapshots)
-      .all()) {
-      this.ledger.enqueue({
+      .from(opportunitySnapshots);
+
+    for (const snapshot of snapshots) {
+      await this.ledger.enqueue({
         taskType: 'eligibility.evaluate',
         payload: { snapshotId: snapshot.id, candidateId },
         idempotencyKey: `career-memory-${claimId}-${snapshot.id}-${fingerprint}`,
@@ -450,27 +491,27 @@ function validateManualEvidence(input: ManualEvidenceInput): void {
   sourceReference(input);
 }
 
-function insertManualEvidence(
-  transaction: DatabaseHandle['db'],
+async function insertManualEvidence(
+  handle: DatabaseHandle,
+  transaction: any,
   claimId: ClaimId,
   evidenceId: EvidenceId,
   input: ManualEvidenceInput,
   createdAt: Date,
-): void {
+): Promise<void> {
   validateManualEvidence(input);
-  transaction
-    .insert(evidence)
-    .values({
-      id: evidenceId,
-      evidenceType: normalize(input.evidenceType, 'Evidence type'),
-      sourceReference: sourceReference(input),
-      excerpt: normalize(input.excerpt, 'Evidence excerpt'),
-      state: input.state,
-      createdAt,
-    })
-    .run();
-  transaction
+  const { evidence, candidateClaimEvidence } = getTables(handle);
+
+  await transaction.insert(evidence).values({
+    id: evidenceId,
+    evidenceType: normalize(input.evidenceType, 'Evidence type'),
+    sourceReference: sourceReference(input),
+    excerpt: normalize(input.excerpt, 'Evidence excerpt'),
+    state: input.state,
+    createdAt,
+  });
+
+  await transaction
     .insert(candidateClaimEvidence)
-    .values({ claimId, evidenceId })
-    .run();
+    .values({ claimId, evidenceId });
 }

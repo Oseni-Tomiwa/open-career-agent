@@ -1,13 +1,12 @@
 import { eq, and } from 'drizzle-orm';
 import type { DatabaseHandle } from '../client.js';
-import { sourceListings, sourceObservations } from '../schema.js';
-import type { OpportunityId } from '@oca/domain'; // I will use SourceRecordId conceptually as ObservationId if needed, but the prompt says to use appropriate names.
+import { getTables } from '../schema-helper.js';
+import type { OpportunityId } from '@oca/domain';
 
-// The prompt just said to have a dedicated source observation model. I'll just use string IDs.
 export class SourceListingRepository {
   public constructor(private readonly db: DatabaseHandle) {}
 
-  public persistListing(
+  public async persistListing(
     id: string,
     listing: {
       sourceSystem: string;
@@ -16,8 +15,11 @@ export class SourceListingRepository {
     },
     opportunityId?: string,
     observedAt: number = Date.now(),
-  ): void {
-    this.db.db
+  ): Promise<void> {
+    const { sourceListings } = getTables(this.db);
+    const db = this.db.db as any;
+
+    await db
       .insert(sourceListings)
       .values({
         id,
@@ -34,15 +36,16 @@ export class SourceListingRepository {
           sourceUrl: listing.sourceUrl,
           updatedAt: new Date(observedAt),
         },
-      })
-      .run();
+      });
   }
 
-  public findListingByExternalId(
+  public async findListingByExternalId(
     sourceSystem: string,
     sourceExternalId: string,
-  ) {
-    const result = this.db.db
+  ): Promise<any | null> {
+    const { sourceListings } = getTables(this.db);
+    const db = this.db.db as any;
+    const rows = await db
       .select()
       .from(sourceListings)
       .where(
@@ -50,23 +53,23 @@ export class SourceListingRepository {
           eq(sourceListings.sourceSystem, sourceSystem),
           eq(sourceListings.sourceExternalId, sourceExternalId),
         ),
-      )
-      .get();
-    return result ?? null;
+      );
+    return rows[0] ?? null;
   }
 
-  public associateListingWithOpportunity(
+  public async associateListingWithOpportunity(
     id: string,
     opportunityId: OpportunityId,
-  ): void {
-    this.db.db
+  ): Promise<void> {
+    const { sourceListings } = getTables(this.db);
+    const db = this.db.db as any;
+    await db
       .update(sourceListings)
       .set({ opportunityId, updatedAt: new Date() })
-      .where(eq(sourceListings.id, id))
-      .run();
+      .where(eq(sourceListings.id, id));
   }
 
-  public persistObservation(
+  public async persistObservation(
     id: string,
     sourceListingId: string,
     observation: {
@@ -74,8 +77,11 @@ export class SourceListingRepository {
       fingerprint: string;
     },
     observedAt: number = Date.now(),
-  ): void {
-    this.db.db
+  ): Promise<void> {
+    const { sourceObservations } = getTables(this.db);
+    const db = this.db.db as any;
+
+    await db
       .insert(sourceObservations)
       .values({
         id,
@@ -90,15 +96,16 @@ export class SourceListingRepository {
           sourceObservations.sourceListingId,
           sourceObservations.fingerprint,
         ],
-      })
-      .run();
+      });
   }
 
-  public findObservationByFingerprint(
+  public async findObservationByFingerprint(
     sourceListingId: string,
     fingerprint: string,
-  ) {
-    const result = this.db.db
+  ): Promise<any | null> {
+    const { sourceObservations } = getTables(this.db);
+    const db = this.db.db as any;
+    const rows = await db
       .select()
       .from(sourceObservations)
       .where(
@@ -106,34 +113,40 @@ export class SourceListingRepository {
           eq(sourceObservations.sourceListingId, sourceListingId),
           eq(sourceObservations.fingerprint, fingerprint),
         ),
-      )
-      .get();
-    return result ?? null;
+      );
+    return rows[0] ?? null;
   }
 
-  public getListing(id: string) {
-    const result = this.db.db
+  public async getListing(id: string): Promise<any | null> {
+    const { sourceListings } = getTables(this.db);
+    const db = this.db.db as any;
+    const rows = await db
       .select()
       .from(sourceListings)
-      .where(eq(sourceListings.id, id))
-      .get();
-    return result ?? null;
+      .where(eq(sourceListings.id, id));
+    return rows[0] ?? null;
   }
 
-  public findListingByOpportunityId(opportunityId: string) {
-    const result = this.db.db
+  public async findListingByOpportunityId(
+    opportunityId: string,
+  ): Promise<any | null> {
+    const { sourceListings } = getTables(this.db);
+    const db = this.db.db as any;
+    const rows = await db
       .select()
       .from(sourceListings)
-      .where(eq(sourceListings.opportunityId, opportunityId))
-      .get();
-    return result ?? null;
+      .where(eq(sourceListings.opportunityId, opportunityId));
+    return rows[0] ?? null;
   }
 
-  public listObservationsForListing(sourceListingId: string) {
-    return this.db.db
+  public async listObservationsForListing(
+    sourceListingId: string,
+  ): Promise<readonly any[]> {
+    const { sourceObservations } = getTables(this.db);
+    const db = this.db.db as any;
+    return await db
       .select()
       .from(sourceObservations)
-      .where(eq(sourceObservations.sourceListingId, sourceListingId))
-      .all();
+      .where(eq(sourceObservations.sourceListingId, sourceListingId));
   }
 }

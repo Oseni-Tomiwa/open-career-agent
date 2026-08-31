@@ -4,6 +4,7 @@ export {
   type DatabaseHandle,
 } from './client.js';
 export { applyMigrations } from './migrate.js';
+export { getTables } from './schema-helper.js';
 export {
   BACKGROUND_TASK_STATES,
   type BackgroundTaskEventRow,

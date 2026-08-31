@@ -17,12 +17,12 @@ describe('Applications V1 migration', () => {
   let directory: string | undefined;
   let database: DatabaseHandle | undefined;
 
-  afterEach(() => {
-    database?.close();
+  afterEach(async () => {
+    await database?.close();
     if (directory) rmSync(directory, { recursive: true, force: true });
   });
 
-  it('upgrades the previous schema without losing Applications or events', () => {
+  it('upgrades the previous schema without losing Applications or events', async () => {
     directory = mkdtempSync(join(tmpdir(), 'oca-app-migration-'));
     const previousMigrations = join(directory, 'previous-migrations');
     mkdirSync(previousMigrations);
@@ -38,8 +38,8 @@ describe('Applications V1 migration', () => {
     }
 
     database = openDatabase(join(directory, 'upgrade.sqlite'));
-    applyMigrations(database, previousMigrations);
-    database.sqlite.exec(`
+    await applyMigrations(database, previousMigrations);
+    database.sqlite!.exec(`
       insert into candidates (id, created_at, updated_at)
       values ('candidate-upgrade', 1, 1);
       insert into opportunities (id, created_at)
@@ -54,23 +54,23 @@ describe('Applications V1 migration', () => {
         ('event-upgrade', 'application-upgrade', 'status_changed', 'Applied', 1);
     `);
 
-    applyMigrations(database, migrationsFolder);
+    await applyMigrations(database, migrationsFolder);
 
     expect(
-      database.sqlite
-        .prepare('select status, note from applications where id = ?')
+      database
+        .sqlite!.prepare('select status, note from applications where id = ?')
         .get('application-upgrade'),
     ).toEqual({ status: 'Applied', note: null });
     expect(
-      database.sqlite
-        .prepare(
+      database
+        .sqlite!.prepare(
           'select event_type as eventType, detail from application_events where id = ?',
         )
         .get('event-upgrade'),
     ).toEqual({ eventType: 'status_changed', detail: 'Applied' });
     expect(() =>
-      database!.sqlite
-        .prepare(
+      database!
+        .sqlite!.prepare(
           `insert into applications
             (id, candidate_id, opportunity_id, status, created_at, updated_at)
            values (?, ?, ?, ?, ?, ?)`,
@@ -85,8 +85,8 @@ describe('Applications V1 migration', () => {
         ),
     ).toThrow();
     expect(
-      database.sqlite
-        .prepare(
+      database
+        .sqlite!.prepare(
           "select name from sqlite_master where type = 'index' and name = 'applications_candidate_status_idx'",
         )
         .get(),

@@ -1,40 +1,36 @@
 import { eq } from 'drizzle-orm';
 import type { DatabaseHandle } from '../client.js';
-import {
-  candidateClaims,
-  candidates,
-  opportunitySnapshots,
-} from '../schema.js';
+import { getTables } from '../schema-helper.js';
 import { BackgroundTaskLedger } from '../task-ledger.js';
 import type { CandidateId, ClaimId } from '@oca/domain';
 
 export class CandidateRepository {
   public constructor(private readonly db: DatabaseHandle) {}
 
-  public createCandidate(
+  public async createCandidate(
     id: CandidateId,
     timestamp: number = Date.now(),
-  ): void {
-    this.db.db
-      .insert(candidates)
-      .values({
-        id,
-        createdAt: new Date(timestamp),
-        updatedAt: new Date(timestamp),
-      })
-      .run();
+  ): Promise<void> {
+    const { candidates } = getTables(this.db);
+    const db = this.db.db as any;
+    await db.insert(candidates).values({
+      id,
+      createdAt: new Date(timestamp),
+      updatedAt: new Date(timestamp),
+    });
   }
 
-  public getCandidate(id: CandidateId) {
-    const result = this.db.db
+  public async getCandidate(id: CandidateId): Promise<any | null> {
+    const { candidates } = getTables(this.db);
+    const db = this.db.db as any;
+    const rows = await db
       .select()
       .from(candidates)
-      .where(eq(candidates.id, id))
-      .get();
-    return result ?? null;
+      .where(eq(candidates.id, id));
+    return rows[0] ?? null;
   }
 
-  public addClaim(
+  public async addClaim(
     claim: {
       id: ClaimId;
       candidateId: CandidateId;
@@ -46,31 +42,29 @@ export class CandidateRepository {
       confidence?: 'HIGH' | 'MODERATE' | 'LOW';
     },
     timestamp: number = Date.now(),
-  ): void {
-    this.db.db
-      .insert(candidateClaims)
-      .values({
-        id: claim.id,
-        candidateId: claim.candidateId,
-        kind: claim.kind,
-        value: claim.value,
-        scope: claim.scope,
-        state: claim.state,
-        confidence: claim.confidence,
-        createdAt: new Date(timestamp),
-        updatedAt: new Date(timestamp),
-      })
-      .run();
+  ): Promise<void> {
+    const { candidateClaims, opportunitySnapshots } = getTables(this.db);
+    const db = this.db.db as any;
 
-    // Candidate knowledge is a material Evaluation input.  Enqueue targeted
-    // reevaluation work for existing snapshots; ledger identity prevents a
-    // duplicate command from producing a task storm.
-    const ledger = new BackgroundTaskLedger(this.db);
-    for (const snapshot of this.db.db
+    await db.insert(candidateClaims).values({
+      id: claim.id,
+      candidateId: claim.candidateId,
+      kind: claim.kind,
+      value: claim.value,
+      scope: claim.scope,
+      state: claim.state,
+      confidence: claim.confidence,
+      createdAt: new Date(timestamp),
+      updatedAt: new Date(timestamp),
+    });
+
+    const snapshots = await db
       .select({ id: opportunitySnapshots.id })
-      .from(opportunitySnapshots)
-      .all()) {
-      ledger.enqueue({
+      .from(opportunitySnapshots);
+
+    const ledger = new BackgroundTaskLedger(this.db);
+    for (const snapshot of snapshots) {
+      await ledger.enqueue({
         taskType: 'eligibility.evaluate',
         payload: { snapshotId: snapshot.id, candidateId: claim.candidateId },
         idempotencyKey: `eligibility-claim-${claim.id}-${snapshot.id}`,
@@ -78,11 +72,12 @@ export class CandidateRepository {
     }
   }
 
-  public getClaims(candidateId: CandidateId) {
-    return this.db.db
+  public async getClaims(candidateId: CandidateId): Promise<readonly any[]> {
+    const { candidateClaims } = getTables(this.db);
+    const db = this.db.db as any;
+    return await db
       .select()
       .from(candidateClaims)
-      .where(eq(candidateClaims.candidateId, candidateId))
-      .all();
+      .where(eq(candidateClaims.candidateId, candidateId));
   }
 }

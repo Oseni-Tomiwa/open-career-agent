@@ -20,12 +20,12 @@ describe('Cloud identity migration', () => {
   let directory: string | undefined;
   let database: DatabaseHandle | undefined;
 
-  afterEach(() => {
-    database?.close();
+  afterEach(async () => {
+    await database?.close();
     if (directory) rmSync(directory, { recursive: true, force: true });
   });
 
-  it('adds accounts without rewriting durable domain and history rows', () => {
+  it('adds accounts without rewriting durable domain and history rows', async () => {
     directory = mkdtempSync(join(tmpdir(), 'oca-cloud-migration-'));
     const prior = join(directory, 'prior');
     mkdirSync(prior);
@@ -39,8 +39,8 @@ describe('Cloud identity migration', () => {
     }
 
     database = openDatabase(join(directory, 'upgrade.sqlite'));
-    applyMigrations(database, prior);
-    database.sqlite.exec(`
+    await applyMigrations(database, prior);
+    database.sqlite!.exec(`
       insert into candidates (id, created_at, updated_at)
       values ('candidate-preserved', 1, 1);
       insert into candidate_claims
@@ -101,7 +101,7 @@ describe('Cloud identity migration', () => {
         ('event-preserved', 'application-preserved', 'status_changed', 'Applied', 1);
     `);
 
-    applyMigrations(database, migrationsFolder);
+    await applyMigrations(database, migrationsFolder);
 
     for (const [table, id] of [
       ['candidates', 'candidate-preserved'],
@@ -117,12 +117,14 @@ describe('Cloud identity migration', () => {
       ['application_events', 'event-preserved'],
     ] as const) {
       expect(
-        database.sqlite.prepare(`select id from ${table} where id = ?`).get(id),
+        database
+          .sqlite!.prepare(`select id from ${table} where id = ?`)
+          .get(id),
       ).toEqual({ id });
     }
     expect(
-      database.sqlite
-        .prepare(
+      database
+        .sqlite!.prepare(
           "select name from sqlite_master where type = 'table' and name in ('users', 'sessions', 'user_candidates') order by name",
         )
         .all(),

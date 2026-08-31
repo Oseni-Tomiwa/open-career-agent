@@ -90,7 +90,7 @@ export function createFitHandlers(deps: {
   const engine = new FitEngine();
 
   return {
-    'fit.evaluate': (task: BackgroundTask) => {
+    'fit.evaluate': async (task: BackgroundTask) => {
       const payload = task.payload as {
         evaluationId?: string;
         snapshotId?: string;
@@ -109,7 +109,7 @@ export function createFitHandlers(deps: {
       const evaluationId = payload.evaluationId as EvaluationId;
       const snapshotId = payload.snapshotId as SnapshotId;
       const candidateId = payload.candidateId as CandidateId;
-      const evaluation = evaluationRepository.getEvaluation(evaluationId);
+      const evaluation = await evaluationRepository.getEvaluation(evaluationId);
       if (!evaluation)
         throw new Error(`Evaluation not found: ${payload.evaluationId}`);
       if (
@@ -119,36 +119,42 @@ export function createFitHandlers(deps: {
         throw new Error('Fit task input does not match its Evaluation');
       }
 
-      const snapshot = opportunityRepository.getSnapshot(snapshotId);
+      const snapshot = await opportunityRepository.getSnapshot(snapshotId);
       if (!snapshot)
         throw new Error(`Snapshot not found: ${payload.snapshotId}`);
-      const claims = candidateRepository.getClaims(candidateId);
-      const claimsWithEvidence = claims.map((claim) => ({
-        id: claim.id,
-        kind: claim.kind,
-        value: claim.value,
-        scope: claim.scope,
-        state: claim.state,
-        confidence: claim.confidence,
-        updatedAt: claim.updatedAt,
-        evidence: evidenceRepository
-          .getClaimEvidence(claim.id as ClaimId)
-          .map((item) => ({
-            id: item.id,
-            evidenceType: item.evidenceType,
-            state: item.state,
-            sourceReference: item.sourceReference,
-            excerpt: item.excerpt,
-            createdAt: item.createdAt,
-          })),
-      }));
+      const claims = await candidateRepository.getClaims(candidateId);
+      const claimsWithEvidence = await Promise.all(
+        claims.map(async (claim: any) => {
+          const evList = await evidenceRepository.getClaimEvidence(
+            claim.id as ClaimId,
+          );
+          return {
+            id: claim.id,
+            kind: claim.kind,
+            value: claim.value,
+            scope: claim.scope,
+            state: claim.state,
+            confidence: claim.confidence,
+            updatedAt: claim.updatedAt,
+            evidence: evList.map((item: any) => ({
+              id: item.id,
+              evidenceType: item.evidenceType,
+              state: item.state,
+              sourceReference: item.sourceReference,
+              excerpt: item.excerpt,
+              createdAt: item.createdAt,
+            })),
+          };
+        }),
+      );
+
       const inputFingerprint = fingerprintFitInputs({
         engineVersion: engine.version,
         snapshotFingerprint: snapshot.fingerprint,
         claims: claimsWithEvidence,
       });
 
-      const existing = evaluationRepository.findFitEvaluation({
+      const existing = await evaluationRepository.findFitEvaluation({
         candidateId,
         snapshotId,
         engineVersion: engine.version,
@@ -156,13 +162,13 @@ export function createFitHandlers(deps: {
       });
       if (existing) {
         if (existing.id !== evaluationId) {
-          evaluationRepository.copyAssessment({
+          await evaluationRepository.copyAssessment({
             sourceEvaluationId: existing.id as EvaluationId,
             targetEvaluationId: evaluationId,
             category: 'fit',
           });
         }
-        taskLedger.enqueue({
+        await taskLedger.enqueue({
           taskType: 'quality.evaluate',
           payload: {
             evaluationId,
@@ -176,7 +182,7 @@ export function createFitHandlers(deps: {
 
       const result = engine.evaluate(snapshot, claims);
 
-      evaluationRepository.persistFitResult({
+      await evaluationRepository.persistFitResult({
         evaluationId,
         fit: {
           level: result.overallLevel,
@@ -206,15 +212,17 @@ export function createFitHandlers(deps: {
               if (!reference.startsWith('claim:')) return [];
               const claimId = reference.slice('claim:'.length);
               return (
-                claimsWithEvidence.find((claim) => claim.id === claimId)
+                claimsWithEvidence.find((claim: any) => claim.id === claimId)
                   ?.evidence ?? []
-              ).map((candidateEvidence) => candidateEvidence.id as EvidenceId);
+              ).map(
+                (candidateEvidence: any) => candidateEvidence.id as EvidenceId,
+              );
             },
           ),
         })),
       });
 
-      taskLedger.enqueue({
+      await taskLedger.enqueue({
         taskType: 'quality.evaluate',
         payload: {
           evaluationId,

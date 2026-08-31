@@ -30,7 +30,6 @@ export function createDecisionHandlers(
   const handleDecisionEvaluate: BackgroundTaskHandler = async (
     task: BackgroundTask,
   ) => {
-    await Promise.resolve();
     const payload = task.payload as {
       evaluationId: string;
       snapshotId: string;
@@ -38,7 +37,7 @@ export function createDecisionHandlers(
     };
 
     const evalId = evaluationId(payload.evaluationId);
-    const evaluation = evaluationRepository.getEvaluation(evalId);
+    const evaluation = await evaluationRepository.getEvaluation(evalId);
 
     if (!evaluation) {
       throw new Error(`Evaluation ${payload.evaluationId} not found`);
@@ -51,15 +50,16 @@ export function createDecisionHandlers(
     }
 
     const eligibilityFindings =
-      evaluationRepository.getEligibilityFindings(evalId);
-    const fitFindings = evaluationRepository.getFitFindings(evalId);
-    const qualityFindings = evaluationRepository.getQualityFindings(evalId);
+      await evaluationRepository.getEligibilityFindings(evalId);
+    const fitFindings = await evaluationRepository.getFitFindings(evalId);
+    const qualityFindings =
+      await evaluationRepository.getQualityFindings(evalId);
 
     const inputFingerprint = fingerprintDecisionInputs({
       engineVersion: DECISION_ENGINE_VERSION,
       eligibilityState: evaluation.eligibilityState,
       eligibilityInputFingerprint: evaluation.eligibilityInputFingerprint,
-      eligibilityFindings: eligibilityFindings.map((f) => ({
+      eligibilityFindings: eligibilityFindings.map((f: any) => ({
         dimension: f.dimensionKey,
         state: f.state,
         summary: f.summary,
@@ -71,7 +71,6 @@ export function createDecisionHandlers(
       qualityInputFingerprint: evaluation.qualityInputFingerprint,
     });
 
-    // A Decision becomes durable only for a coherent completed Evaluation.
     if (
       !evaluation.eligibilityInputFingerprint ||
       !evaluation.fitInputFingerprint ||
@@ -91,7 +90,7 @@ export function createDecisionHandlers(
             state: evaluation.eligibilityState,
             engineVersion: evaluation.eligibilityEngineVersion,
             inputFingerprint: evaluation.eligibilityInputFingerprint,
-            findings: eligibilityFindings.map((f) => ({
+            findings: eligibilityFindings.map((f: any) => ({
               dimension: f.dimensionKey,
               state: f.state,
               summary: f.summary,
@@ -105,7 +104,7 @@ export function createDecisionHandlers(
             engineVersion: evaluation.fitEngineVersion,
             inputFingerprint: evaluation.fitInputFingerprint,
             summary: evaluation.fitSummary,
-            findings: fitFindings.map((f) => ({
+            findings: fitFindings.map((f: any) => ({
               dimensionKey: f.dimensionKey,
               label: f.label ?? undefined,
               state: f.state,
@@ -122,7 +121,7 @@ export function createDecisionHandlers(
             inputFingerprint: evaluation.qualityInputFingerprint,
             freshnessBucket: evaluation.qualityFreshnessBucket,
             summary: evaluation.qualitySummary,
-            findings: qualityFindings.map((f) => ({
+            findings: qualityFindings.map((f: any) => ({
               dimension: f.dimensionKey,
               label: f.label ?? undefined,
               state: f.state,
@@ -136,13 +135,17 @@ export function createDecisionHandlers(
     const decisionResult = decisionEngine.evaluate(decisionInput);
 
     const allFindings = [
-      ...eligibilityFindings.map((finding) => ({
+      ...eligibilityFindings.map((finding: any) => ({
         category: 'eligibility',
         finding,
       })),
-      ...fitFindings.map((finding) => ({ category: 'fit', finding })),
-      ...qualityFindings.map((finding) => ({ category: 'quality', finding })),
+      ...fitFindings.map((finding: any) => ({ category: 'fit', finding })),
+      ...qualityFindings.map((finding: any) => ({
+        category: 'quality',
+        finding,
+      })),
     ] as const;
+
     const reasonFindingIds = decisionResult.decisiveFindings.flatMap(
       (reference) =>
         allFindings
@@ -179,7 +182,7 @@ export function createDecisionHandlers(
     );
 
     const dId = decisionId(`dec-${randomUUID()}`);
-    evaluationRepository.persistDecision({
+    await evaluationRepository.persistDecision({
       id: dId,
       evaluationId: evalId,
       candidateId: candidateId(evaluation.candidateId),
@@ -193,7 +196,7 @@ export function createDecisionHandlers(
       fitInputFingerprint: evaluation.fitInputFingerprint,
       qualityInputFingerprint: evaluation.qualityInputFingerprint,
       reasonCodes: decisionResult.reasonCodes,
-      reasonFindingIds: reasonFindingIds.map((reason) => ({
+      reasonFindingIds: reasonFindingIds.map((reason: any) => ({
         ...reason,
         findingId: findingId(reason.findingId),
       })),

@@ -31,20 +31,20 @@ const mockGreenhousePayload = {
 describe('Greenhouse Ingestion Flow', () => {
   let db: DatabaseHandle;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     try {
       unlinkSync(TEST_DB_PATH);
     } catch {
       /* ignore */
     }
     db = openDatabase(TEST_DB_PATH);
-    databaseIsReady(db);
-    applyMigrations(db);
+    await applyMigrations(db);
+    expect(await databaseIsReady(db)).toBe(true);
     vi.stubGlobal('fetch', vi.fn());
   });
 
-  afterEach(() => {
-    db.close();
+  afterEach(async () => {
+    await db.close();
     try {
       unlinkSync(TEST_DB_PATH);
     } catch {
@@ -122,6 +122,7 @@ describe('Greenhouse Ingestion Flow', () => {
     it('executes adapter, persists SourceRecord, deduplicates, and creates Snapshots', async () => {
       const config = {
         environment: 'test' as const,
+        databaseEngine: 'sqlite' as const,
         databasePath: TEST_DB_PATH,
         migrationMode: 'auto' as const,
         pollIntervalMs: 1000,
@@ -153,11 +154,11 @@ describe('Greenhouse Ingestion Flow', () => {
       });
 
       const oppRepo = new OpportunityRepository(db);
-      const opps = oppRepo.getOpportunities();
+      const opps = await oppRepo.getOpportunities();
       expect(opps).toHaveLength(1);
       const oppId = opps[0]!.id;
 
-      const snaps = oppRepo.getSnapshots(opportunityId(oppId));
+      const snaps = await oppRepo.getSnapshots(opportunityId(oppId));
       expect(snaps).toHaveLength(1);
       expect(snaps[0]!.title).toBe('Software Engineer');
 
@@ -183,9 +184,9 @@ describe('Greenhouse Ingestion Flow', () => {
         lastError: null,
       });
 
-      const oppsAfter = oppRepo.getOpportunities();
+      const oppsAfter = await oppRepo.getOpportunities();
       expect(oppsAfter).toHaveLength(1); // Deduplicated Opportunity
-      const snapsAfter = oppRepo.getSnapshots(opportunityId(oppId));
+      const snapsAfter = await oppRepo.getSnapshots(opportunityId(oppId));
       expect(snapsAfter).toHaveLength(1); // Deduplicated Snapshot
 
       // Third run with changed payload - new snapshot
@@ -215,7 +216,7 @@ describe('Greenhouse Ingestion Flow', () => {
         lastError: null,
       });
 
-      const snapsFinal = oppRepo.getSnapshots(opportunityId(oppId));
+      const snapsFinal = await oppRepo.getSnapshots(opportunityId(oppId));
       expect(snapsFinal).toHaveLength(2); // New snapshot appended
       expect(snapsFinal[1]!.title).toBe('Senior Software Engineer');
       expect(snapsFinal[0]!.title).toBe('Software Engineer'); // Previous intact

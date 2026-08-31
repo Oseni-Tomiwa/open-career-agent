@@ -13,28 +13,28 @@ import {
   CareerMemoryRepository,
 } from './repositories/career-memory-repository.js';
 import { OpportunityRepository } from './repositories/opportunity-repository.js';
-import { backgroundTasks } from './schema.js';
+import { getTables } from './schema-helper.js';
 
 describe('Career Memory repository', () => {
   let directory: string;
   let database: DatabaseHandle;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     directory = mkdtempSync(join(tmpdir(), 'oca-career-memory-'));
     database = openDatabase(join(directory, 'test.sqlite'));
-    applyMigrations(database);
+    await applyMigrations(database);
   });
 
-  afterEach(() => {
-    database.close();
+  afterEach(async () => {
+    await database.close();
     rmSync(directory, { recursive: true, force: true });
   });
 
-  it('round-trips state, scope, confidence, and candidate-confirmed Evidence', () => {
+  it('round-trips state, scope, confidence, and candidate-confirmed Evidence', async () => {
     const candidate = candidateId('candidate-memory-roundtrip');
-    new CandidateRepository(database).createCandidate(candidate);
+    await new CandidateRepository(database).createCandidate(candidate);
     const repository = new CareerMemoryRepository(database);
-    repository.createClaim({
+    await repository.createClaim({
       candidateId: candidate,
       kind: 'work_authorization',
       value: 'Authorized to work',
@@ -48,7 +48,8 @@ describe('Career Memory repository', () => {
       },
     });
 
-    expect(repository.getProfile(candidate)).toMatchObject({
+    const profile = await repository.getProfile(candidate);
+    expect(profile).toMatchObject({
       claims: [
         {
           kind: 'work_authorization',
@@ -67,11 +68,11 @@ describe('Career Memory repository', () => {
     });
   });
 
-  it('preserves historical Evidence and contradiction state', () => {
+  it('preserves historical Evidence and contradiction state', async () => {
     const candidate = candidateId('candidate-memory-conflict');
-    new CandidateRepository(database).createCandidate(candidate);
+    await new CandidateRepository(database).createCandidate(candidate);
     const repository = new CareerMemoryRepository(database);
-    const created = repository.createClaim({
+    const created = await repository.createClaim({
       candidateId: candidate,
       kind: 'work_authorization',
       value: 'Authorized to work',
@@ -83,7 +84,7 @@ describe('Career Memory repository', () => {
         state: 'candidate-confirmed',
       },
     });
-    repository.attachEvidence({
+    await repository.attachEvidence({
       candidateId: candidate,
       claimId: claimId(created.id),
       evidence: {
@@ -95,27 +96,28 @@ describe('Career Memory repository', () => {
       transitionTo: 'CONFLICTING',
     });
 
-    expect(repository.getProfile(candidate)?.claims[0]).toMatchObject({
+    const profile = await repository.getProfile(candidate);
+    expect(profile?.claims[0]).toMatchObject({
       state: 'CONFLICTING',
       evidence: [{ state: 'candidate-confirmed' }, { state: 'disputed' }],
     });
-    expect(() =>
+    await expect(
       repository.updateClaim({
         candidateId: candidate,
         claimId: claimId(created.id),
         state: 'SUPPORTED',
       }),
-    ).toThrow(CareerMemoryError);
+    ).rejects.toThrow(CareerMemoryError);
   });
 
-  it('prevents cross-candidate linkage and supported content rewriting', () => {
+  it('prevents cross-candidate linkage and supported content rewriting', async () => {
     const first = candidateId('candidate-memory-first');
     const second = candidateId('candidate-memory-second');
     const candidates = new CandidateRepository(database);
-    candidates.createCandidate(first);
-    candidates.createCandidate(second);
+    await candidates.createCandidate(first);
+    await candidates.createCandidate(second);
     const repository = new CareerMemoryRepository(database);
-    const created = repository.createClaim({
+    const created = await repository.createClaim({
       candidateId: first,
       kind: 'skill',
       value: 'Node.js',
@@ -127,7 +129,7 @@ describe('Career Memory repository', () => {
       },
     });
 
-    expect(() =>
+    await expect(
       repository.attachEvidence({
         candidateId: second,
         claimId: claimId(created.id),
@@ -138,24 +140,25 @@ describe('Career Memory repository', () => {
           state: 'unreviewed',
         },
       }),
-    ).toThrow(CareerMemoryError);
-    expect(() =>
+    ).rejects.toThrow(CareerMemoryError);
+    await expect(
       repository.updateClaim({
         candidateId: first,
         claimId: claimId(created.id),
         value: 'Kubernetes',
       }),
-    ).toThrow(CareerMemoryError);
-    expect(repository.getProfile(second)?.claims).toEqual([]);
+    ).rejects.toThrow(CareerMemoryError);
+    const secondProfile = await repository.getProfile(second);
+    expect(secondProfile?.claims).toEqual([]);
   });
 
-  it('enqueues semantic reevaluation idempotently', () => {
+  it('enqueues semantic reevaluation idempotently', async () => {
     const candidate = candidateId('candidate-memory-tasks');
-    new CandidateRepository(database).createCandidate(candidate);
+    await new CandidateRepository(database).createCandidate(candidate);
     const opportunities = new OpportunityRepository(database);
     const opportunity = opportunityId('opportunity-memory-tasks');
-    opportunities.createOpportunity(opportunity);
-    opportunities.appendSnapshot({
+    await opportunities.createOpportunity(opportunity);
+    await opportunities.appendSnapshot({
       id: snapshotId('snapshot-memory-tasks'),
       opportunityId: opportunity,
       title: 'Backend Engineer',
@@ -164,32 +167,35 @@ describe('Career Memory repository', () => {
       fingerprint: 'memory-task-snapshot',
     });
     const repository = new CareerMemoryRepository(database);
-    const created = repository.createClaim({
+    const created = await repository.createClaim({
       candidateId: candidate,
       kind: 'skill',
       value: 'Node.js',
       state: 'UNKNOWN',
     });
-    expect(database.db.select().from(backgroundTasks).all()).toHaveLength(1);
+
+    const { backgroundTasks } = getTables(database);
+    const db = database.db as any;
+    expect(await db.select().from(backgroundTasks)).toHaveLength(1);
 
     const evidence = {
       evidenceType: 'user-confirmed statement',
       excerpt: 'I have delivered Node.js services.',
       state: 'candidate-confirmed' as const,
     };
-    repository.attachEvidence({
+    await repository.attachEvidence({
       candidateId: candidate,
       claimId: claimId(created.id),
       evidence,
       transitionTo: 'SUPPORTED',
     });
-    expect(database.db.select().from(backgroundTasks).all()).toHaveLength(2);
-    repository.attachEvidence({
+    expect(await db.select().from(backgroundTasks)).toHaveLength(2);
+    await repository.attachEvidence({
       candidateId: candidate,
       claimId: claimId(created.id),
       evidence,
       transitionTo: 'SUPPORTED',
     });
-    expect(database.db.select().from(backgroundTasks).all()).toHaveLength(2);
+    expect(await db.select().from(backgroundTasks)).toHaveLength(2);
   });
 });

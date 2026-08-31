@@ -43,10 +43,10 @@ describe('TodayRepository', () => {
 
   const now = new Date('2026-08-31T12:00:00.000Z');
 
-  beforeEach(() => {
+  beforeEach(async () => {
     directory = mkdtempSync(join(tmpdir(), 'oca-today-repo-test-'));
     database = openDatabase(join(directory, 'test.sqlite'));
-    applyMigrations(database);
+    await applyMigrations(database);
 
     candRepo = new CandidateRepository(database);
     oppRepo = new OpportunityRepository(database);
@@ -54,17 +54,17 @@ describe('TodayRepository', () => {
     searchRepo = new SearchTargetRepository(database);
     todayRepo = new TodayRepository(database);
 
-    candRepo.createCandidate(candidateAlex, now.getTime() - 86400000);
-    candRepo.createCandidate(candidateJordan, now.getTime() - 86400000);
+    await candRepo.createCandidate(candidateAlex, now.getTime() - 86400000);
+    await candRepo.createCandidate(candidateJordan, now.getTime() - 86400000);
   });
 
-  afterEach(() => {
-    database.close();
+  afterEach(async () => {
+    await database.close();
     rmSync(directory, { recursive: true, force: true });
   });
 
-  it('returns an empty dashboard structure for candidate with no discovery targets or opportunities', () => {
-    const dashboard = todayRepo.getTodayDashboard(candidateAlex, { now });
+  it('returns an empty dashboard structure for candidate with no discovery targets or opportunities', async () => {
+    const dashboard = await todayRepo.getTodayDashboard(candidateAlex, { now });
 
     expect(dashboard.greetingName).toBe('Alex');
     expect(dashboard.summaryText).toBe(
@@ -78,9 +78,9 @@ describe('TodayRepository', () => {
     expect(dashboard.careerMemoryAttention).toEqual([]);
   });
 
-  it('surfaces an incomplete due follow-up and removes it after completion', () => {
-    oppRepo.createOpportunity(opp1);
-    oppRepo.appendSnapshot({
+  it('surfaces an incomplete due follow-up and removes it after completion', async () => {
+    await oppRepo.createOpportunity(opp1);
+    await oppRepo.appendSnapshot({
       id: snap1,
       opportunityId: opp1,
       title: 'Platform Engineer',
@@ -89,13 +89,13 @@ describe('TodayRepository', () => {
       fingerprint: 'fp-follow-up',
     });
     const applications = new ApplicationRepository(database);
-    const app = applications.createApplication({
+    const app = await applications.createApplication({
       id: applicationId('app-follow-up'),
       candidateId: candidateAlex,
       opportunityId: opp1,
       status: 'Applied',
     });
-    const scheduled = applications.updateApplication({
+    const scheduled = await applications.updateApplication({
       id: applicationId(app.id),
       candidateId: candidateAlex,
       expectedUpdatedAt: app.updatedAt,
@@ -103,31 +103,30 @@ describe('TodayRepository', () => {
       followUpNote: 'Email the recruiter',
     });
 
-    expect(
-      todayRepo.getTodayDashboard(candidateAlex, { now })
-        .applicationActivity[0],
-    ).toMatchObject({
+    const dashboardBefore = await todayRepo.getTodayDashboard(candidateAlex, {
+      now,
+    });
+    expect(dashboardBefore.applicationActivity[0]).toMatchObject({
       applicationId: app.id,
       nextAction: 'Email the recruiter',
       dueDate: '2026-08-31T09:00:00.000Z',
     });
 
-    applications.updateApplication({
+    await applications.updateApplication({
       id: applicationId(app.id),
       candidateId: candidateAlex,
       expectedUpdatedAt: scheduled.updatedAt,
       followUpCompletedAt: now,
     });
-    expect(
-      todayRepo.getTodayDashboard(candidateAlex, { now }).applicationActivity[0]
-        ?.dueDate,
-    ).toBeNull();
+    const dashboardAfter = await todayRepo.getTodayDashboard(candidateAlex, {
+      now,
+    });
+    expect(dashboardAfter.applicationActivity[0]?.dueDate).toBeNull();
   });
 
-  it('aggregates priority opportunities and needs attention with strict candidate isolation', () => {
-    // Setup Opp 1 and Snapshot 1
-    oppRepo.createOpportunity(opp1, now.getTime() - 7200000);
-    oppRepo.appendSnapshot(
+  it('aggregates priority opportunities and needs attention with strict candidate isolation', async () => {
+    await oppRepo.createOpportunity(opp1, now.getTime() - 7200000);
+    await oppRepo.appendSnapshot(
       {
         id: snap1,
         opportunityId: opp1,
@@ -139,9 +138,8 @@ describe('TodayRepository', () => {
       now.getTime() - 7200000,
     );
 
-    // Setup Opp 2 and Snapshot 2
-    oppRepo.createOpportunity(opp2, now.getTime() - 3600000);
-    oppRepo.appendSnapshot(
+    await oppRepo.createOpportunity(opp2, now.getTime() - 3600000);
+    await oppRepo.appendSnapshot(
       {
         id: snap2,
         opportunityId: opp2,
@@ -154,33 +152,32 @@ describe('TodayRepository', () => {
     );
 
     const sourceRepo = new SourceListingRepository(database);
-    sourceRepo.persistListing(
+    await sourceRepo.persistListing(
       'sl-1',
       { sourceSystem: 'greenhouse', sourceExternalId: 'gh-1' },
       opp1,
       now.getTime() - 7200000,
     );
-    sourceRepo.persistListing(
+    await sourceRepo.persistListing(
       'sl-2',
       { sourceSystem: 'greenhouse', sourceExternalId: 'gh-2' },
       opp2,
       now.getTime() - 3600000,
     );
 
-    // Candidate Alex search target & discovery matches
-    const targetA = searchRepo.createSearchTarget(candidateAlex, {
+    const targetA = await searchRepo.createSearchTarget(candidateAlex, {
       name: 'Backend Target',
       locations: ['Remote'],
     });
 
     const runA = discoveryRunId('dr-run-a');
-    searchRepo.createDiscoveryRun(
+    await searchRepo.createDiscoveryRun(
       runA,
       candidateAlex,
       searchTargetId(targetA.id),
       'greenhouse',
     );
-    searchRepo.recordDiscoveryMatch({
+    await searchRepo.recordDiscoveryMatch({
       id: discoveryMatchId('dm-1'),
       candidateId: candidateAlex,
       searchTargetId: searchTargetId(targetA.id),
@@ -190,7 +187,7 @@ describe('TodayRepository', () => {
       matchReasons: [],
       retainedUnresolved: [],
     });
-    searchRepo.recordDiscoveryMatch({
+    await searchRepo.recordDiscoveryMatch({
       id: discoveryMatchId('dm-2'),
       candidateId: candidateAlex,
       searchTargetId: searchTargetId(targetA.id),
@@ -201,9 +198,8 @@ describe('TodayRepository', () => {
       retainedUnresolved: [],
     });
 
-    // Evaluations for Alex
     const eval1 = evaluationId('eval-1');
-    evalRepo.persistEvaluation(
+    await evalRepo.persistEvaluation(
       {
         id: eval1,
         candidateId: candidateAlex,
@@ -216,7 +212,7 @@ describe('TodayRepository', () => {
       now.getTime() - 3600000,
     );
 
-    evalRepo.persistDecision({
+    await evalRepo.persistDecision({
       id: decisionId('dec-1'),
       evaluationId: eval1,
       candidateId: candidateAlex,
@@ -235,7 +231,7 @@ describe('TodayRepository', () => {
     });
 
     const eval2 = evaluationId('eval-2');
-    evalRepo.persistEvaluation(
+    await evalRepo.persistEvaluation(
       {
         id: eval2,
         candidateId: candidateAlex,
@@ -248,7 +244,7 @@ describe('TodayRepository', () => {
       now.getTime() - 1800000,
     );
 
-    evalRepo.persistDecision({
+    await evalRepo.persistDecision({
       id: decisionId('dec-2'),
       evaluationId: eval2,
       candidateId: candidateAlex,
@@ -266,8 +262,9 @@ describe('TodayRepository', () => {
       evaluatedAt: new Date(now.getTime() - 1800000),
     });
 
-    // Query Alex Today
-    const dashboardAlex = todayRepo.getTodayDashboard(candidateAlex, { now });
+    const dashboardAlex = await todayRepo.getTodayDashboard(candidateAlex, {
+      now,
+    });
 
     expect(dashboardAlex.greetingName).toBe('Alex');
     expect(dashboardAlex.priorityOpportunities).toHaveLength(1);
@@ -280,8 +277,7 @@ describe('TodayRepository', () => {
     expect(dashboardAlex.needsAttention[0]!.opportunityId).toBe('opp-2');
     expect(dashboardAlex.needsAttention[0]!.category).toBe('investigate');
 
-    // Query Jordan Today (must be empty, no cross-candidate leakage)
-    const dashboardJordan = todayRepo.getTodayDashboard(candidateJordan, {
+    const dashboardJordan = await todayRepo.getTodayDashboard(candidateJordan, {
       now,
     });
     expect(dashboardJordan.greetingName).toBe('Jordan');

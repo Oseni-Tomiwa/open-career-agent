@@ -5,6 +5,7 @@ import {
   type DatabaseHandle,
 } from './client.js';
 import { applyMigrations } from './migrate.js';
+import { getTables } from './schema-helper.js';
 import {
   CandidateRepository,
   OpportunityRepository,
@@ -27,26 +28,25 @@ import {
 } from '@oca/domain';
 import { unlinkSync } from 'node:fs';
 import { eq } from 'drizzle-orm';
-import { decisions, evaluations as evaluationRows } from './schema.js';
 
 const TEST_DB_PATH = 'persistence-test.sqlite';
 
 describe('Domain Persistence Foundation', () => {
   let db: DatabaseHandle;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     try {
       unlinkSync(TEST_DB_PATH);
     } catch {
       /* ignore */
     }
     db = openDatabase(TEST_DB_PATH);
-    databaseIsReady(db);
-    applyMigrations(db, './migrations');
+    await applyMigrations(db, './migrations');
+    expect(await databaseIsReady(db)).toBe(true);
   });
 
-  afterEach(() => {
-    db.close();
+  afterEach(async () => {
+    await db.close();
     try {
       unlinkSync(TEST_DB_PATH);
     } catch {
@@ -55,101 +55,101 @@ describe('Domain Persistence Foundation', () => {
   });
 
   describe('SOURCE IDENTITY', () => {
-    it('SourceRecord persists without Opportunity', () => {
+    it('SourceRecord persists without Opportunity', async () => {
       const repo = new SourceListingRepository(db);
       const srId = snapshotId('sr_1');
-      repo.persistListing(srId, {
+      await repo.persistListing(srId, {
         sourceSystem: 'Greenhouse',
         sourceExternalId: 'gh_123',
       });
-      repo.persistObservation('obs_' + srId, srId, {
+      await repo.persistObservation('obs_' + srId, srId, {
         rawPayload: '{"title": "Engineer"}',
         fingerprint: 'hash',
       });
-      const record = repo.getListing(srId);
+      const record = await repo.getListing(srId);
       expect(record).toBeDefined();
       expect(record?.sourceSystem).toBe('Greenhouse');
       expect(record?.opportunityId).toBeNull();
     });
 
-    it('SourceRecord can later associate with Opportunity', () => {
+    it('SourceRecord can later associate with Opportunity', async () => {
       const srcRepo = new SourceListingRepository(db);
       const oppRepo = new OpportunityRepository(db);
 
       const srId = snapshotId('sr_1');
-      srcRepo.persistListing(srId, {
+      await srcRepo.persistListing(srId, {
         sourceSystem: 'Greenhouse',
         sourceExternalId: 'gh_123',
       });
-      srcRepo.persistObservation('obs_' + srId, srId, {
+      await srcRepo.persistObservation('obs_' + srId, srId, {
         rawPayload: '{"title": "Engineer"}',
         fingerprint: 'hash',
       });
 
       const oId = opportunityId('opp_1');
-      oppRepo.createOpportunity(oId);
+      await oppRepo.createOpportunity(oId);
 
-      srcRepo.associateListingWithOpportunity(srId, oId);
-      const record = srcRepo.getListing(srId);
+      await srcRepo.associateListingWithOpportunity(srId, oId);
+      const record = await srcRepo.getListing(srId);
       expect(record?.opportunityId).toBe(oId);
     });
 
-    it('multiple SourceRecords can point to one Opportunity', () => {
+    it('multiple SourceRecords can point to one Opportunity', async () => {
       const srcRepo = new SourceListingRepository(db);
       const oppRepo = new OpportunityRepository(db);
 
       const oId = opportunityId('opp_1');
-      oppRepo.createOpportunity(oId);
+      await oppRepo.createOpportunity(oId);
 
       const srId1 = snapshotId('sr_1');
-      srcRepo.persistListing(srId1, {
+      await srcRepo.persistListing(srId1, {
         sourceSystem: 'Greenhouse',
         sourceExternalId: 'gh_123',
       });
-      srcRepo.persistObservation('obs_' + srId1, srId1, {
+      await srcRepo.persistObservation('obs_' + srId1, srId1, {
         rawPayload: '{}',
         fingerprint: 'hash',
       });
-      srcRepo.associateListingWithOpportunity(srId1, oId);
+      await srcRepo.associateListingWithOpportunity(srId1, oId);
 
       const srId2 = snapshotId('sr_2');
-      srcRepo.persistListing(srId2, {
+      await srcRepo.persistListing(srId2, {
         sourceSystem: 'Workday',
         sourceExternalId: 'wd_456',
       });
-      srcRepo.persistObservation('obs_' + srId2, srId2, {
+      await srcRepo.persistObservation('obs_' + srId2, srId2, {
         rawPayload: '{}',
         fingerprint: 'hash',
       });
-      srcRepo.associateListingWithOpportunity(srId2, oId);
+      await srcRepo.associateListingWithOpportunity(srId2, oId);
 
-      const records = srcRepo.getListing(srId1);
-      const records2 = srcRepo.getListing(srId2);
+      const records = await srcRepo.getListing(srId1);
+      const records2 = await srcRepo.getListing(srId2);
       const arr = [records, records2].filter((r) => r?.opportunityId === oId);
       expect(arr).toHaveLength(2);
     });
   });
 
   describe('SNAPSHOT PROVENANCE', () => {
-    it('Snapshot provenance can identify its originating SourceRecord', () => {
+    it('Snapshot provenance can identify its originating SourceRecord', async () => {
       const srcRepo = new SourceListingRepository(db);
       const oppRepo = new OpportunityRepository(db);
 
       const srId = snapshotId('sr_1');
-      srcRepo.persistListing(srId, {
+      await srcRepo.persistListing(srId, {
         sourceSystem: 'Greenhouse',
         sourceExternalId: 'gh_123',
       });
-      srcRepo.persistObservation('obs_' + srId, srId, {
+      await srcRepo.persistObservation('obs_' + srId, srId, {
         rawPayload: '{"title": "Engineer"}',
         fingerprint: 'hash',
       });
 
       const oId = opportunityId('opp_1');
-      oppRepo.createOpportunity(oId);
+      await oppRepo.createOpportunity(oId);
 
       const sId = snapshotId('snap_1');
-      oppRepo.appendSnapshot({
+      await oppRepo.appendSnapshot({
         fingerprint: 'test-hash',
         id: sId,
         opportunityId: oId,
@@ -159,19 +159,19 @@ describe('Domain Persistence Foundation', () => {
         sourceObservationId: 'obs_' + srId,
       });
 
-      const sources = oppRepo.getSnapshotSources(sId);
+      const sources = await oppRepo.getSnapshotSources(sId);
       expect(sources).toHaveLength(1);
       expect(sources[0]?.sourceObservationId).toBe('obs_' + srId);
     });
   });
 
   describe('CLAIMS', () => {
-    it('Epistemic states persist and UNKNOWN does not become false', () => {
+    it('Epistemic states persist and UNKNOWN does not become false', async () => {
       const candidateRepo = new CandidateRepository(db);
       const cId = candidateId('cand_1');
-      candidateRepo.createCandidate(cId);
+      await candidateRepo.createCandidate(cId);
 
-      candidateRepo.addClaim({
+      await candidateRepo.addClaim({
         id: claimId('cl_1'),
         candidateId: cId,
         kind: 'skill',
@@ -180,7 +180,7 @@ describe('Domain Persistence Foundation', () => {
         state: 'SUPPORTED',
         confidence: 'HIGH',
       });
-      candidateRepo.addClaim({
+      await candidateRepo.addClaim({
         id: claimId('cl_2'),
         candidateId: cId,
         kind: 'skill',
@@ -188,14 +188,14 @@ describe('Domain Persistence Foundation', () => {
         state: 'INFERRED',
         confidence: 'MODERATE',
       });
-      candidateRepo.addClaim({
+      await candidateRepo.addClaim({
         id: claimId('cl_3'),
         candidateId: cId,
         kind: 'education',
         value: 'Degree',
         state: 'UNKNOWN',
       });
-      candidateRepo.addClaim({
+      await candidateRepo.addClaim({
         id: claimId('cl_4'),
         candidateId: cId,
         kind: 'location',
@@ -203,7 +203,7 @@ describe('Domain Persistence Foundation', () => {
         state: 'CONFLICTING',
       });
 
-      const claims = candidateRepo.getClaims(cId);
+      const claims = await candidateRepo.getClaims(cId);
       expect(claims).toHaveLength(4);
       expect(claims.find((claim) => claim.value === 'React')?.scope).toBe(
         'professional',
@@ -213,15 +213,15 @@ describe('Domain Persistence Foundation', () => {
       expect(unknownClaim?.value).toBe('Degree');
     });
 
-    it('Evidence relationships remain intact', () => {
+    it('Evidence relationships remain intact', async () => {
       const candidateRepo = new CandidateRepository(db);
       const evidenceRepo = new EvidenceRepository(db);
 
       const cId = candidateId('cand_1');
-      candidateRepo.createCandidate(cId);
+      await candidateRepo.createCandidate(cId);
 
       const clId = claimId('cl_1');
-      candidateRepo.addClaim({
+      await candidateRepo.addClaim({
         id: clId,
         candidateId: cId,
         kind: 'skill',
@@ -230,34 +230,34 @@ describe('Domain Persistence Foundation', () => {
       });
 
       const evId = evidenceId('ev_1');
-      evidenceRepo.attachToClaim(clId, {
+      await evidenceRepo.attachToClaim(clId, {
         id: evId,
         evidenceType: 'candidate',
         sourceReference: 'resume.pdf',
         excerpt: 'Used React for 5 years.',
       });
 
-      const evidenceList = evidenceRepo.getClaimEvidence(clId);
+      const evidenceList = await evidenceRepo.getClaimEvidence(clId);
       expect(evidenceList).toHaveLength(1);
       expect(evidenceList[0]?.id).toBe(evId);
     });
   });
 
   describe('EVALUATION FINDINGS', () => {
-    it('Findings persist independently with distinct states, evidence attaches to finding', () => {
+    it('Findings persist independently with distinct states, evidence attaches to finding', async () => {
       const oppRepo = new OpportunityRepository(db);
       const candRepo = new CandidateRepository(db);
       const evalRepo = new EvaluationRepository(db);
       const evidenceRepo = new EvidenceRepository(db);
 
       const cId = candidateId('cand_1');
-      candRepo.createCandidate(cId);
+      await candRepo.createCandidate(cId);
 
       const oId = opportunityId('opp_1');
-      oppRepo.createOpportunity(oId);
+      await oppRepo.createOpportunity(oId);
 
       const sId = snapshotId('snap_1');
-      oppRepo.appendSnapshot({
+      await oppRepo.appendSnapshot({
         fingerprint: 'test-hash',
         id: sId,
         opportunityId: oId,
@@ -267,7 +267,7 @@ describe('Domain Persistence Foundation', () => {
       });
 
       const eId = evaluationId('eval_1');
-      evalRepo.persistEvaluation({
+      await evalRepo.persistEvaluation({
         id: eId,
         candidateId: cId,
         snapshotId: sId,
@@ -276,8 +276,7 @@ describe('Domain Persistence Foundation', () => {
         qualityLevel: 'strong',
       });
 
-      // Eligibility
-      evalRepo.persistFinding({
+      await evalRepo.persistFinding({
         id: findingId('f_1'),
         evaluationId: eId,
         category: 'eligibility',
@@ -285,7 +284,7 @@ describe('Domain Persistence Foundation', () => {
         state: 'SUPPORTED',
         summary: 'Has visa',
       });
-      evalRepo.persistFinding({
+      await evalRepo.persistFinding({
         id: findingId('f_2'),
         evaluationId: eId,
         category: 'eligibility',
@@ -294,8 +293,7 @@ describe('Domain Persistence Foundation', () => {
         summary: 'Needs sponsorship but listing says no.',
       });
 
-      // Fit
-      evalRepo.persistFinding({
+      await evalRepo.persistFinding({
         id: findingId('f_3'),
         evaluationId: eId,
         category: 'fit',
@@ -303,7 +301,7 @@ describe('Domain Persistence Foundation', () => {
         state: 'MATCH',
         summary: '5 years node',
       });
-      evalRepo.persistFinding({
+      await evalRepo.persistFinding({
         id: findingId('f_4'),
         evaluationId: eId,
         category: 'fit',
@@ -312,8 +310,7 @@ describe('Domain Persistence Foundation', () => {
         summary: 'No k8s',
       });
 
-      // Quality
-      evalRepo.persistFinding({
+      await evalRepo.persistFinding({
         id: findingId('f_5'),
         evaluationId: eId,
         category: 'quality',
@@ -322,7 +319,7 @@ describe('Domain Persistence Foundation', () => {
         summary: 'Posted today',
       });
 
-      const findings = evalRepo.getFindings(eId);
+      const findings = await evalRepo.getFindings(eId);
       expect(findings).toHaveLength(5);
 
       const sponsorship = findings.find(
@@ -331,14 +328,14 @@ describe('Domain Persistence Foundation', () => {
       expect(sponsorship?.state).toBe('CONTRADICTORY');
 
       const evId = evidenceId('ev_1');
-      evidenceRepo.attachToFinding(findingId(sponsorship!.id), {
+      await evidenceRepo.attachToFinding(findingId(sponsorship!.id), {
         id: evId,
         evidenceType: 'opportunity',
         sourceReference: 'job_desc.txt',
         excerpt: 'No sponsorship available',
       });
 
-      const findingEvidence = evidenceRepo.getFindingEvidence(
+      const findingEvidence = await evidenceRepo.getFindingEvidence(
         findingId(sponsorship!.id),
       );
       expect(findingEvidence).toHaveLength(1);
@@ -346,20 +343,20 @@ describe('Domain Persistence Foundation', () => {
   });
 
   describe('QUALITY PERSISTENCE', () => {
-    it('persists Quality result with findings, attaches evidence, and updates evaluation metadata', () => {
+    it('persists Quality result with findings, attaches evidence, and updates evaluation metadata', async () => {
       const oppRepo = new OpportunityRepository(db);
       const candRepo = new CandidateRepository(db);
       const evalRepo = new EvaluationRepository(db);
       const evidenceRepo = new EvidenceRepository(db);
 
       const cId = candidateId('cand_quality');
-      candRepo.createCandidate(cId);
+      await candRepo.createCandidate(cId);
 
       const oId = opportunityId('opp_quality');
-      oppRepo.createOpportunity(oId);
+      await oppRepo.createOpportunity(oId);
 
       const sId = snapshotId('snap_quality');
-      oppRepo.appendSnapshot({
+      await oppRepo.appendSnapshot({
         fingerprint: 'test-hash',
         id: sId,
         opportunityId: oId,
@@ -369,7 +366,7 @@ describe('Domain Persistence Foundation', () => {
       });
 
       const eId = evaluationId('eval_quality');
-      evalRepo.persistEvaluation({
+      await evalRepo.persistEvaluation({
         id: eId,
         candidateId: cId,
         snapshotId: sId,
@@ -380,7 +377,7 @@ describe('Domain Persistence Foundation', () => {
       const evId = evidenceId('ev_freshness');
       const fId = findingId('f_freshness');
 
-      const saved = evalRepo.persistQualityResult({
+      const saved = await evalRepo.persistQualityResult({
         evaluationId: eId,
         quality: {
           level: 'strong',
@@ -414,7 +411,7 @@ describe('Domain Persistence Foundation', () => {
 
       expect(saved).toBe(true);
 
-      const updatedEval = evalRepo.getEvaluation(eId);
+      const updatedEval = await evalRepo.getEvaluation(eId);
       expect(updatedEval?.qualityLevel).toBe('strong');
       expect(updatedEval?.qualityEngineVersion).toBe('quality-v1');
       expect(updatedEval?.qualityInputFingerprint).toBe('quality-fp-1');
@@ -423,19 +420,19 @@ describe('Domain Persistence Foundation', () => {
       );
       expect(updatedEval?.qualityFreshnessBucket).toBe('recent');
 
-      const qualityFindings = evalRepo.getQualityFindings(eId);
+      const qualityFindings = await evalRepo.getQualityFindings(eId);
       expect(qualityFindings).toHaveLength(1);
       expect(qualityFindings[0]?.dimensionKey).toBe('freshness');
       expect(qualityFindings[0]?.state).toBe('STRONG');
 
-      const findingEvidence = evidenceRepo.getFindingEvidence(fId);
+      const findingEvidence = await evidenceRepo.getFindingEvidence(fId);
       expect(findingEvidence).toHaveLength(1);
       expect(findingEvidence[0]?.sourceReference).toBe('snapshot:snap_quality');
 
-      const latestQuality = evalRepo.getLatestQualityForSnapshot(sId);
+      const latestQuality = await evalRepo.getLatestQualityForSnapshot(sId);
       expect(latestQuality?.id).toBe(eId);
 
-      const foundByFp = evalRepo.findQualityEvaluation({
+      const foundByFp = await evalRepo.findQualityEvaluation({
         snapshotId: sId,
         engineVersion: 'quality-v1',
         inputFingerprint: 'quality-fp-1',
@@ -443,17 +440,17 @@ describe('Domain Persistence Foundation', () => {
       expect(foundByFp?.id).toBe(eId);
     });
 
-    it('rejects stale out-of-order writes and behaves idempotently on duplicate writes', () => {
+    it('rejects stale out-of-order writes and behaves idempotently on duplicate writes', async () => {
       const oppRepo = new OpportunityRepository(db);
       const candRepo = new CandidateRepository(db);
       const evalRepo = new EvaluationRepository(db);
 
       const cId = candidateId('cand_stale');
-      candRepo.createCandidate(cId);
+      await candRepo.createCandidate(cId);
       const oId = opportunityId('opp_stale');
-      oppRepo.createOpportunity(oId);
+      await oppRepo.createOpportunity(oId);
       const sId = snapshotId('snap_stale');
-      oppRepo.appendSnapshot({
+      await oppRepo.appendSnapshot({
         fingerprint: 'test-hash',
         id: sId,
         opportunityId: oId,
@@ -462,7 +459,7 @@ describe('Domain Persistence Foundation', () => {
         content: 'Content',
       });
       const eId = evaluationId('eval_stale');
-      evalRepo.persistEvaluation({
+      await evalRepo.persistEvaluation({
         id: eId,
         candidateId: cId,
         snapshotId: sId,
@@ -472,8 +469,7 @@ describe('Domain Persistence Foundation', () => {
       const newerTime = new Date('2026-08-30T12:00:00Z');
       const olderTime = new Date('2026-08-30T08:00:00Z');
 
-      // Write newer result
-      evalRepo.persistQualityResult({
+      await evalRepo.persistQualityResult({
         evaluationId: eId,
         quality: {
           level: 'strong',
@@ -486,8 +482,7 @@ describe('Domain Persistence Foundation', () => {
         findings: [],
       });
 
-      // Duplicate write with same fingerprint -> returns true without error
-      const dupResult = evalRepo.persistQualityResult({
+      const dupResult = await evalRepo.persistQualityResult({
         evaluationId: eId,
         quality: {
           level: 'strong',
@@ -501,8 +496,7 @@ describe('Domain Persistence Foundation', () => {
       });
       expect(dupResult).toBe(true);
 
-      // Stale write with older timestamp -> rejected (false)
-      const staleResult = evalRepo.persistQualityResult({
+      const staleResult = await evalRepo.persistQualityResult({
         evaluationId: eId,
         quality: {
           level: 'weak',
@@ -516,27 +510,26 @@ describe('Domain Persistence Foundation', () => {
       });
       expect(staleResult).toBe(false);
 
-      // Evaluation remains intact with newer evaluation
-      const currentEval = evalRepo.getEvaluation(eId);
+      const currentEval = await evalRepo.getEvaluation(eId);
       expect(currentEval?.qualityLevel).toBe('strong');
       expect(currentEval?.qualityInputFingerprint).toBe('fp-newer');
     });
   });
 
   describe('HISTORY', () => {
-    it('historical Evaluations and Decisions remain intact with structured metadata', () => {
+    it('historical Evaluations and Decisions remain intact with structured metadata', async () => {
       const candRepo = new CandidateRepository(db);
       const oppRepo = new OpportunityRepository(db);
       const evalRepo = new EvaluationRepository(db);
 
       const cId = candidateId('cand_1');
-      candRepo.createCandidate(cId);
+      await candRepo.createCandidate(cId);
 
       const oId = opportunityId('opp_1');
-      oppRepo.createOpportunity(oId);
+      await oppRepo.createOpportunity(oId);
 
       const sId = snapshotId('snap_1');
-      oppRepo.appendSnapshot({
+      await oppRepo.appendSnapshot({
         fingerprint: 'test-hash',
         id: sId,
         opportunityId: oId,
@@ -546,7 +539,7 @@ describe('Domain Persistence Foundation', () => {
       });
 
       const eId = evaluationId('eval_1');
-      evalRepo.persistEvaluation({
+      await evalRepo.persistEvaluation({
         id: eId,
         candidateId: cId,
         snapshotId: sId,
@@ -560,7 +553,7 @@ describe('Domain Persistence Foundation', () => {
 
       const dId = decisionId('dec_1');
       const evalTime = new Date('2026-08-30T12:00:00Z');
-      const success = evalRepo.persistDecision({
+      const success = await evalRepo.persistDecision({
         id: dId,
         evaluationId: eId,
         candidateId: cId,
@@ -579,7 +572,7 @@ describe('Domain Persistence Foundation', () => {
       });
       expect(success).toBe(true);
 
-      const decision = evalRepo.getDecision(dId);
+      const decision = await evalRepo.getDecision(dId);
       expect(decision).toBeDefined();
       expect(decision?.priority).toBe('high-priority');
       expect(decision?.action).toBe('apply');
@@ -590,15 +583,14 @@ describe('Domain Persistence Foundation', () => {
         'STRONG_REQUIRED_FIT',
       ]);
 
-      const latestForEval = evalRepo.getLatestDecisionForEvaluation(eId);
+      const latestForEval = await evalRepo.getLatestDecisionForEvaluation(eId);
       expect(latestForEval?.id).toBe(dId);
 
-      const latestForSnap = evalRepo.getLatestDecisionForSnapshot(sId);
+      const latestForSnap = await evalRepo.getLatestDecisionForSnapshot(sId);
       expect(latestForSnap?.id).toBe(dId);
       expect(latestForSnap?.priority).toBe('high-priority');
 
-      // Test idempotency
-      const dup = evalRepo.persistDecision({
+      const dup = await evalRepo.persistDecision({
         id: decisionId('dec_dup'),
         evaluationId: eId,
         candidateId: cId,
@@ -617,12 +609,11 @@ describe('Domain Persistence Foundation', () => {
       });
       expect(dup).toBe(true);
 
-      // A superseded Evaluation cannot accept a late Decision write.
-      evalRepo.supersedeCurrentEvaluation({
+      await evalRepo.supersedeCurrentEvaluation({
         candidateId: cId,
         snapshotId: sId,
       });
-      const stale = evalRepo.persistDecision({
+      const stale = await evalRepo.persistDecision({
         id: decisionId('dec_stale'),
         evaluationId: eId,
         candidateId: cId,
@@ -650,7 +641,7 @@ describe('Domain Persistence Foundation', () => {
       ['quality', 'elig-fp-a', 'fit-fp-a', 'quality-fp-b'],
     ])(
       'rejects a late Decision after a newer %s revision exists',
-      (
+      async (
         _dimension,
         eligibilityFingerprint,
         fitFingerprint,
@@ -664,9 +655,9 @@ describe('Domain Persistence Foundation', () => {
         const snapshot = snapshotId(`snap-race-${_dimension}`);
         const evaluationA = evaluationId(`eval-race-a-${_dimension}`);
         const evaluationB = evaluationId(`eval-race-b-${_dimension}`);
-        candidates.createCandidate(candidate);
-        opportunities.createOpportunity(opportunity);
-        opportunities.appendSnapshot({
+        await candidates.createCandidate(candidate);
+        await opportunities.createOpportunity(opportunity);
+        await opportunities.appendSnapshot({
           id: snapshot,
           opportunityId: opportunity,
           title: 'Role',
@@ -674,7 +665,7 @@ describe('Domain Persistence Foundation', () => {
           content: 'Role',
           fingerprint: `snapshot-${_dimension}`,
         });
-        evaluations.persistEvaluation({
+        await evaluations.persistEvaluation({
           id: evaluationA,
           candidateId: candidate,
           snapshotId: snapshot,
@@ -685,24 +676,24 @@ describe('Domain Persistence Foundation', () => {
           qualityLevel: 'strong',
           qualityInputFingerprint: 'quality-fp-a',
         });
-        evaluations.forkEvaluation({
+        await evaluations.forkEvaluation({
           id: evaluationB,
           sourceEvaluationId: evaluationA,
           copy: ['eligibility', 'fit', 'quality'],
         });
-        // The fork preserves A's completed assessments; B receives one newer
-        // semantic upstream input before the late A write attempts persistence.
-        db.db
+
+        const { evaluations: evaluationRows } = getTables(db);
+        const dbClient = db.db as any;
+        await dbClient
           .update(evaluationRows)
           .set({
             eligibilityInputFingerprint: eligibilityFingerprint,
             fitInputFingerprint: fitFingerprint,
             qualityInputFingerprint: qualityFingerprint,
           })
-          .where(eq(evaluationRows.id, evaluationB))
-          .run();
+          .where(eq(evaluationRows.id, evaluationB));
 
-        const lateA = evaluations.persistDecision({
+        const lateA = await evaluations.persistDecision({
           id: decisionId(`decision-a-${_dimension}`),
           evaluationId: evaluationA,
           candidateId: candidate,
@@ -722,7 +713,7 @@ describe('Domain Persistence Foundation', () => {
         expect(lateA).toBe(false);
 
         expect(
-          evaluations.persistDecision({
+          await evaluations.persistDecision({
             id: decisionId(`decision-b-${_dimension}`),
             evaluationId: evaluationB,
             candidateId: candidate,
@@ -740,13 +731,16 @@ describe('Domain Persistence Foundation', () => {
             evaluatedAt: new Date(),
           }),
         ).toBe(true);
-        expect(
-          evaluations.getCurrentDecision(candidate, snapshot)?.evaluationId,
-        ).toBe(evaluationB);
+
+        const currentDec = await evaluations.getCurrentDecision(
+          candidate,
+          snapshot,
+        );
+        expect(currentDec?.evaluationId).toBe(evaluationB);
       },
     );
 
-    it('enforces Decision semantic idempotency in SQLite, independently of repository pre-checks', () => {
+    it('enforces Decision semantic idempotency in SQLite, independently of repository pre-checks', async () => {
       const candidates = new CandidateRepository(db);
       const opportunities = new OpportunityRepository(db);
       const evaluations = new EvaluationRepository(db);
@@ -754,9 +748,9 @@ describe('Domain Persistence Foundation', () => {
       const opportunity = opportunityId('opp-decision-unique');
       const snapshot = snapshotId('snap-decision-unique');
       const evaluation = evaluationId('eval-decision-unique');
-      candidates.createCandidate(candidate);
-      opportunities.createOpportunity(opportunity);
-      opportunities.appendSnapshot({
+      await candidates.createCandidate(candidate);
+      await opportunities.createOpportunity(opportunity);
+      await opportunities.appendSnapshot({
         id: snapshot,
         opportunityId: opportunity,
         title: 'Role',
@@ -764,7 +758,7 @@ describe('Domain Persistence Foundation', () => {
         content: 'Role',
         fingerprint: 'unique-snapshot',
       });
-      evaluations.persistEvaluation({
+      await evaluations.persistEvaluation({
         id: evaluation,
         candidateId: candidate,
         snapshotId: snapshot,
@@ -791,19 +785,21 @@ describe('Domain Persistence Foundation', () => {
         evaluatedAt: new Date(),
         createdAt: new Date(),
       };
-      db.db
+
+      const { decisions } = getTables(db);
+      const dbClient = db.db as any;
+      await dbClient
         .insert(decisions)
-        .values({ id: decisionId('decision-unique-a'), ...value })
-        .run();
-      expect(() =>
-        db.db
+        .values({ id: decisionId('decision-unique-a'), ...value });
+
+      await expect(
+        dbClient
           .insert(decisions)
-          .values({ id: decisionId('decision-unique-b'), ...value })
-          .run(),
-      ).toThrow();
+          .values({ id: decisionId('decision-unique-b'), ...value }),
+      ).rejects.toThrow();
     });
 
-    it('persists DecisionReason linking Decision -> EvaluationFinding -> Evidence provenance', () => {
+    it('persists DecisionReason linking Decision -> EvaluationFinding -> Evidence provenance', async () => {
       const candidates = new CandidateRepository(db);
       const opportunities = new OpportunityRepository(db);
       const evaluations = new EvaluationRepository(db);
@@ -816,9 +812,9 @@ describe('Domain Persistence Foundation', () => {
       const finding = findingId('find-prov-1');
       const evId = evidenceId('ev-prov-1');
 
-      candidates.createCandidate(candidate);
-      opportunities.createOpportunity(opportunity);
-      opportunities.appendSnapshot({
+      await candidates.createCandidate(candidate);
+      await opportunities.createOpportunity(opportunity);
+      await opportunities.appendSnapshot({
         id: snapshot,
         opportunityId: opportunity,
         title: 'Lead Engineer',
@@ -827,7 +823,7 @@ describe('Domain Persistence Foundation', () => {
         fingerprint: 'fp-snap-prov',
       });
 
-      evaluations.persistEvaluation({
+      await evaluations.persistEvaluation({
         id: evaluation,
         candidateId: candidate,
         snapshotId: snapshot,
@@ -839,7 +835,7 @@ describe('Domain Persistence Foundation', () => {
         qualityInputFingerprint: 'fp-qual-prov',
       });
 
-      evaluations.persistFinding({
+      await evaluations.persistFinding({
         id: finding,
         evaluationId: evaluation,
         category: 'eligibility',
@@ -848,7 +844,7 @@ describe('Domain Persistence Foundation', () => {
         summary: 'Requires German work authorization.',
       });
 
-      evidenceRepo.attachToSnapshot(snapshot, {
+      await evidenceRepo.attachToSnapshot(snapshot, {
         id: evId,
         evidenceType: 'source-observation',
         sourceReference: 'greenhouse:456',
@@ -856,10 +852,10 @@ describe('Domain Persistence Foundation', () => {
         state: 'source-verified',
       });
 
-      evaluations.attachEvidenceToFinding(finding, evId);
+      await evaluations.attachEvidenceToFinding(finding, evId);
 
       const dId = decisionId('dec-prov-1');
-      evaluations.persistDecision({
+      await evaluations.persistDecision({
         id: dId,
         evaluationId: evaluation,
         candidateId: candidate,
@@ -879,12 +875,12 @@ describe('Domain Persistence Foundation', () => {
         evaluatedAt: new Date(),
       });
 
-      const reasons = evaluations.getDecisionReasons(dId);
+      const reasons = await evaluations.getDecisionReasons(dId);
       expect(reasons).toHaveLength(1);
       expect(reasons[0]?.reasonCode).toBe('ELIGIBILITY_BLOCKER');
       expect(reasons[0]?.findingId).toBe(finding);
 
-      const findingEvidence = evidenceRepo.getFindingEvidence(finding);
+      const findingEvidence = await evidenceRepo.getFindingEvidence(finding);
       expect(findingEvidence).toHaveLength(1);
       expect(findingEvidence[0]?.id).toBe(evId);
       expect(findingEvidence[0]?.excerpt).toBe(
@@ -892,7 +888,7 @@ describe('Domain Persistence Foundation', () => {
       );
     });
 
-    it('ensures application records and events remain untouched across decision updates', () => {
+    it('ensures application records and events remain untouched across decision updates', async () => {
       const candidates = new CandidateRepository(db);
       const opportunities = new OpportunityRepository(db);
       const evaluations = new EvaluationRepository(db);
@@ -903,9 +899,9 @@ describe('Domain Persistence Foundation', () => {
       const snapshot = snapshotId('snap-app-no-interfere');
       const evaluation = evaluationId('eval-app-no-interfere');
 
-      candidates.createCandidate(candidate);
-      opportunities.createOpportunity(opportunity);
-      opportunities.appendSnapshot({
+      await candidates.createCandidate(candidate);
+      await opportunities.createOpportunity(opportunity);
+      await opportunities.appendSnapshot({
         id: snapshot,
         opportunityId: opportunity,
         title: 'Backend Dev',
@@ -914,7 +910,7 @@ describe('Domain Persistence Foundation', () => {
         fingerprint: 'fp-snap-app',
       });
 
-      evaluations.persistEvaluation({
+      await evaluations.persistEvaluation({
         id: evaluation,
         candidateId: candidate,
         snapshotId: snapshot,
@@ -927,14 +923,14 @@ describe('Domain Persistence Foundation', () => {
       });
 
       const appId = applicationId('app-no-interfere');
-      apps.createApplication({
+      await apps.createApplication({
         id: appId,
         candidateId: candidate,
         opportunityId: opportunity,
         status: 'Applied',
       });
       const evId = eventId('ev-app-no-interfere');
-      apps.appendEvent({
+      await apps.appendEvent({
         id: evId,
         candidateId: candidate,
         applicationId: appId,
@@ -942,8 +938,7 @@ describe('Domain Persistence Foundation', () => {
         detail: 'Submitted application on website.',
       });
 
-      // Persist Decision 1
-      evaluations.persistDecision({
+      await evaluations.persistDecision({
         id: decisionId('dec-app-1'),
         evaluationId: evaluation,
         candidateId: candidate,
@@ -961,13 +956,13 @@ describe('Domain Persistence Foundation', () => {
         evaluatedAt: new Date('2026-08-30T10:00:00Z'),
       });
 
-      // Application and event exist unchanged
-      expect(apps.getApplication(candidate, appId)?.status).toBe('Applied');
-      expect(apps.getEvents(candidate, appId)).toHaveLength(3);
+      const appBefore = await apps.getApplication(candidate, appId);
+      expect(appBefore?.status).toBe('Applied');
+      const eventsBefore = await apps.getEvents(candidate, appId);
+      expect(eventsBefore).toHaveLength(3);
 
-      // Transition Decision to blocked (e.g. listing closed)
       const eval2 = evaluationId('eval-app-no-interfere-2');
-      evaluations.persistEvaluation({
+      await evaluations.persistEvaluation({
         id: eval2,
         candidateId: candidate,
         snapshotId: snapshot,
@@ -979,7 +974,7 @@ describe('Domain Persistence Foundation', () => {
         qualityInputFingerprint: 'fp-qual-app-2',
       });
 
-      evaluations.persistDecision({
+      await evaluations.persistDecision({
         id: decisionId('dec-app-2'),
         evaluationId: eval2,
         candidateId: candidate,
@@ -997,22 +992,21 @@ describe('Domain Persistence Foundation', () => {
         evaluatedAt: new Date('2026-08-30T11:00:00Z'),
       });
 
-      // Application status and history events MUST NOT be affected by Decision transition
-      const appAfter = apps.getApplication(candidate, appId);
+      const appAfter = await apps.getApplication(candidate, appId);
       expect(appAfter?.status).toBe('Applied');
-      const eventsAfter = apps.getEvents(candidate, appId);
+      const eventsAfter = await apps.getEvents(candidate, appId);
       expect(eventsAfter).toHaveLength(3);
       expect(eventsAfter.some((event) => event.id === evId)).toBe(true);
     });
   });
 
   describe('DELETE SEMANTICS', () => {
-    it('critical audit deletion remains restricted, junction cleanup behaves intentionally', () => {
+    it('critical audit deletion remains restricted, junction cleanup behaves intentionally', async () => {
       const candRepo = new CandidateRepository(db);
       const cId = candidateId('cand_does_not_exist');
       const clId = claimId('cl_1');
 
-      expect(() =>
+      await expect(
         candRepo.addClaim({
           id: clId,
           candidateId: cId,
@@ -1020,7 +1014,7 @@ describe('Domain Persistence Foundation', () => {
           value: 'TS',
           state: 'SUPPORTED',
         }),
-      ).toThrow();
+      ).rejects.toThrow();
     });
   });
 });

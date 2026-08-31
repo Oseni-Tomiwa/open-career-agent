@@ -134,9 +134,11 @@ function readSessionToken(request: FastifyRequest): {
   const authorization = request.headers.authorization;
   if (authorization?.startsWith('Bearer ')) {
     const token = authorization.slice('Bearer '.length).trim();
+    if (token.startsWith('ck_')) return { token: null, source: null };
     return { token: token || null, source: token ? 'bearer' : null };
   }
   const token = parseCookies(request.headers.cookie)[COOKIE_NAME];
+  if (token?.startsWith('br_')) return { token: null, source: null };
   return { token: token ?? null, source: token ? 'cookie' : null };
 }
 
@@ -168,7 +170,11 @@ function requestCandidateId(request: FastifyRequest): string | null {
   const params = request.params as { candidateId?: unknown } | undefined;
   if (typeof params?.candidateId === 'string') return params.candidateId;
   const query = request.query as { candidateId?: unknown } | undefined;
-  return typeof query?.candidateId === 'string' ? query.candidateId : null;
+  if (typeof query?.candidateId === 'string') return query.candidateId;
+  const match = request.raw.url?.match(
+    /\/candidates\/(candidate_[a-zA-Z0-9_-]+)/,
+  );
+  return match?.[1] ?? null;
 }
 
 function authError(
@@ -205,7 +211,7 @@ export function registerAuthBoundary(
   const typedApp = app.withTypeProvider<TypeBoxTypeProvider>();
   const repository = new AuthRepository(database);
 
-  typedApp.addHook('preHandler', async (request, reply) => {
+  app.addHook('onRequest', async (request, reply) => {
     const route = request.routeOptions.url;
     if (route && PUBLIC_ROUTES.has(route)) return;
 
@@ -217,9 +223,14 @@ export function registerAuthBoundary(
 
     if (config.identityMode === 'cloud') {
       const credential = readSessionToken(request);
-      const principal = credential.token
-        ? repository.findActiveSession(hashToken(credential.token))
-        : null;
+      let principal: AuthenticatedPrincipalRecord | null = null;
+      try {
+        principal = credential.token
+          ? await repository.findActiveSession(hashToken(credential.token))
+          : null;
+      } catch {
+        // Session lookup error
+      }
       if (!principal) {
         const error = authError(request, 401, 'UNAUTHORIZED');
         await reply.status(error.statusCode).send(error.body);
@@ -229,10 +240,16 @@ export function registerAuthBoundary(
 
       if (
         credential.source === 'cookie' &&
-        !['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
         request.headers.origin !== config.webOrigin
       ) {
-        const error = authError(request, 403, 'FORBIDDEN');
+        const isStateChanging = !['GET', 'HEAD', 'OPTIONS'].includes(
+          request.method,
+        );
+        const error = authError(
+          request,
+          isStateChanging ? 403 : 401,
+          isStateChanging ? 'FORBIDDEN' : 'UNAUTHORIZED',
+        );
         await reply.status(error.statusCode).send(error.body);
         return;
       }
@@ -240,10 +257,14 @@ export function registerAuthBoundary(
       const requestedCandidate = requestCandidateId(request);
       if (
         requestedCandidate &&
-        !repository.userCanAccessCandidate(principal.userId, requestedCandidate)
+        !(await repository.userCanAccessCandidate(
+          principal.userId,
+          requestedCandidate,
+        ))
       ) {
         const error = authError(request, 403, 'FORBIDDEN');
         await reply.status(error.statusCode).send(error.body);
+        return;
       }
       return;
     }
@@ -260,22 +281,26 @@ export function registerAuthBoundary(
     }
   });
 
-  function newSessionMaterial() {
-    const token = randomBytes(32).toString('base64url');
+  function newSessionMaterial(transport: 'bearer' | 'cookie' = 'bearer') {
+    const prefix = transport === 'cookie' ? 'ck_' : 'br_';
+    const token = `${prefix}${randomBytes(32).toString('base64url')}`;
     const expiresAt = new Date(
       Date.now() + config.sessionTtlHours * 60 * 60 * 1000,
     );
     return { token, tokenHash: hashToken(token), expiresAt };
   }
 
-  function createSession(userId: string) {
-    const material = newSessionMaterial();
-    repository.createSession({
+  async function createSession(
+    userId: string,
+    transport: 'bearer' | 'cookie' = 'bearer',
+  ) {
+    const material = newSessionMaterial(transport);
+    await repository.createSession({
       userId,
       tokenHash: material.tokenHash,
       expiresAt: material.expiresAt,
     });
-    const principal = repository.findActiveSession(material.tokenHash);
+    const principal = await repository.findActiveSession(material.tokenHash);
     if (!principal) throw new Error('Newly created session could not be read');
     return { token: material.token, principal };
   }
@@ -284,7 +309,7 @@ export function registerAuthBoundary(
     request: FastifyRequest,
     transport: 'cookie' | 'bearer' | undefined,
   ): boolean {
-    if (transport === 'bearer') return true;
+    if (transport === 'bearer' || transport === undefined) return true;
     return request.headers.origin === config.webOrigin;
   }
 
@@ -316,8 +341,8 @@ export function registerAuthBoundary(
       }
       try {
         const passwordHash = await hashPassword(request.body.password);
-        const material = newSessionMaterial();
-        const account = repository.createAccount({
+        const material = newSessionMaterial(request.body.transport ?? 'bearer');
+        const account = await repository.createAccount({
           email: request.body.email,
           passwordHash,
           session: {
@@ -325,7 +350,9 @@ export function registerAuthBoundary(
             expiresAt: material.expiresAt,
           },
         });
-        const principal = repository.findActiveSession(material.tokenHash);
+        const principal = await repository.findActiveSession(
+          material.tokenHash,
+        );
         if (!principal || !account.sessionId) {
           throw new Error('Newly registered session could not be read');
         }
@@ -384,7 +411,7 @@ export function registerAuthBoundary(
           },
         });
       }
-      const user = repository.findUserByEmail(request.body.email);
+      const user = await repository.findUserByEmail(request.body.email);
       const valid = await verifyPassword(
         request.body.password,
         user?.passwordHash ?? DUMMY_PASSWORD_HASH,
@@ -398,7 +425,10 @@ export function registerAuthBoundary(
           },
         });
       }
-      const session = createSession(user.id);
+      const session = await createSession(
+        user.id,
+        request.body.transport ?? 'bearer',
+      );
       if (request.body.transport !== 'bearer') {
         reply.header(
           'set-cookie',
@@ -445,9 +475,9 @@ export function registerAuthBoundary(
         },
       },
     },
-    (request, reply) => {
+    async (request, reply) => {
       const principal = getAuthenticatedPrincipal(request)!;
-      const revoked = repository.revokeSession(principal.sessionId);
+      const revoked = await repository.revokeSession(principal.sessionId);
       reply.header(
         'set-cookie',
         cookieValue('', 0, config.environment === 'production'),

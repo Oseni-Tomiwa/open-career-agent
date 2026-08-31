@@ -49,14 +49,14 @@ export function createDiscoveryHandlers(deps: {
       const cId = candidateId(payload.candidateId);
       const tId = searchTargetId(payload.searchTargetId);
 
-      const target = searchTargetRepo.getSearchTarget(cId, tId);
+      const target = await searchTargetRepo.getSearchTarget(cId, tId);
       let runId: DiscoveryRunId;
 
       if (payload.discoveryRunId) {
         runId = discoveryRunId(payload.discoveryRunId);
       } else {
         runId = discoveryRunId(`dr_${randomUUID()}`);
-        searchTargetRepo.createDiscoveryRun(
+        await searchTargetRepo.createDiscoveryRun(
           runId,
           cId,
           tId,
@@ -65,7 +65,7 @@ export function createDiscoveryHandlers(deps: {
       }
 
       if (!target || !target.enabled) {
-        searchTargetRepo.updateDiscoveryRun(runId, {
+        await searchTargetRepo.updateDiscoveryRun(runId, {
           status: 'FAILED',
           errorSummary: !target
             ? 'Search target not found'
@@ -75,7 +75,7 @@ export function createDiscoveryHandlers(deps: {
         return;
       }
 
-      searchTargetRepo.updateDiscoveryRun(runId, {
+      await searchTargetRepo.updateDiscoveryRun(runId, {
         status: 'RUNNING',
       });
 
@@ -138,14 +138,14 @@ export function createDiscoveryHandlers(deps: {
             // ACCEPTED MATCH
             acceptedCount++;
 
-            let existingListing = sourceRepo.findListingByExternalId(
+            let existingListing = await sourceRepo.findListingByExternalId(
               record.sourceSystem,
               record.sourceExternalId,
             );
 
             const listingId = existingListing?.id ?? `sl_${randomUUID()}`;
 
-            sourceRepo.persistListing(
+            await sourceRepo.persistListing(
               listingId,
               {
                 sourceSystem: record.sourceSystem,
@@ -156,13 +156,13 @@ export function createDiscoveryHandlers(deps: {
               record.observedAt.getTime(),
             );
 
-            existingListing = sourceRepo.getListing(listingId);
+            existingListing = await sourceRepo.getListing(listingId);
             let oppId = existingListing?.opportunityId ?? null;
 
             if (!oppId) {
               oppId = opportunityId(`opp_${randomUUID()}`);
-              oppRepo.createOpportunity(opportunityId(oppId));
-              sourceRepo.associateListingWithOpportunity(
+              await oppRepo.createOpportunity(opportunityId(oppId));
+              await sourceRepo.associateListingWithOpportunity(
                 listingId,
                 opportunityId(oppId),
               );
@@ -172,14 +172,14 @@ export function createDiscoveryHandlers(deps: {
               .update(record.rawPayload)
               .digest('hex');
 
-            const existingObs = sourceRepo.findObservationByFingerprint(
+            const existingObs = await sourceRepo.findObservationByFingerprint(
               listingId,
               rawHash,
             );
             const obsId = existingObs?.id ?? `so_${randomUUID()}`;
 
             if (!existingObs) {
-              sourceRepo.persistObservation(
+              await sourceRepo.persistObservation(
                 obsId,
                 listingId,
                 {
@@ -191,7 +191,7 @@ export function createDiscoveryHandlers(deps: {
             }
 
             const snapshotFingerprint = normalizer.hash(normalized);
-            const latestSnapshot = oppRepo.getLatestSnapshot(
+            const latestSnapshot = await oppRepo.getLatestSnapshot(
               opportunityId(oppId),
             );
 
@@ -203,7 +203,7 @@ export function createDiscoveryHandlers(deps: {
               latestSnapshot.fingerprint !== snapshotFingerprint
             ) {
               snapId = snapshotId(`snap_${randomUUID()}`);
-              oppRepo.appendSnapshot({
+              await oppRepo.appendSnapshot({
                 id: snapId,
                 opportunityId: opportunityId(oppId),
                 title: normalized.title,
@@ -227,7 +227,7 @@ export function createDiscoveryHandlers(deps: {
             }
 
             // Record Candidate Discovery Match
-            searchTargetRepo.recordDiscoveryMatch({
+            await searchTargetRepo.recordDiscoveryMatch({
               id: discoveryMatchId(`dm_${randomUUID()}`),
               candidateId: cId,
               searchTargetId: tId,
@@ -240,7 +240,7 @@ export function createDiscoveryHandlers(deps: {
 
             // Enqueue eligibility evaluation if snapshot exists
             if (snapId) {
-              taskLedger.enqueue({
+              await taskLedger.enqueue({
                 taskType: 'eligibility.evaluate',
                 payload: { snapshotId: snapId, candidateId: cId },
                 idempotencyKey: `eligibility-${cId}-${snapId}`,
@@ -257,7 +257,7 @@ export function createDiscoveryHandlers(deps: {
         }
       }
 
-      searchTargetRepo.updateDiscoveryRun(runId, {
+      await searchTargetRepo.updateDiscoveryRun(runId, {
         status: sourceFailed ? 'FAILED' : 'COMPLETED',
         discoveredCount,
         acceptedCount,

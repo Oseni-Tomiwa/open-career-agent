@@ -4,7 +4,7 @@ import {
   CandidateRepository,
   EvaluationRepository,
   BackgroundTaskLedger,
-  candidates,
+  getTables,
 } from '@oca/database';
 import type { BackgroundTaskHandler } from '../worker.js';
 import type { BackgroundTask } from '@oca/database';
@@ -50,39 +50,39 @@ export function createEligibilityHandlers(deps: {
   const ledger = new BackgroundTaskLedger(deps.db);
 
   return {
-    'eligibility.evaluate': (task: BackgroundTask) => {
+    'eligibility.evaluate': async (task: BackgroundTask) => {
       const payload = task.payload as {
         snapshotId: string;
         candidateId?: string;
       };
       const snapId = payload.snapshotId;
 
-      const snapshot = oppRepo.getSnapshot(snapId as unknown as SnapshotId);
+      const snapshot = await oppRepo.getSnapshot(
+        snapId as unknown as SnapshotId,
+      );
       if (!snapshot) {
         throw new Error(`Snapshot not found: ${snapId}`);
       }
 
-      // For MVP, evaluate against ALL candidates, or if candidateId is provided, just that one.
-      // Usually there's only one user candidate in a single-tenant agent context.
-      // Let's assume we find a single default candidate for now if not provided
       let candId = payload.candidateId;
       if (!candId) {
-        // Just hacky lookup for first candidate to evaluate
-        const dbCandidates = deps.db.db.select().from(candidates).all();
+        const { candidates } = getTables(deps.db);
+        const db = deps.db.db as any;
+        const dbCandidates = await db.select().from(candidates);
         if (dbCandidates.length === 0) return;
         candId = dbCandidates[0]?.id;
         if (!candId) return;
       }
 
       if (!candId) return;
-      const claims = candidateRepo.getClaims(candId as unknown as CandidateId);
+      const claims = await candidateRepo.getClaims(
+        candId as unknown as CandidateId,
+      );
 
       const result = engine.evaluate(
         snapshot,
         claims.map((claim) => ({
           ...claim,
-          // Eligibility V1 predates the canonical persistence vocabulary.
-          // Keep the frozen engine stable and adapt at its workflow boundary.
           state:
             claim.state === 'CONFLICTING'
               ? 'conflict'
@@ -102,23 +102,23 @@ export function createEligibilityHandlers(deps: {
         })),
       });
 
-      deps.db.db.transaction(() => {
-        evalRepo.supersedeCurrentEvaluation({
+      const db = deps.db.db as any;
+      await db.transaction(async () => {
+        await evalRepo.supersedeCurrentEvaluation({
           candidateId: candId as CandidateId,
           snapshotId: snapId as SnapshotId,
         });
-        evalRepo.persistEvaluation({
+        await evalRepo.persistEvaluation({
           id: evalId as unknown as EvaluationId,
           candidateId: candId as unknown as CandidateId,
           snapshotId: snapId as unknown as SnapshotId,
           eligibilityState: result.overallState,
           eligibilityEngineVersion: result.version,
           eligibilityInputFingerprint: inputFingerprint,
-          // fitLevel and qualityLevel are omitted/null for now
         });
 
         for (const finding of result.findings) {
-          evalRepo.persistFinding({
+          await evalRepo.persistFinding({
             id: randomUUID() as unknown as FindingId,
             evaluationId: evalId as unknown as EvaluationId,
             category: 'eligibility',
@@ -130,7 +130,7 @@ export function createEligibilityHandlers(deps: {
         }
       });
 
-      ledger.enqueue({
+      await ledger.enqueue({
         taskType: 'fit.evaluate',
         payload: {
           evaluationId: evalId,

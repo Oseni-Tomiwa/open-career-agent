@@ -34,17 +34,44 @@ describe('configuration', () => {
     ).toThrow('must be api in Cloud mode');
   });
 
-  it('defaults Cloud processes to explicit migrations', () => {
+  it('defaults Cloud processes to explicit migrations and PostgreSQL', () => {
     const cloud = parseApiConfig({
       APP_ENV: 'production',
       IDENTITY_MODE: 'cloud',
+      DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/rolevia',
       TRUSTED_CANDIDATE_ID: 'must-not-win',
     });
     expect(cloud).toMatchObject({
       identityMode: 'cloud',
       migrationMode: 'manual',
+      databaseEngine: 'postgres',
+      databaseUrl: 'postgres://postgres:postgres@localhost:5432/rolevia',
     });
     expect(cloud.trustedCandidateId).toBeUndefined();
+  });
+
+  it('enforces PostgreSQL for Cloud mode and validates DATABASE_URL', () => {
+    expect(() =>
+      parseApiConfig({
+        IDENTITY_MODE: 'cloud',
+      }),
+    ).toThrow('DATABASE_URL is required when DATABASE_ENGINE=postgres');
+
+    expect(() =>
+      parseApiConfig({
+        IDENTITY_MODE: 'cloud',
+        DATABASE_ENGINE: 'sqlite',
+        DATABASE_URL: 'postgres://localhost/test',
+      }),
+    ).toThrow(
+      'Rolevia Cloud requires DATABASE_ENGINE=postgres and cannot run on SQLite',
+    );
+
+    expect(() =>
+      parseWorkerConfig({
+        DATABASE_ENGINE: 'postgres',
+      }),
+    ).toThrow('DATABASE_URL is required when DATABASE_ENGINE=postgres');
   });
 
   it('fails closed when production identity mode is ambiguous', () => {

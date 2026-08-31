@@ -44,10 +44,10 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
   const candidateA = candidateId('cand-disc-a');
   const candidateB = candidateId('cand-disc-b');
 
-  beforeEach(() => {
+  beforeEach(async () => {
     directory = mkdtempSync(join(tmpdir(), 'oca-disc-worker-test-'));
     db = openDatabase(join(directory, 'test.sqlite'));
-    applyMigrations(db);
+    await applyMigrations(db);
 
     ledger = new BackgroundTaskLedger(db);
     targetRepo = new SearchTargetRepository(db);
@@ -55,8 +55,8 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
     oppRepo = new OpportunityRepository(db);
     evalRepo = new EvaluationRepository(db);
 
-    candRepo.createCandidate(candidateA);
-    candRepo.createCandidate(candidateB);
+    await candRepo.createCandidate(candidateA);
+    await candRepo.createCandidate(candidateB);
 
     worker = new BackgroundWorker({
       ledger,
@@ -74,27 +74,25 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
-    db.close();
+    await db.close();
     rmSync(directory, { recursive: true, force: true });
   });
 
   it('runs E2E discovery scenario with 4 discovered, 2 accepted, 2 rejected, cascading accepted into intelligence pipeline', async () => {
-    // 1. Setup Search Target for Candidate A
-    const targetA = targetRepo.createSearchTarget(candidateA, {
+    const targetA = await targetRepo.createSearchTarget(candidateA, {
       name: 'Backend Target',
       targetRoles: ['Backend Engineer'],
       locations: ['Germany'],
       locationIsHardFilter: true,
       workModels: ['remote'],
-      workModelIsHardFilter: false, // Remote is preferred, not hard
+      workModelIsHardFilter: false,
       requiredTerms: ['TypeScript'],
       excludedTerms: ['Senior'],
       sources: [{ sourceSystem: 'greenhouse', boardId: 'testboard' }],
     });
 
-    // 2. Mock Greenhouse API response fixture
     const greenhouseFixture = {
       jobs: [
         {
@@ -137,16 +135,15 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       ),
     );
 
-    // 3. Enqueue discovery run task
     const runId = discoveryRunId('dr-test-e2e-1');
-    targetRepo.createDiscoveryRun(
+    await targetRepo.createDiscoveryRun(
       runId,
       candidateA,
       searchTargetId(targetA.id),
       'greenhouse',
     );
 
-    ledger.enqueue({
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -156,13 +153,11 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       idempotencyKey: 'disc-task-1',
     });
 
-    // Process tasks until queue drains (discovery + cascading eligibility/fit/quality/decision)
     while (await worker.runOnce(new Date())) {
       // Drain background worker task ledger
     }
 
-    // 4. Verify DiscoveryRun statistics
-    const completedRun = targetRepo.getDiscoveryRun(runId);
+    const completedRun = await targetRepo.getDiscoveryRun(runId);
     expect(completedRun).not.toBeNull();
     expect(completedRun?.status).toBe('COMPLETED');
     expect(completedRun?.discoveredCount).toBe(4);
@@ -173,27 +168,25 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       'LOCATION_HARD_REJECT: United States': 1,
     });
 
-    // 5. Verify Candidate Matches
-    const matches = targetRepo.listDiscoveryMatches(candidateA);
+    const matches = await targetRepo.listDiscoveryMatches(candidateA);
     expect(matches).toHaveLength(2);
 
-    // 6. Verify accepted opportunity progressed into full intelligence pipeline
-    const matchedOppIds = targetRepo.getMatchedOpportunityIds(candidateA);
+    const matchedOppIds = await targetRepo.getMatchedOpportunityIds(candidateA);
     expect(matchedOppIds.length).toBe(2);
 
     const firstOppId = matchedOppIds[0];
     expect(firstOppId).toBeDefined();
-    const latestSnapshot = oppRepo.getLatestSnapshot(firstOppId!);
+    const latestSnapshot = await oppRepo.getLatestSnapshot(firstOppId!);
     expect(latestSnapshot).not.toBeNull();
 
-    const evaluation = evalRepo.getCurrentEvaluation(
+    const evaluation = await evalRepo.getCurrentEvaluation(
       candidateA,
       snapshotId(latestSnapshot!.id),
     );
     expect(evaluation).not.toBeNull();
     expect(evaluation?.eligibilityState).toBeDefined();
 
-    const decision = evalRepo.getCurrentDecisionForEvaluation(
+    const decision = await evalRepo.getCurrentDecisionForEvaluation(
       evaluationId(evaluation!.id),
     );
     expect(decision).not.toBeNull();
@@ -201,12 +194,12 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
   });
 
   it('supports multi-candidate discovery of the same canonical opportunity with isolated candidate matches and decisions', async () => {
-    const targetA = targetRepo.createSearchTarget(candidateA, {
+    const targetA = await targetRepo.createSearchTarget(candidateA, {
       name: 'Target A',
       targetRoles: ['Full Stack'],
     });
 
-    const targetB = targetRepo.createSearchTarget(candidateB, {
+    const targetB = await targetRepo.createSearchTarget(candidateB, {
       name: 'Target B',
       targetRoles: ['Full Stack'],
     });
@@ -232,10 +225,13 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       ),
     );
 
-    // Run discovery for Candidate A
     const runA = discoveryRunId('dr-shared-a');
-    targetRepo.createDiscoveryRun(runA, candidateA, searchTargetId(targetA.id));
-    ledger.enqueue({
+    await targetRepo.createDiscoveryRun(
+      runA,
+      candidateA,
+      searchTargetId(targetA.id),
+    );
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -249,10 +245,13 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       // Drain background worker task ledger
     }
 
-    // Run discovery for Candidate B
     const runB = discoveryRunId('dr-shared-b');
-    targetRepo.createDiscoveryRun(runB, candidateB, searchTargetId(targetB.id));
-    ledger.enqueue({
+    await targetRepo.createDiscoveryRun(
+      runB,
+      candidateB,
+      searchTargetId(targetB.id),
+    );
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateB,
@@ -266,21 +265,18 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       // Drain background worker task ledger
     }
 
-    // Verify ONE canonical Opportunity created
-    const summaries = oppRepo.getOpportunitySummaries();
+    const summaries = await oppRepo.getOpportunitySummaries();
     expect(summaries).toHaveLength(1);
 
-    // Verify separate Candidate-scoped DiscoveryMatches
-    const matchesA = targetRepo.listDiscoveryMatches(candidateA);
-    const matchesB = targetRepo.listDiscoveryMatches(candidateB);
+    const matchesA = await targetRepo.listDiscoveryMatches(candidateA);
+    const matchesB = await targetRepo.listDiscoveryMatches(candidateB);
     expect(matchesA).toHaveLength(1);
     expect(matchesB).toHaveLength(1);
     expect(matchesA[0]?.opportunityId).toBe(matchesB[0]?.opportunityId);
   });
 
   it('proves Discovery metadata and preferences strictly DO NOT alter Fit, Eligibility, Quality, or Decision evaluations', async () => {
-    // 1. Setup two different Search Targets for Candidate A: Target 1 prefers remote & required term TypeScript; Target 2 prefers on-site & no keywords
-    const target1 = targetRepo.createSearchTarget(candidateA, {
+    const target1 = await targetRepo.createSearchTarget(candidateA, {
       name: 'Target 1 Remote Pref',
       targetRoles: ['Backend Engineer'],
       locations: ['Germany'],
@@ -290,7 +286,7 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       requiredTerms: ['TypeScript'],
     });
 
-    const target2 = targetRepo.createSearchTarget(candidateA, {
+    const target2 = await targetRepo.createSearchTarget(candidateA, {
       name: 'Target 2 Onsite Pref',
       targetRoles: ['Backend Engineer'],
       locations: ['France'],
@@ -321,10 +317,13 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       ),
     );
 
-    // Run discovery under Target 1
     const run1 = discoveryRunId('dr-iso-1');
-    targetRepo.createDiscoveryRun(run1, candidateA, searchTargetId(target1.id));
-    ledger.enqueue({
+    await targetRepo.createDiscoveryRun(
+      run1,
+      candidateA,
+      searchTargetId(target1.id),
+    );
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -338,20 +337,25 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       // Drain worker queue
     }
 
-    const matchedOppId = targetRepo.getMatchedOpportunityIds(candidateA)[0]!;
-    const snapshot1 = oppRepo.getLatestSnapshot(matchedOppId)!;
-    const eval1 = evalRepo.getCurrentEvaluation(
+    const matchedOppId = (
+      await targetRepo.getMatchedOpportunityIds(candidateA)
+    )[0]!;
+    const snapshot1 = (await oppRepo.getLatestSnapshot(matchedOppId))!;
+    const eval1 = (await evalRepo.getCurrentEvaluation(
       candidateA,
       snapshotId(snapshot1.id),
-    )!;
-    const dec1 = evalRepo.getCurrentDecisionForEvaluation(
+    ))!;
+    const dec1 = (await evalRepo.getCurrentDecisionForEvaluation(
       evaluationId(eval1.id),
-    )!;
+    ))!;
 
-    // Run discovery for SAME candidate under Target 2 for same opportunity
     const run2 = discoveryRunId('dr-iso-2');
-    targetRepo.createDiscoveryRun(run2, candidateA, searchTargetId(target2.id));
-    ledger.enqueue({
+    await targetRepo.createDiscoveryRun(
+      run2,
+      candidateA,
+      searchTargetId(target2.id),
+    );
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -365,30 +369,25 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       // Drain worker queue
     }
 
-    const eval2 = evalRepo.getCurrentEvaluation(
+    const eval2 = (await evalRepo.getCurrentEvaluation(
       candidateA,
       snapshotId(snapshot1.id),
-    )!;
-    const dec2 = evalRepo.getCurrentDecisionForEvaluation(
+    ))!;
+    const dec2 = (await evalRepo.getCurrentDecisionForEvaluation(
       evaluationId(eval2.id),
-    )!;
+    ))!;
 
-    // INVARIANT ASSERTIONS:
-    // 1. Remote preference or location preference does NOT alter Fit level
     expect(eval1.fitLevel).toBe(eval2.fitLevel);
 
-    // 2. Required terms in SearchTarget do NOT create CandidateClaims or Evidence
     const memoryRepo = new CareerMemoryRepository(db);
-    const profile = memoryRepo.getProfile(candidateA);
+    const profile = await memoryRepo.getProfile(candidateA);
     expect(profile?.claims).toHaveLength(0);
 
-    // 3. DiscoveryMatch reasons do NOT alter Eligibility, Quality, or Decision
     expect(eval1.eligibilityState).toBe(eval2.eligibilityState);
     expect(eval1.qualityLevel).toBe(eval2.qualityLevel);
     expect(dec1.priority).toBe(dec2.priority);
     expect(dec1.action).toBe(dec2.action);
 
-    // 4. Same Candidate + Opportunity intelligence inputs produce identical evaluation outcomes regardless of Search Target
     expect(eval1.fitInputFingerprint).toBe(eval2.fitInputFingerprint);
     expect(eval1.eligibilityInputFingerprint).toBe(
       eval2.eligibilityInputFingerprint,
@@ -397,7 +396,7 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
   });
 
   it('runs discovery across Lever and Ashby sources and produces identical downstream intelligence evaluations for equivalent job snapshots', async () => {
-    const targetMulti = targetRepo.createSearchTarget(candidateA, {
+    const targetMulti = await targetRepo.createSearchTarget(candidateA, {
       name: 'Multi ATS Target',
       targetRoles: ['Backend Engineer'],
       sources: [
@@ -452,14 +451,14 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
     });
 
     const runId = discoveryRunId('dr-multi-ats');
-    targetRepo.createDiscoveryRun(
+    await targetRepo.createDiscoveryRun(
       runId,
       candidateA,
       searchTargetId(targetMulti.id),
       'lever',
     );
 
-    ledger.enqueue({
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -473,27 +472,26 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       // Drain worker queue
     }
 
-    const runRecord = targetRepo.getDiscoveryRun(runId);
+    const runRecord = await targetRepo.getDiscoveryRun(runId);
     expect(runRecord?.status).toBe('COMPLETED');
     expect(runRecord?.discoveredCount).toBe(2);
     expect(runRecord?.acceptedCount).toBe(2);
 
-    const matches = targetRepo.listDiscoveryMatches(candidateA);
+    const matches = await targetRepo.listDiscoveryMatches(candidateA);
     expect(matches).toHaveLength(2);
 
-    // Verify downstream evaluations produced for both Lever and Ashby opportunities
     for (const match of matches) {
-      const snap = oppRepo.getLatestSnapshot(
+      const snap = (await oppRepo.getLatestSnapshot(
         opportunityId(match.opportunityId),
-      )!;
-      const evaluation = evalRepo.getCurrentEvaluation(
+      ))!;
+      const evaluation = await evalRepo.getCurrentEvaluation(
         candidateA,
         snapshotId(snap.id),
       );
       expect(evaluation).not.toBeNull();
       expect(evaluation?.eligibilityState).toBeDefined();
 
-      const decision = evalRepo.getCurrentDecisionForEvaluation(
+      const decision = await evalRepo.getCurrentDecisionForEvaluation(
         evaluationId(evaluation!.id),
       );
       expect(decision).not.toBeNull();
@@ -502,7 +500,7 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
   });
 
   it('handles source failure honestly without marking discovery run as COMPLETED', async () => {
-    const targetFailing = targetRepo.createSearchTarget(candidateA, {
+    const targetFailing = await targetRepo.createSearchTarget(candidateA, {
       name: 'Failing Source Target',
       targetRoles: ['Backend Engineer'],
       sources: [{ sourceSystem: 'lever', boardId: 'broken-site' }],
@@ -516,14 +514,14 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
     );
 
     const runId = discoveryRunId('dr-failing');
-    targetRepo.createDiscoveryRun(
+    await targetRepo.createDiscoveryRun(
       runId,
       candidateA,
       searchTargetId(targetFailing.id),
       'lever',
     );
 
-    ledger.enqueue({
+    await ledger.enqueue({
       taskType: 'discovery.run',
       payload: {
         candidateId: candidateA,
@@ -537,7 +535,7 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       // Drain worker queue
     }
 
-    const runRecord = targetRepo.getDiscoveryRun(runId);
+    const runRecord = await targetRepo.getDiscoveryRun(runId);
     expect(runRecord?.status).toBe('FAILED');
     expect(runRecord?.errorSummary).toContain('Lever API returned 503');
   });

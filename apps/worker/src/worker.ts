@@ -39,7 +39,7 @@ export class BackgroundWorker {
   }
 
   public async runOnce(now = new Date()): Promise<boolean> {
-    const recovered = this.options.ledger.recoverExpiredLeases(now);
+    const recovered = await this.options.ledger.recoverExpiredLeases(now);
     if (recovered.length > 0) {
       this.options.logger.warn(
         { count: recovered.length },
@@ -47,7 +47,7 @@ export class BackgroundWorker {
       );
     }
 
-    const task = this.options.ledger.claimNext({
+    const task = await this.options.ledger.claimNext({
       leaseOwner: this.options.workerId,
       leaseDurationMs: this.options.leaseDurationMs,
       now,
@@ -57,7 +57,7 @@ export class BackgroundWorker {
 
     const handler = this.options.handlers[task.taskType];
     if (!handler) {
-      this.options.ledger.markFailed(
+      await this.options.ledger.markFailed(
         task.id,
         this.options.workerId,
         `No handler registered for ${task.taskType}`,
@@ -71,7 +71,7 @@ export class BackgroundWorker {
 
     try {
       await handler(task);
-      this.options.ledger.markSucceeded(task.id, this.options.workerId);
+      await this.options.ledger.markSucceeded(task.id, this.options.workerId);
       this.options.logger.info(
         { taskId: task.id, taskType: task.taskType },
         'Background task succeeded',
@@ -84,7 +84,7 @@ export class BackgroundWorker {
         baseDelay * (0.75 + this.random() * 0.5),
       );
       const retryAt = new Date(Date.now() + jitteredDelay);
-      const updated = this.options.ledger.scheduleRetry(
+      const updated = await this.options.ledger.scheduleRetry(
         task.id,
         this.options.workerId,
         message,

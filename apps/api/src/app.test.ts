@@ -50,7 +50,8 @@ describe('API application', () => {
     app = await createApiApp({
       config: {
         environment: 'test',
-        databasePath: database.path,
+        databaseEngine: 'sqlite',
+        databasePath: database.path!,
         migrationMode: 'auto',
         host: '127.0.0.1',
         port: 3000,
@@ -69,28 +70,28 @@ describe('API application', () => {
     rmSync(directory, { recursive: true, force: true });
   });
 
-  function recordTestDiscoveryMatch(
+  async function recordTestDiscoveryMatch(
     cId: ReturnType<typeof candidateId>,
     oppId: ReturnType<typeof opportunityId>,
     suffix: string,
   ) {
     const sourceRepo = new SourceListingRepository(database);
-    sourceRepo.persistListing(
+    await sourceRepo.persistListing(
       `sl-test-${suffix}`,
       { sourceSystem: 'greenhouse', sourceExternalId: `ext-${suffix}` },
       oppId,
       Date.now(),
     );
     const searchRepo = new SearchTargetRepository(database);
-    const target = searchRepo.createSearchTarget(cId, {
+    const target = await searchRepo.createSearchTarget(cId, {
       name: `Target ${suffix}`,
     });
-    const run = searchRepo.createDiscoveryRun(
+    const run = await searchRepo.createDiscoveryRun(
       discoveryRunId(`run-test-${suffix}`),
       cId,
       searchTargetId(target.id),
     );
-    searchRepo.recordDiscoveryMatch({
+    await searchRepo.recordDiscoveryMatch({
       id: discoveryMatchId(`dm-test-${suffix}`),
       candidateId: cId,
       searchTargetId: searchTargetId(target.id),
@@ -154,9 +155,9 @@ describe('API application', () => {
     const opportunity = opportunityId('opportunity-api-fit');
     const snapshot = snapshotId('snapshot-api-fit');
     const opportunityRepository = new OpportunityRepository(database);
-    opportunityRepository.createOpportunity(opportunity);
-    recordTestDiscoveryMatch(candidate, opportunity, 'fit');
-    opportunityRepository.appendSnapshot({
+    await opportunityRepository.createOpportunity(opportunity);
+    await recordTestDiscoveryMatch(candidate, opportunity, 'fit');
+    await opportunityRepository.appendSnapshot({
       id: snapshot,
       opportunityId: opportunity,
       title: 'Backend Engineer',
@@ -167,13 +168,13 @@ describe('API application', () => {
     const evaluation = evaluationId('evaluation-api-fit');
     const finding = findingId('finding-api-fit');
     const evaluationRepository = new EvaluationRepository(database);
-    evaluationRepository.persistEvaluation({
+    await evaluationRepository.persistEvaluation({
       id: evaluation,
       candidateId: candidate,
       snapshotId: snapshot,
       eligibilityState: 'investigate',
     });
-    evaluationRepository.persistFitResult({
+    await evaluationRepository.persistFitResult({
       evaluationId: evaluation,
       fit: {
         level: 'strong',
@@ -810,16 +811,16 @@ describe('API application', () => {
     );
 
     const searchRepo = new SearchTargetRepository(database);
-    const targetB = searchRepo.createSearchTarget(candidateB, {
+    const targetB = await searchRepo.createSearchTarget(candidateB, {
       name: 'Target B',
     });
-    const runB = searchRepo.createDiscoveryRun(
+    const runB = await searchRepo.createDiscoveryRun(
       discoveryRunId('run-leak-b'),
       candidateB,
       searchTargetId(targetB.id),
     );
 
-    searchRepo.recordDiscoveryMatch({
+    await searchRepo.recordDiscoveryMatch({
       id: discoveryMatchId('dm-leak-b'),
       candidateId: candidateB,
       searchTargetId: searchTargetId(targetB.id),
@@ -1039,11 +1040,11 @@ describe('API application', () => {
     expect(listBRes.json<{ data: unknown[] }>().data).toEqual([]);
 
     const beforeReads = {
-      applications: database.sqlite
-        .prepare('select count(*) as count from applications')
+      applications: database
+        .sqlite!.prepare('select count(*) as count from applications')
         .get() as { count: number },
-      events: database.sqlite
-        .prepare('select count(*) as count from application_events')
+      events: database
+        .sqlite!.prepare('select count(*) as count from application_events')
         .get() as { count: number },
     };
     for (const url of [
@@ -1056,13 +1057,13 @@ describe('API application', () => {
       expect((await app.inject({ method: 'GET', url })).statusCode).toBe(200);
     }
     expect(
-      database.sqlite
-        .prepare('select count(*) as count from applications')
+      database
+        .sqlite!.prepare('select count(*) as count from applications')
         .get(),
     ).toEqual(beforeReads.applications);
     expect(
-      database.sqlite
-        .prepare('select count(*) as count from application_events')
+      database
+        .sqlite!.prepare('select count(*) as count from application_events')
         .get(),
     ).toEqual(beforeReads.events);
   });
@@ -1080,7 +1081,8 @@ describe('Cloud identity and candidate isolation', () => {
     cloudApp = await createApiApp({
       config: {
         environment: 'test',
-        databasePath: database.path,
+        databaseEngine: 'sqlite',
+        databasePath: database.path!,
         migrationMode: 'auto',
         host: '127.0.0.1',
         port: 3000,
@@ -1182,16 +1184,16 @@ describe('Cloud identity and candidate isolation', () => {
 
   it('normalizes email, persists only token hashes, expires and revokes sessions', async () => {
     const account = await registerBearer('Person@Example.COM');
-    const stored = database.sqlite
-      .prepare('select normalized_email from users where id = ?')
+    const stored = database
+      .sqlite!.prepare('select normalized_email from users where id = ?')
       .get(account.session.user.id) as { normalized_email: string };
     expect(stored.normalized_email).toBe('person@example.com');
 
     const tokenHash = createHash('sha256')
       .update(account.token, 'utf8')
       .digest('hex');
-    const storedSession = database.sqlite
-      .prepare('select token_hash from sessions where token_hash = ?')
+    const storedSession = database
+      .sqlite!.prepare('select token_hash from sessions where token_hash = ?')
       .get(tokenHash) as { token_hash: string };
     expect(storedSession.token_hash).toBe(tokenHash);
     expect(storedSession.token_hash).not.toContain(account.token);
@@ -1217,8 +1219,10 @@ describe('Cloud identity and candidate isolation', () => {
     const expiringHash = createHash('sha256')
       .update(expiring.token, 'utf8')
       .digest('hex');
-    database.sqlite
-      .prepare('update sessions set expires_at = 0 where token_hash = ?')
+    database
+      .sqlite!.prepare(
+        'update sessions set expires_at = 0 where token_hash = ?',
+      )
       .run(expiringHash);
     expect(
       (
@@ -1280,7 +1284,7 @@ describe('Cloud identity and candidate isolation', () => {
         await cloudApp.inject({
           method: 'GET',
           url: '/auth/session',
-          headers: { cookie },
+          headers: { cookie, origin: 'https://app.rolevia.test' },
         })
       ).statusCode,
     ).toBe(200);
@@ -1360,12 +1364,13 @@ describe('Cloud identity and candidate isolation', () => {
     const trusted = candidateId('candidate-trusted-local');
     const other = candidateId('candidate-not-trusted');
     const candidates = new CandidateRepository(localDatabase);
-    candidates.createCandidate(trusted);
-    candidates.createCandidate(other);
+    await candidates.createCandidate(trusted);
+    await candidates.createCandidate(other);
     const localApp = await createApiApp({
       config: {
         environment: 'production',
-        databasePath: localDatabase.path,
+        databaseEngine: 'sqlite',
+        databasePath: localDatabase.path!,
         migrationMode: 'auto',
         host: '127.0.0.1',
         port: 3000,

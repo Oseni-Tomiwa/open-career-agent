@@ -27,47 +27,47 @@ describe('SearchTargetRepository', () => {
   const candidateA = candidateId('cand-search-a');
   const candidateB = candidateId('cand-search-b');
 
-  beforeEach(() => {
+  beforeEach(async () => {
     directory = mkdtempSync(join(tmpdir(), 'oca-search-repo-test-'));
     database = openDatabase(join(directory, 'test.sqlite'));
-    applyMigrations(database);
+    await applyMigrations(database);
 
     candRepo = new CandidateRepository(database);
-    candRepo.createCandidate(candidateA);
-    candRepo.createCandidate(candidateB);
+    await candRepo.createCandidate(candidateA);
+    await candRepo.createCandidate(candidateB);
 
     repository = new SearchTargetRepository(database);
   });
 
-  afterEach(() => {
-    database.close();
+  afterEach(async () => {
+    await database.close();
     rmSync(directory, { recursive: true, force: true });
   });
 
-  it('creates, reads, updates, and lists search targets per candidate with strict candidate isolation', () => {
-    const targetA = repository.createSearchTarget(candidateA, {
+  it('creates, reads, updates, and lists search targets per candidate with strict candidate isolation', async () => {
+    const targetA = await repository.createSearchTarget(candidateA, {
       name: 'Backend Target A',
       targetRoles: ['Backend Engineer'],
       locations: ['Germany'],
       locationIsHardFilter: true,
     });
 
-    const targetB = repository.createSearchTarget(candidateB, {
+    const targetB = await repository.createSearchTarget(candidateB, {
       name: 'Frontend Target B',
       targetRoles: ['Frontend Engineer'],
       locations: ['Remote'],
     });
 
-    expect(repository.listSearchTargets(candidateA)).toHaveLength(1);
-    expect(repository.listSearchTargets(candidateB)).toHaveLength(1);
+    expect(await repository.listSearchTargets(candidateA)).toHaveLength(1);
+    expect(await repository.listSearchTargets(candidateB)).toHaveLength(1);
     expect(
-      repository.getSearchTarget(candidateA, searchTargetId(targetA.id)),
+      await repository.getSearchTarget(candidateA, searchTargetId(targetA.id)),
     ).not.toBeNull();
     expect(
-      repository.getSearchTarget(candidateA, searchTargetId(targetB.id)),
+      await repository.getSearchTarget(candidateA, searchTargetId(targetB.id)),
     ).toBeNull();
 
-    const updated = repository.updateSearchTarget(
+    const updated = await repository.updateSearchTarget(
       candidateA,
       searchTargetId(targetA.id),
       {
@@ -80,38 +80,38 @@ describe('SearchTargetRepository', () => {
     expect(updated?.skills).toEqual(['TypeScript', 'Node.js']);
   });
 
-  it('records discovery runs and matches, supporting same opportunity matched by multiple candidates without duplication', () => {
+  it('records discovery runs and matches, supporting same opportunity matched by multiple candidates without duplication', async () => {
     const oppRepo = new OpportunityRepository(database);
     const sourceRepo = new SourceListingRepository(database);
 
     const sharedOppId = opportunityId('opp-shared-1');
-    oppRepo.createOpportunity(sharedOppId);
-    sourceRepo.persistListing(
+    await oppRepo.createOpportunity(sharedOppId);
+    await sourceRepo.persistListing(
       'sl-shared-1',
       { sourceSystem: 'greenhouse', sourceExternalId: '101' },
       sharedOppId,
       Date.now(),
     );
 
-    const targetA = repository.createSearchTarget(candidateA, {
+    const targetA = await repository.createSearchTarget(candidateA, {
       name: 'Target A',
     });
-    const targetB = repository.createSearchTarget(candidateB, {
+    const targetB = await repository.createSearchTarget(candidateB, {
       name: 'Target B',
     });
 
-    const runA = repository.createDiscoveryRun(
+    const runA = await repository.createDiscoveryRun(
       discoveryRunId('run-a-1'),
       candidateA,
       searchTargetId(targetA.id),
     );
-    const runB = repository.createDiscoveryRun(
+    const runB = await repository.createDiscoveryRun(
       discoveryRunId('run-b-1'),
       candidateB,
       searchTargetId(targetB.id),
     );
 
-    repository.recordDiscoveryMatch({
+    await repository.recordDiscoveryMatch({
       id: discoveryMatchId('dm-a-1'),
       candidateId: candidateA,
       searchTargetId: searchTargetId(targetA.id),
@@ -122,7 +122,7 @@ describe('SearchTargetRepository', () => {
       retainedUnresolved: [],
     });
 
-    repository.recordDiscoveryMatch({
+    await repository.recordDiscoveryMatch({
       id: discoveryMatchId('dm-b-1'),
       candidateId: candidateB,
       searchTargetId: searchTargetId(targetB.id),
@@ -133,39 +133,39 @@ describe('SearchTargetRepository', () => {
       retainedUnresolved: [],
     });
 
-    expect(repository.getMatchedOpportunityIds(candidateA)).toEqual([
+    expect(await repository.getMatchedOpportunityIds(candidateA)).toEqual([
       sharedOppId,
     ]);
-    expect(repository.getMatchedOpportunityIds(candidateB)).toEqual([
+    expect(await repository.getMatchedOpportunityIds(candidateB)).toEqual([
       sharedOppId,
     ]);
-    expect(repository.listDiscoveryMatches(candidateA)).toHaveLength(1);
-    expect(repository.listDiscoveryMatches(candidateB)).toHaveLength(1);
+    expect(await repository.listDiscoveryMatches(candidateA)).toHaveLength(1);
+    expect(await repository.listDiscoveryMatches(candidateB)).toHaveLength(1);
   });
 
-  it('preserves historical DiscoveryRun and DiscoveryMatch provenance when a Search Target is deleted/archived', () => {
+  it('preserves historical DiscoveryRun and DiscoveryMatch provenance when a Search Target is deleted/archived', async () => {
     const oppRepo = new OpportunityRepository(database);
     const sourceRepo = new SourceListingRepository(database);
 
     const oppId = opportunityId('opp-hist-1');
-    oppRepo.createOpportunity(oppId);
-    sourceRepo.persistListing(
+    await oppRepo.createOpportunity(oppId);
+    await sourceRepo.persistListing(
       'sl-hist-1',
       { sourceSystem: 'greenhouse', sourceExternalId: '202' },
       oppId,
       Date.now(),
     );
 
-    const target = repository.createSearchTarget(candidateA, {
+    const target = await repository.createSearchTarget(candidateA, {
       name: 'Legacy Target',
     });
-    const run = repository.createDiscoveryRun(
+    const run = await repository.createDiscoveryRun(
       discoveryRunId('run-hist-1'),
       candidateA,
       searchTargetId(target.id),
     );
 
-    repository.recordDiscoveryMatch({
+    await repository.recordDiscoveryMatch({
       id: discoveryMatchId('dm-hist-1'),
       candidateId: candidateA,
       searchTargetId: searchTargetId(target.id),
@@ -176,17 +176,15 @@ describe('SearchTargetRepository', () => {
       retainedUnresolved: [],
     });
 
-    const deleted = repository.deleteSearchTarget(
+    const deleted = await repository.deleteSearchTarget(
       candidateA,
       searchTargetId(target.id),
     );
     expect(deleted).toBe(true);
 
-    // Active search target list excludes archived target
-    expect(repository.listSearchTargets(candidateA)).toHaveLength(0);
+    expect(await repository.listSearchTargets(candidateA)).toHaveLength(0);
 
-    // Target record survives in storage and can still be fetched by searchTargetId for provenance audit
-    const archivedTarget = repository.getSearchTarget(
+    const archivedTarget = await repository.getSearchTarget(
       candidateA,
       searchTargetId(target.id),
     );
@@ -195,13 +193,12 @@ describe('SearchTargetRepository', () => {
     expect(archivedTarget?.enabled).toBe(false);
     expect(archivedTarget?.archivedAt).toBeDefined();
 
-    // Historical DiscoveryRun and DiscoveryMatch provenance are preserved intact
-    const matches = repository.listDiscoveryMatches(candidateA);
+    const matches = await repository.listDiscoveryMatches(candidateA);
     expect(matches).toHaveLength(1);
     expect(matches[0]?.searchTargetId).toBe(target.id);
     expect(matches[0]?.discoveryRunId).toBe(run.id);
 
-    const runs = repository.listDiscoveryRuns(candidateA);
+    const runs = await repository.listDiscoveryRuns(candidateA);
     expect(runs).toHaveLength(1);
     expect(runs[0]?.searchTargetId).toBe(target.id);
   });

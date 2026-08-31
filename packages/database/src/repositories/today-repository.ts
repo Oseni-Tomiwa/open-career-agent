@@ -66,19 +66,19 @@ export class TodayRepository {
     this.appRepo = new ApplicationRepository(handle);
   }
 
-  public getTodayDashboard(
+  public async getTodayDashboard(
     cId: CandidateId,
     options: TodayDashboardOptions = {},
-  ): TodayDashboardResponse {
+  ): Promise<TodayDashboardResponse> {
     const now = options.now ?? new Date();
     const timeWindowDays = options.timeWindowDays ?? 7;
     const sinceMs = now.getTime() - timeWindowDays * 86400000;
 
-    const profile = this.memoryRepo.getProfile(cId);
+    const profile = await this.memoryRepo.getProfile(cId);
     const greetingName = deriveGreetingName(cId);
 
-    const matchedOppIds = this.searchRepo.getMatchedOpportunityIds(cId);
-    const candidateApplications = this.appRepo.listApplications(cId);
+    const matchedOppIds = await this.searchRepo.getMatchedOpportunityIds(cId);
+    const candidateApplications = await this.appRepo.listApplications(cId);
     const appMap = new Map(
       candidateApplications.map((app) => [app.opportunityId, app]),
     );
@@ -90,16 +90,16 @@ export class TodayRepository {
 
     for (const oppIdStr of matchedOppIds) {
       const oppId = opportunityId(oppIdStr);
-      const snapshot = this.oppRepo.getLatestSnapshot(oppId);
+      const snapshot = await this.oppRepo.getLatestSnapshot(oppId);
       if (!snapshot) continue;
 
-      const evalRecord = this.evalRepo.getCurrentEvaluation(
+      const evalRecord = await this.evalRepo.getCurrentEvaluation(
         cId,
         snapshotId(snapshot.id),
       );
       if (!evalRecord) continue;
 
-      const decision = this.evalRepo.getCurrentDecisionForEvaluation(
+      const decision = await this.evalRepo.getCurrentDecisionForEvaluation(
         evaluationId(evalRecord.id),
       );
 
@@ -190,10 +190,8 @@ export class TodayRepository {
       }
 
       // Check Decision History Transitions
-      const decisionHistory = this.evalRepo.getDecisionHistoryForCandidate(
-        cId,
-        oppId,
-      );
+      const decisionHistory =
+        await this.evalRepo.getDecisionHistoryForCandidate(cId, oppId);
       if (decisionHistory.length >= 2) {
         const currentDec = decisionHistory[0]!;
         const prevDec = decisionHistory[1]!;
@@ -215,13 +213,13 @@ export class TodayRepository {
     }
 
     // 2. Recent Discoveries
-    const discoveryMatches = this.searchRepo.listDiscoveryMatches(cId);
+    const discoveryMatches = await this.searchRepo.listDiscoveryMatches(cId);
     const discoveryChanges: RecentChangeItem[] = [];
     for (const match of discoveryMatches) {
       const matchDate = new Date(match.matchedAt);
       if (matchDate.getTime() >= sinceMs) {
         const oppId = opportunityId(match.opportunityId);
-        const snapshot = this.oppRepo.getLatestSnapshot(oppId);
+        const snapshot = await this.oppRepo.getLatestSnapshot(oppId);
         discoveryChanges.push({
           opportunityId: match.opportunityId,
           title: snapshot?.title ?? 'Opportunity',
@@ -245,60 +243,65 @@ export class TodayRepository {
     });
 
     // 3. Discovery Activity
-    const runs = this.searchRepo.listDiscoveryRuns(cId);
-    const discoveryActivity: DiscoveryActivityItem[] = runs
-      .filter((r) => new Date(r.startedAt).getTime() >= sinceMs)
-      .slice(0, 5)
-      .map((r) => {
-        const target = this.searchRepo.getSearchTarget(
-          cId,
-          searchTargetId(r.searchTargetId),
-        );
-        return {
-          runId: r.id,
-          searchTargetId: r.searchTargetId,
-          searchTargetName: target?.name ?? 'Search Target',
-          sourceSystem: r.sourceSystem,
-          status: r.status,
-          startedAt: toIso(r.startedAt),
-          completedAt: r.completedAt ? toIso(r.completedAt) : null,
-          discoveredCount: r.discoveredCount,
-          acceptedCount: r.acceptedCount,
-          rejectedCount: r.rejectedCount,
-          errorSummary: r.errorSummary,
-        };
-      })
-      .sort((a, b) => {
+    const runs = await this.searchRepo.listDiscoveryRuns(cId);
+    const rawActivityList = await Promise.all(
+      runs
+        .filter((r) => new Date(r.startedAt).getTime() >= sinceMs)
+        .slice(0, 5)
+        .map(async (r) => {
+          const target = await this.searchRepo.getSearchTarget(
+            cId,
+            searchTargetId(r.searchTargetId),
+          );
+          return {
+            runId: r.id,
+            searchTargetId: r.searchTargetId,
+            searchTargetName: target?.name ?? 'Search Target',
+            sourceSystem: r.sourceSystem,
+            status: r.status,
+            startedAt: toIso(r.startedAt),
+            completedAt: r.completedAt ? toIso(r.completedAt) : null,
+            discoveredCount: r.discoveredCount,
+            acceptedCount: r.acceptedCount,
+            rejectedCount: r.rejectedCount,
+            errorSummary: r.errorSummary,
+          };
+        }),
+    );
+
+    const discoveryActivity: DiscoveryActivityItem[] = rawActivityList.sort(
+      (a, b) => {
         const timeDiff =
           new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime();
         if (timeDiff !== 0) return timeDiff;
         return a.runId.localeCompare(b.runId);
-      });
+      },
+    );
 
     // 4. Career Memory Attention
     const memoryAttentionItems: CareerMemoryAttentionItem[] = [];
     if (profile) {
       const attentionClaims = profile.claims.filter(
-        (c) => c.state === 'UNKNOWN' || c.state === 'CONFLICTING',
+        (c: any) => c.state === 'UNKNOWN' || c.state === 'CONFLICTING',
       );
 
       for (const claim of attentionClaims) {
         const affectedOppIds: string[] = [];
         for (const oppIdStr of matchedOppIds) {
-          const snapshot = this.oppRepo.getLatestSnapshot(
+          const snapshot = await this.oppRepo.getLatestSnapshot(
             opportunityId(oppIdStr),
           );
           if (!snapshot) continue;
-          const evalRecord = this.evalRepo.getCurrentEvaluation(
+          const evalRecord = await this.evalRepo.getCurrentEvaluation(
             cId,
             snapshotId(snapshot.id),
           );
           if (!evalRecord) continue;
-          const findings = this.evalRepo.getFindings(
+          const findings = await this.evalRepo.getFindings(
             evaluationId(evalRecord.id),
           );
           const hasUnresolvedFinding = findings.some(
-            (f) =>
+            (f: any) =>
               (f.state === 'UNRESOLVED' || f.state === 'NO_EVIDENCE') &&
               f.dimensionKey.toLowerCase().includes(claim.kind.toLowerCase()),
           );
@@ -311,7 +314,7 @@ export class TodayRepository {
         if (affectedCount > 0) {
           const kindTitle = claim.kind
             .split('_')
-            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
             .join(' ');
 
           memoryAttentionItems.push({
@@ -335,14 +338,20 @@ export class TodayRepository {
     // 5. Application Activity
     const appActivityItems: ApplicationActivityItem[] = [];
     for (const app of candidateApplications) {
-      const snapshot = this.oppRepo.getLatestSnapshot(
+      const snapshot = await this.oppRepo.getLatestSnapshot(
         opportunityId(app.opportunityId),
       );
-      const events = this.appRepo.getEvents(cId, applicationId(app.id));
+      const events = await this.appRepo.getEvents(cId, applicationId(app.id));
       const lastEvent = events.length > 0 ? events[events.length - 1] : null;
       const lastEventAt = lastEvent
         ? toIso(lastEvent.occurredAt)
         : toIso(app.updatedAt);
+
+      const appFollowUpDueAt = app.followUpDueAt
+        ? app.followUpDueAt instanceof Date
+          ? app.followUpDueAt
+          : new Date(app.followUpDueAt)
+        : null;
 
       appActivityItems.push({
         applicationId: app.id,
@@ -357,8 +366,8 @@ export class TodayRepository {
               `Follow up on ${app.status.toLowerCase()} status`)
             : `Follow up on ${app.status.toLowerCase()} status`,
         dueDate:
-          app.followUpDueAt && !app.followUpCompletedAt
-            ? app.followUpDueAt.toISOString()
+          appFollowUpDueAt && !app.followUpCompletedAt
+            ? appFollowUpDueAt.toISOString()
             : null,
       });
     }

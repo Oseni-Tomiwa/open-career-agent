@@ -13,12 +13,8 @@ import {
 } from '@oca/domain';
 
 import type { DatabaseHandle } from '../client.js';
-import {
-  discoveryMatches,
-  discoveryRuns,
-  searchTargets,
-  type DiscoveryRunStatus,
-} from '../schema.js';
+import { getTables } from '../schema-helper.js';
+import type { DiscoveryRunStatus } from '../schema.js';
 
 export interface CreateSearchTargetInput {
   name: string;
@@ -96,8 +92,11 @@ export interface DiscoveryMatchRecord {
 export class SearchTargetRepository {
   constructor(private readonly handle: DatabaseHandle) {}
 
-  public listSearchTargets(cId: CandidateId): SearchTarget[] {
-    const rows = this.handle.db
+  public async listSearchTargets(cId: CandidateId): Promise<SearchTarget[]> {
+    const { searchTargets } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    const rows = await db
       .select()
       .from(searchTargets)
       .where(
@@ -106,33 +105,39 @@ export class SearchTargetRepository {
           isNull(searchTargets.archivedAt),
         ),
       )
-      .orderBy(desc(searchTargets.createdAt))
-      .all();
+      .orderBy(desc(searchTargets.createdAt));
 
-    return rows.map((row) => this.mapSearchTargetRow(row));
+    return rows.map((row: any) => this.mapSearchTargetRow(row));
   }
 
-  public getSearchTarget(
+  public async getSearchTarget(
     cId: CandidateId,
     tId: SearchTargetId,
-  ): SearchTarget | null {
-    const row = this.handle.db
+  ): Promise<SearchTarget | null> {
+    const { searchTargets } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    const rows = await db
       .select()
       .from(searchTargets)
-      .where(and(eq(searchTargets.candidateId, cId), eq(searchTargets.id, tId)))
-      .get();
+      .where(
+        and(eq(searchTargets.candidateId, cId), eq(searchTargets.id, tId)),
+      );
 
+    const row = rows[0];
     return row ? this.mapSearchTargetRow(row) : null;
   }
 
-  public createSearchTarget(
+  public async createSearchTarget(
     cId: CandidateId,
     input: CreateSearchTargetInput,
     idOverride?: SearchTargetId,
-  ): SearchTarget {
+  ): Promise<SearchTarget> {
     const id = idOverride ?? searchTargetId(`st_${crypto.randomUUID()}`);
     const now = new Date();
     const nowIso = now.toISOString();
+    const { searchTargets } = getTables(this.handle);
+    const db = this.handle.db as any;
 
     const row = {
       id,
@@ -163,7 +168,7 @@ export class SearchTargetRepository {
       updatedAt: now,
     };
 
-    this.handle.db.insert(searchTargets).values(row).run();
+    await db.insert(searchTargets).values(row);
 
     return {
       id,
@@ -193,15 +198,17 @@ export class SearchTargetRepository {
     };
   }
 
-  public updateSearchTarget(
+  public async updateSearchTarget(
     cId: CandidateId,
     tId: SearchTargetId,
     input: UpdateSearchTargetInput,
-  ): SearchTarget | null {
-    const existing = this.getSearchTarget(cId, tId);
+  ): Promise<SearchTarget | null> {
+    const existing = await this.getSearchTarget(cId, tId);
     if (!existing) return null;
 
     const now = new Date();
+    const { searchTargets } = getTables(this.handle);
+    const db = this.handle.db as any;
 
     const updates: Record<string, unknown> = {
       updatedAt: now,
@@ -244,32 +251,42 @@ export class SearchTargetRepository {
     if (input.sources !== undefined)
       updates.sourcesJson = JSON.stringify(input.sources);
 
-    this.handle.db
+    await db
       .update(searchTargets)
       .set(updates)
-      .where(and(eq(searchTargets.candidateId, cId), eq(searchTargets.id, tId)))
-      .run();
+      .where(
+        and(eq(searchTargets.candidateId, cId), eq(searchTargets.id, tId)),
+      );
 
-    return this.getSearchTarget(cId, tId);
+    return await this.getSearchTarget(cId, tId);
   }
 
-  public deleteSearchTarget(cId: CandidateId, tId: SearchTargetId): boolean {
+  public async deleteSearchTarget(
+    cId: CandidateId,
+    tId: SearchTargetId,
+  ): Promise<boolean> {
     const now = new Date();
-    const res = this.handle.db
+    const { searchTargets } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    const res = await db
       .update(searchTargets)
       .set({ enabled: false, archivedAt: now, updatedAt: now })
       .where(and(eq(searchTargets.candidateId, cId), eq(searchTargets.id, tId)))
-      .run();
-    return res.changes > 0;
+      .returning();
+
+    return res.length > 0;
   }
 
-  public createDiscoveryRun(
+  public async createDiscoveryRun(
     runId: DiscoveryRunId,
     cId: CandidateId,
     tId: SearchTargetId,
     sourceSystem = 'greenhouse',
-  ): DiscoveryRunRecord {
+  ): Promise<DiscoveryRunRecord> {
     const now = new Date();
+    const { discoveryRuns } = getTables(this.handle);
+    const db = this.handle.db as any;
 
     const row = {
       id: runId,
@@ -286,7 +303,7 @@ export class SearchTargetRepository {
       errorSummary: null,
     };
 
-    this.handle.db.insert(discoveryRuns).values(row).run();
+    await db.insert(discoveryRuns).values(row);
 
     return {
       id: runId,
@@ -304,7 +321,7 @@ export class SearchTargetRepository {
     };
   }
 
-  public updateDiscoveryRun(
+  public async updateDiscoveryRun(
     runId: DiscoveryRunId,
     updates: {
       status?: DiscoveryRunStatus;
@@ -315,7 +332,7 @@ export class SearchTargetRepository {
       errorSummary?: string | null;
       completedAt?: Date | null;
     },
-  ): DiscoveryRunRecord | null {
+  ): Promise<DiscoveryRunRecord | null> {
     const setObj: Record<string, unknown> = {};
     if (updates.status !== undefined) setObj.status = updates.status;
     if (updates.discoveredCount !== undefined)
@@ -331,44 +348,56 @@ export class SearchTargetRepository {
     if (updates.completedAt !== undefined)
       setObj.completedAt = updates.completedAt;
 
-    this.handle.db
+    const { discoveryRuns } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    await db
       .update(discoveryRuns)
       .set(setObj)
-      .where(eq(discoveryRuns.id, runId))
-      .run();
+      .where(eq(discoveryRuns.id, runId));
 
-    const row = this.handle.db
+    const rows = await db
       .select()
       .from(discoveryRuns)
-      .where(eq(discoveryRuns.id, runId))
-      .get();
+      .where(eq(discoveryRuns.id, runId));
 
+    const row = rows[0];
     return row ? this.mapDiscoveryRunRow(row) : null;
   }
 
-  public listDiscoveryRuns(cId: CandidateId, limit = 20): DiscoveryRunRecord[] {
-    const rows = this.handle.db
+  public async listDiscoveryRuns(
+    cId: CandidateId,
+    limit = 20,
+  ): Promise<DiscoveryRunRecord[]> {
+    const { discoveryRuns } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    const rows = await db
       .select()
       .from(discoveryRuns)
       .where(eq(discoveryRuns.candidateId, cId))
       .orderBy(desc(discoveryRuns.startedAt))
-      .limit(limit)
-      .all();
+      .limit(limit);
 
-    return rows.map((row) => this.mapDiscoveryRunRow(row));
+    return rows.map((row: any) => this.mapDiscoveryRunRow(row));
   }
 
-  public getDiscoveryRun(runId: DiscoveryRunId): DiscoveryRunRecord | null {
-    const row = this.handle.db
+  public async getDiscoveryRun(
+    runId: DiscoveryRunId,
+  ): Promise<DiscoveryRunRecord | null> {
+    const { discoveryRuns } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    const rows = await db
       .select()
       .from(discoveryRuns)
-      .where(eq(discoveryRuns.id, runId))
-      .get();
+      .where(eq(discoveryRuns.id, runId));
 
+    const row = rows[0];
     return row ? this.mapDiscoveryRunRow(row) : null;
   }
 
-  public recordDiscoveryMatch(input: {
+  public async recordDiscoveryMatch(input: {
     id?: DiscoveryMatchId;
     candidateId: CandidateId;
     searchTargetId: SearchTargetId;
@@ -377,9 +406,11 @@ export class SearchTargetRepository {
     sourceListingId: string;
     matchReasons: string[];
     retainedUnresolved: string[];
-  }): DiscoveryMatchRecord {
+  }): Promise<DiscoveryMatchRecord> {
     const id = input.id ?? discoveryMatchId(`dm_${crypto.randomUUID()}`);
     const now = new Date();
+    const { discoveryMatches } = getTables(this.handle);
+    const db = this.handle.db as any;
 
     const row = {
       id,
@@ -393,11 +424,7 @@ export class SearchTargetRepository {
       retainedUnresolvedJson: JSON.stringify(input.retainedUnresolved),
     };
 
-    this.handle.db
-      .insert(discoveryMatches)
-      .values(row)
-      .onConflictDoNothing()
-      .run();
+    await db.insert(discoveryMatches).values(row).onConflictDoNothing();
 
     return {
       id,
@@ -412,25 +439,33 @@ export class SearchTargetRepository {
     };
   }
 
-  public getMatchedOpportunityIds(cId: CandidateId): OpportunityId[] {
-    const rows = this.handle.db
+  public async getMatchedOpportunityIds(
+    cId: CandidateId,
+  ): Promise<OpportunityId[]> {
+    const { discoveryMatches } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    const rows = await db
       .select({ opportunityId: discoveryMatches.opportunityId })
       .from(discoveryMatches)
-      .where(eq(discoveryMatches.candidateId, cId))
-      .all();
+      .where(eq(discoveryMatches.candidateId, cId));
 
-    return rows.map((row) => opportunityId(row.opportunityId));
+    return rows.map((row: any) => opportunityId(row.opportunityId));
   }
 
-  public listDiscoveryMatches(cId: CandidateId): DiscoveryMatchRecord[] {
-    const rows = this.handle.db
+  public async listDiscoveryMatches(
+    cId: CandidateId,
+  ): Promise<DiscoveryMatchRecord[]> {
+    const { discoveryMatches } = getTables(this.handle);
+    const db = this.handle.db as any;
+
+    const rows = await db
       .select()
       .from(discoveryMatches)
       .where(eq(discoveryMatches.candidateId, cId))
-      .orderBy(desc(discoveryMatches.matchedAt))
-      .all();
+      .orderBy(desc(discoveryMatches.matchedAt));
 
-    return rows.map((row) => ({
+    return rows.map((row: any) => ({
       id: row.id,
       candidateId: row.candidateId,
       searchTargetId: row.searchTargetId,
@@ -443,9 +478,7 @@ export class SearchTargetRepository {
     }));
   }
 
-  private mapSearchTargetRow(
-    row: typeof searchTargets.$inferSelect,
-  ): SearchTarget {
+  private mapSearchTargetRow(row: any): SearchTarget {
     return {
       id: row.id,
       candidateId: row.candidateId,
@@ -485,9 +518,7 @@ export class SearchTargetRepository {
     };
   }
 
-  private mapDiscoveryRunRow(
-    row: typeof discoveryRuns.$inferSelect,
-  ): DiscoveryRunRecord {
+  private mapDiscoveryRunRow(row: any): DiscoveryRunRecord {
     return {
       id: row.id,
       candidateId: row.candidateId,
