@@ -20,6 +20,12 @@ export const SearchEmploymentTypeSchema = Type.Union([
   Type.Literal('internship'),
 ]);
 
+export const SourceSystemSchema = Type.Union([
+  Type.Literal('greenhouse'),
+  Type.Literal('lever'),
+  Type.Literal('ashby'),
+]);
+
 export const SearchSourceConfigSchema = Type.Object(
   {
     sourceSystem: Type.String(),

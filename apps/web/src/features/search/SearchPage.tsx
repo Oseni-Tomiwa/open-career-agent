@@ -50,6 +50,9 @@ export function SearchPage() {
   const [minSalary, setMinSalary] = useState<number | ''>(90000);
   const [currency, setCurrency] = useState('EUR');
   const [freshnessDays, setFreshnessDays] = useState(30);
+  const [sourceSystem, setSourceSystem] = useState<
+    'greenhouse' | 'lever' | 'ashby'
+  >('greenhouse');
   const [boardId, setBoardId] = useState('figma');
 
   // Discovery Run Status Feedback
@@ -84,6 +87,10 @@ export function SearchPage() {
             setMinSalary(t.minSalary ?? '');
             setCurrency(t.currency ?? 'EUR');
             setFreshnessDays(t.freshnessDays ?? 30);
+            setSourceSystem(
+              (t.sources[0]?.sourceSystem as
+                'greenhouse' | 'lever' | 'ashby') || 'greenhouse',
+            );
             setBoardId(t.sources[0]?.boardId ?? 'figma');
           }
         }
@@ -123,6 +130,10 @@ export function SearchPage() {
     setMinSalary(t.minSalary ?? '');
     setCurrency(t.currency ?? 'EUR');
     setFreshnessDays(t.freshnessDays ?? 30);
+    setSourceSystem(
+      (t.sources[0]?.sourceSystem as 'greenhouse' | 'lever' | 'ashby') ||
+        'greenhouse',
+    );
     setBoardId(t.sources[0]?.boardId ?? 'figma');
   }
 
@@ -145,6 +156,7 @@ export function SearchPage() {
     setMinSalary('');
     setCurrency('USD');
     setFreshnessDays(30);
+    setSourceSystem('greenhouse');
     setBoardId('figma');
   }
 
@@ -178,9 +190,7 @@ export function SearchPage() {
       freshnessDays,
       requiredTerms: parseCsv(requiredTerms),
       excludedTerms: parseCsv(excludedTerms),
-      sources: [
-        { sourceSystem: 'greenhouse', boardId: boardId.trim() || 'figma' },
-      ],
+      sources: [{ sourceSystem, boardId: boardId.trim() || 'figma' }],
     };
 
     try {
@@ -465,21 +475,47 @@ export function SearchPage() {
               <div className="form-section-heading">
                 <span>05</span>
                 <div>
-                  <h2 id="sources-heading">Sources & Greenhouse Config</h2>
-                  <p>
-                    Target ATS source board identifier (e.g. figma, stripe,
-                    cloudflare).
-                  </p>
+                  <h2 id="sources-heading">Sources & ATS Config</h2>
+                  <p>Target ATS source provider and board/site identifier.</p>
                 </div>
               </div>
-              <label>
-                <span>Greenhouse Board ID</span>
-                <input
-                  onChange={(e) => setBoardId(e.target.value)}
-                  placeholder="figma"
-                  value={boardId}
-                />
-              </label>
+              <div className="field-row">
+                <label>
+                  <span>Source ATS System</span>
+                  <select
+                    value={sourceSystem}
+                    onChange={(e) =>
+                      setSourceSystem(
+                        e.target.value as 'greenhouse' | 'lever' | 'ashby',
+                      )
+                    }
+                  >
+                    <option value="greenhouse">Greenhouse</option>
+                    <option value="lever">Lever</option>
+                    <option value="ashby">Ashby</option>
+                  </select>
+                </label>
+                <label>
+                  <span>
+                    {sourceSystem === 'greenhouse'
+                      ? 'Greenhouse Board Token'
+                      : sourceSystem === 'lever'
+                        ? 'Lever Company/Site Identifier'
+                        : 'Ashby Board Identifier'}
+                  </span>
+                  <input
+                    onChange={(e) => setBoardId(e.target.value)}
+                    placeholder={
+                      sourceSystem === 'greenhouse'
+                        ? 'figma'
+                        : sourceSystem === 'lever'
+                          ? 'netflix'
+                          : 'linear'
+                    }
+                    value={boardId}
+                  />
+                </label>
+              </div>
             </section>
 
             <div className="form-actions">

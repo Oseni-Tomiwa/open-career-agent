@@ -128,4 +128,12 @@ export class SourceListingRepository {
       .get();
     return result ?? null;
   }
+
+  public listObservationsForListing(sourceListingId: string) {
+    return this.db.db
+      .select()
+      .from(sourceObservations)
+      .where(eq(sourceObservations.sourceListingId, sourceListingId))
+      .all();
+  }
 }

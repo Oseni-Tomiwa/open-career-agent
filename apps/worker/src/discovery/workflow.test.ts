@@ -17,6 +17,7 @@ import {
   candidateId,
   discoveryRunId,
   evaluationId,
+  opportunityId,
   searchTargetId,
   snapshotId,
 } from '@oca/domain';
@@ -393,5 +394,151 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       eval2.eligibilityInputFingerprint,
     );
     expect(dec1.inputFingerprint).toBe(dec2.inputFingerprint);
+  });
+
+  it('runs discovery across Lever and Ashby sources and produces identical downstream intelligence evaluations for equivalent job snapshots', async () => {
+    const targetMulti = targetRepo.createSearchTarget(candidateA, {
+      name: 'Multi ATS Target',
+      targetRoles: ['Backend Engineer'],
+      sources: [
+        { sourceSystem: 'lever', boardId: 'acme-lever' },
+        { sourceSystem: 'ashby', boardId: 'acme-ashby' },
+      ],
+    });
+
+    const leverFixture = [
+      {
+        id: 'lever-opp-1',
+        text: 'Backend Engineer',
+        categories: { team: 'Acme Corp', location: 'Remote' },
+        descriptionPlain: 'TypeScript Backend role.',
+        hostedUrl: 'https://jobs.lever.co/acme/lever-opp-1',
+        workplaceType: 'remote',
+      },
+    ];
+
+    const ashbyFixture = {
+      jobs: [
+        {
+          id: 'ashby-opp-1',
+          title: 'Backend Engineer',
+          department: 'Acme Corp',
+          locationName: 'Remote',
+          descriptionPlain: 'TypeScript Backend role.',
+          jobUrl: 'https://jobs.ashbyhq.com/acme/ashby-opp-1',
+          isRemote: true,
+        },
+      ],
+    };
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
+      const urlStr =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.href
+            : String((url as { url?: string }).url ?? '');
+      if (urlStr.includes('lever.co')) {
+        return Promise.resolve(
+          new Response(JSON.stringify(leverFixture), { status: 200 }),
+        );
+      }
+      if (urlStr.includes('ashbyhq.com')) {
+        return Promise.resolve(
+          new Response(JSON.stringify(ashbyFixture), { status: 200 }),
+        );
+      }
+      return Promise.reject(new Error('Unknown URL'));
+    });
+
+    const runId = discoveryRunId('dr-multi-ats');
+    targetRepo.createDiscoveryRun(
+      runId,
+      candidateA,
+      searchTargetId(targetMulti.id),
+      'lever',
+    );
+
+    ledger.enqueue({
+      taskType: 'discovery.run',
+      payload: {
+        candidateId: candidateA,
+        searchTargetId: targetMulti.id,
+        discoveryRunId: runId,
+      },
+      idempotencyKey: 'disc-multi-ats',
+    });
+
+    while (await worker.runOnce(new Date())) {
+      // Drain worker queue
+    }
+
+    const runRecord = targetRepo.getDiscoveryRun(runId);
+    expect(runRecord?.status).toBe('COMPLETED');
+    expect(runRecord?.discoveredCount).toBe(2);
+    expect(runRecord?.acceptedCount).toBe(2);
+
+    const matches = targetRepo.listDiscoveryMatches(candidateA);
+    expect(matches).toHaveLength(2);
+
+    // Verify downstream evaluations produced for both Lever and Ashby opportunities
+    for (const match of matches) {
+      const snap = oppRepo.getLatestSnapshot(
+        opportunityId(match.opportunityId),
+      )!;
+      const evaluation = evalRepo.getCurrentEvaluation(
+        candidateA,
+        snapshotId(snap.id),
+      );
+      expect(evaluation).not.toBeNull();
+      expect(evaluation?.eligibilityState).toBeDefined();
+
+      const decision = evalRepo.getCurrentDecisionForEvaluation(
+        evaluationId(evaluation!.id),
+      );
+      expect(decision).not.toBeNull();
+      expect(decision?.priority).toBeDefined();
+    }
+  });
+
+  it('handles source failure honestly without marking discovery run as COMPLETED', async () => {
+    const targetFailing = targetRepo.createSearchTarget(candidateA, {
+      name: 'Failing Source Target',
+      targetRoles: ['Backend Engineer'],
+      sources: [{ sourceSystem: 'lever', boardId: 'broken-site' }],
+    });
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('Service Unavailable', {
+        status: 503,
+        statusText: 'Service Unavailable',
+      }),
+    );
+
+    const runId = discoveryRunId('dr-failing');
+    targetRepo.createDiscoveryRun(
+      runId,
+      candidateA,
+      searchTargetId(targetFailing.id),
+      'lever',
+    );
+
+    ledger.enqueue({
+      taskType: 'discovery.run',
+      payload: {
+        candidateId: candidateA,
+        searchTargetId: targetFailing.id,
+        discoveryRunId: runId,
+      },
+      idempotencyKey: 'disc-failing',
+    });
+
+    while (await worker.runOnce(new Date())) {
+      // Drain worker queue
+    }
+
+    const runRecord = targetRepo.getDiscoveryRun(runId);
+    expect(runRecord?.status).toBe('FAILED');
+    expect(runRecord?.errorSummary).toContain('Lever API returned 503');
   });
 });

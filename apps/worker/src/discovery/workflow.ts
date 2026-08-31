@@ -19,7 +19,7 @@ import {
   snapshotId,
   type DiscoveryRunId,
 } from '@oca/domain';
-import { GreenhouseAdapter, GreenhouseNormalizer } from '@oca/sources';
+import { getSourceAdapter, getSourceNormalizer } from '@oca/sources';
 
 import type { BackgroundTaskHandler } from '../worker.js';
 
@@ -79,22 +79,39 @@ export function createDiscoveryHandlers(deps: {
         status: 'RUNNING',
       });
 
-      const adapter = new GreenhouseAdapter();
-      const normalizer = new GreenhouseNormalizer();
-
       let discoveredCount = 0;
       let acceptedCount = 0;
       let rejectedCount = 0;
       const rejectedByReason: Record<string, number> = {};
+      let sourceFailed = false;
+      const errorSummaries: string[] = [];
 
-      const boardsToScan =
+      const sourcesToScan =
         target.sources.length > 0
-          ? target.sources.map((s) => s.boardId)
-          : (deps.config?.greenhouseBoards ?? ['figma']);
+          ? target.sources
+          : (deps.config?.greenhouseBoards ?? ['figma']).map((boardId) => ({
+              sourceSystem: 'greenhouse',
+              boardId,
+            }));
 
-      for (const boardId of boardsToScan) {
+      for (const sourceConfig of sourcesToScan) {
+        let adapter;
+        let normalizer;
         try {
-          for await (const record of adapter.discover(boardId)) {
+          adapter = getSourceAdapter(sourceConfig.sourceSystem);
+          normalizer = getSourceNormalizer(sourceConfig.sourceSystem);
+        } catch (err) {
+          sourceFailed = true;
+          const msg =
+            err instanceof Error ? err.message : 'Invalid source adapter';
+          errorSummaries.push(
+            `Source ${sourceConfig.sourceSystem}:${sourceConfig.boardId} failed: ${msg}`,
+          );
+          continue;
+        }
+
+        try {
+          for await (const record of adapter.discover(sourceConfig.boardId)) {
             discoveredCount++;
 
             let normalized;
@@ -231,20 +248,23 @@ export function createDiscoveryHandlers(deps: {
             }
           }
         } catch (error) {
+          sourceFailed = true;
           const errMessage =
             error instanceof Error ? error.message : 'Source discovery error';
-          searchTargetRepo.updateDiscoveryRun(runId, {
-            errorSummary: `Source ${boardId} failed: ${errMessage}`,
-          });
+          errorSummaries.push(
+            `Source ${sourceConfig.sourceSystem}:${sourceConfig.boardId} failed: ${errMessage}`,
+          );
         }
       }
 
       searchTargetRepo.updateDiscoveryRun(runId, {
-        status: 'COMPLETED',
+        status: sourceFailed ? 'FAILED' : 'COMPLETED',
         discoveredCount,
         acceptedCount,
         rejectedCount,
         rejectedByReason,
+        errorSummary:
+          errorSummaries.length > 0 ? errorSummaries.join('; ') : null,
         completedAt: new Date(),
       });
     },

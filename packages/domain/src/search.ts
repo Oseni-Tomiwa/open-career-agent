@@ -17,8 +17,11 @@ export const SEARCH_EMPLOYMENT_TYPES = [
 ] as const;
 export type SearchEmploymentType = (typeof SEARCH_EMPLOYMENT_TYPES)[number];
 
+export const SOURCE_SYSTEMS = ['greenhouse', 'lever', 'ashby'] as const;
+export type SourceSystem = (typeof SOURCE_SYSTEMS)[number];
+
 export interface SearchSourceConfig {
-  sourceSystem: string;
+  sourceSystem: SourceSystem | (string & {});
   boardId: string;
 }
 

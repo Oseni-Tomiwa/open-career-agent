@@ -4,21 +4,20 @@ import {
   type SourceOpportunity,
 } from '../core/index.js';
 
-export class GreenhouseAdapter implements SourceAdapter {
-  public readonly sourceSystem = 'greenhouse';
+export class AshbyAdapter implements SourceAdapter {
+  public readonly sourceSystem = 'ashby';
 
   public async *discover(
     boardId: string,
   ): AsyncIterableIterator<SourceOpportunity> {
     const cleanId = boardId.trim();
     if (!cleanId || cleanId.includes('/') || cleanId.includes('\\')) {
-      throw new Error(`Invalid Greenhouse board identifier: '${boardId}'`);
+      throw new Error(`Invalid Ashby board identifier: '${boardId}'`);
     }
 
     const encodedBoardId = encodeURIComponent(cleanId);
-    const url = `https://boards-api.greenhouse.io/v1/boards/${encodedBoardId}/jobs?content=true`;
+    const url = `https://api.ashbyhq.com/posting-api/job-board/${encodedBoardId}`;
 
-    // We will use native fetch.
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Rolevia/open-career-agent',
@@ -28,33 +27,32 @@ export class GreenhouseAdapter implements SourceAdapter {
 
     if (!response.ok) {
       throw new Error(
-        `Greenhouse API returned ${response.status} ${response.statusText} for ${url}`,
+        `Ashby API returned ${response.status} ${response.statusText} for ${url}`,
       );
     }
 
     const payload = (await response.json()) as {
       jobs?: Array<{
-        id: number | string;
-        absolute_url?: string;
-        updated_at?: string;
+        id: string | number;
+        jobUrl?: string;
         [key: string]: unknown;
       }>;
     };
 
     if (!payload || !payload.jobs || !Array.isArray(payload.jobs)) {
-      throw new Error('Malformed Greenhouse response: missing jobs array');
+      throw new Error('Malformed Ashby response: missing jobs array');
     }
 
     for (const job of payload.jobs) {
-      const sourceUrl = isSafeHttpUrl(job.absolute_url)
-        ? job.absolute_url
-        : undefined;
+      if (!job || !job.id) continue;
+
+      const sourceUrl = isSafeHttpUrl(job.jobUrl) ? job.jobUrl : undefined;
 
       yield {
         sourceSystem: this.sourceSystem,
         sourceExternalId: String(job.id),
         ...(sourceUrl ? { sourceUrl } : {}),
-        rawPayload: JSON.stringify(job),
+        rawPayload: JSON.stringify({ ...job, _boardId: cleanId }),
         observedAt: new Date(),
       };
     }
