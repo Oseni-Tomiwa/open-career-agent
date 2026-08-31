@@ -1,0 +1,35 @@
+# Multi-stage Dockerfile for Rolevia Cloud Background Worker Service
+FROM node:24-alpine AS base
+RUN corepack enable && corepack prepare pnpm@11.17.0 --activate
+WORKDIR /app
+
+# Stage 1: Build workspace artifacts
+FROM base AS builder
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json tsconfig.json ./
+COPY apps/worker/package.json ./apps/worker/
+COPY packages/config/package.json ./packages/config/
+COPY packages/domain/package.json ./packages/domain/
+COPY packages/schemas/package.json ./packages/schemas/
+COPY packages/database/package.json ./packages/database/
+COPY packages/sources/package.json ./packages/sources/
+COPY packages/intelligence/package.json ./packages/intelligence/
+
+RUN pnpm install --frozen-lockfile
+
+COPY packages ./packages
+COPY apps/worker ./apps/worker
+
+RUN pnpm build:packages && pnpm --filter @oca/worker build
+
+# Stage 2: Runtime image
+FROM base AS runner
+ENV NODE_ENV=production
+ENV APP_ENV=production
+ENV IDENTITY_MODE=cloud
+ENV DATABASE_ENGINE=postgres
+
+COPY --chown=node:node --from=builder /app /app
+
+USER node
+
+CMD ["pnpm", "--filter", "@oca/worker", "start"]

@@ -12,6 +12,7 @@ export default tseslint.config(
       'data/**',
       'playwright-report/**',
       'test-results/**',
+      'scripts/**',
     ],
   },
   eslint.configs.recommended,

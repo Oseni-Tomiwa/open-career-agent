@@ -20,7 +20,9 @@ import {
   LogoutResponseSchema,
   RegisterInputSchema,
 } from '@oca/schemas';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+
+import { createAuthRateLimiter } from './rate-limit.js';
 
 const SCRYPT_N = 16_384;
 const SCRYPT_R = 8;
@@ -313,9 +315,15 @@ export function registerAuthBoundary(
     return request.headers.origin === config.webOrigin;
   }
 
+  const rateLimit =
+    config.environment === 'test'
+      ? async (_req: FastifyRequest, _reply: FastifyReply) => {}
+      : createAuthRateLimiter({ maxRequests: 10, windowMs: 60_000 });
+
   typedApp.post(
     '/auth/register',
     {
+      preHandler: rateLimit,
       schema: {
         tags: ['auth'],
         body: RegisterInputSchema,
@@ -323,6 +331,7 @@ export function registerAuthBoundary(
           201: AuthResponseSchema,
           403: ApiErrorEnvelopeSchema,
           409: ApiErrorEnvelopeSchema,
+          429: ApiErrorEnvelopeSchema,
         },
       },
     },
@@ -388,6 +397,7 @@ export function registerAuthBoundary(
   typedApp.post(
     '/auth/login',
     {
+      preHandler: rateLimit,
       schema: {
         tags: ['auth'],
         body: LoginInputSchema,
@@ -395,6 +405,7 @@ export function registerAuthBoundary(
           200: AuthResponseSchema,
           401: ApiErrorEnvelopeSchema,
           403: ApiErrorEnvelopeSchema,
+          429: ApiErrorEnvelopeSchema,
         },
       },
     },

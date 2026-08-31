@@ -31,6 +31,34 @@ export interface OpenDatabaseOptions {
   readonly databaseUrl?: string;
 }
 
+function assertSafeTestDatabaseUrl(url: string): void {
+  const isTestEnvironment =
+    process.env.VITEST === 'true' ||
+    process.env.NODE_ENV === 'test' ||
+    process.env.APP_ENV === 'test';
+
+  if (!isTestEnvironment) return;
+  if (process.env.ALLOW_PRODUCTION_TESTING === 'true') return;
+
+  const lower = url.toLowerCase();
+  const prodKeywords = [
+    '.rds.amazonaws.com',
+    '.postgres.database.azure.com',
+    '.neon.tech',
+    '.cloudql.google.com',
+    'prod-',
+    '-prod.',
+    '/production',
+    'rolevia_production',
+  ];
+
+  if (prodKeywords.some((keyword) => lower.includes(keyword))) {
+    throw new Error(
+      `CRITICAL DATABASE SAFETY GUARD: Test suite rejected connection to suspected production database URL '${url}'. Set ALLOW_PRODUCTION_TESTING=true to bypass.`,
+    );
+  }
+}
+
 export function openDatabase(
   optionsOrPath: OpenDatabaseOptions | string,
 ): DatabaseHandle {
@@ -46,6 +74,7 @@ export function openDatabase(
     if (!databaseUrl) {
       throw new Error('DATABASE_URL is required when DATABASE_ENGINE=postgres');
     }
+    assertSafeTestDatabaseUrl(databaseUrl);
     const pool = new pg.Pool({ connectionString: databaseUrl, max: 20 });
     const db = drizzlePg({ client: pool });
     let closed = false;

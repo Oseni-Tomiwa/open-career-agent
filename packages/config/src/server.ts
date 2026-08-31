@@ -179,7 +179,11 @@ export function parseApiConfig(input: NodeJS.ProcessEnv): ApiConfig {
     databasePath:
       environment.SQLITE_DATABASE_PATH ?? './data/open-career-agent.sqlite',
     ...(databaseUrl ? { databaseUrl } : {}),
-    host: environment.API_HOST ?? '127.0.0.1',
+    host:
+      environment.API_HOST ??
+      (identityMode === 'cloud' || applicationEnvironment === 'production'
+        ? '0.0.0.0'
+        : '127.0.0.1'),
     port: parsePositiveInteger('API_PORT', environment.API_PORT ?? '3000'),
     webOrigin: parseUrl(
       'WEB_ORIGIN',

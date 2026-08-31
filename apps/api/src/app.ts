@@ -104,9 +104,21 @@ export async function createApiApp(
         ? { redact: [...API_LOG_REDACTION_PATHS] }
         : false;
 
+  const isCloudOrProd =
+    options.config.environment === 'production' ||
+    options.config.identityMode === 'cloud';
+
   const app = Fastify({
     logger: loggerOptions,
+    bodyLimit: 1_048_576, // 1MB payload limit
+    trustProxy: isCloudOrProd,
   }).withTypeProvider<TypeBoxTypeProvider>();
+
+  app.addHook('onSend', async (_request, reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    reply.header('X-Frame-Options', 'DENY');
+  });
 
   await app.register(cors, {
     origin: [options.config.webOrigin],
