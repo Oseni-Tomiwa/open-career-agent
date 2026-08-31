@@ -19,7 +19,11 @@ import {
   snapshotId,
   type DiscoveryRunId,
 } from '@oca/domain';
-import { getSourceAdapter, getSourceNormalizer } from '@oca/sources';
+import {
+  deriveOpportunityIdentityEvidence,
+  getSourceAdapter,
+  getSourceNormalizer,
+} from '@oca/sources';
 
 import type { BackgroundTaskHandler } from '../worker.js';
 
@@ -60,7 +64,11 @@ export function createDiscoveryHandlers(deps: {
           runId,
           cId,
           tId,
-          target?.sources[0]?.sourceSystem ?? 'greenhouse',
+          target
+            ? [
+                ...new Set(target.sources.map((source) => source.sourceSystem)),
+              ].join(', ') || 'unconfigured'
+            : 'unconfigured',
         );
       }
 
@@ -75,9 +83,16 @@ export function createDiscoveryHandlers(deps: {
         return;
       }
 
-      await searchTargetRepo.updateDiscoveryRun(runId, {
-        status: 'RUNNING',
-      });
+      if (target.sources.length === 0) {
+        await searchTargetRepo.updateDiscoveryRun(runId, {
+          status: 'FAILED',
+          errorSummary: 'No job sources are configured for this search target',
+          completedAt: new Date(),
+        });
+        return;
+      }
+
+      await searchTargetRepo.updateDiscoveryRun(runId, { status: 'RUNNING' });
 
       let discoveredCount = 0;
       let acceptedCount = 0;
@@ -86,15 +101,7 @@ export function createDiscoveryHandlers(deps: {
       let sourceFailed = false;
       const errorSummaries: string[] = [];
 
-      const sourcesToScan =
-        target.sources.length > 0
-          ? target.sources
-          : (deps.config?.greenhouseBoards ?? ['figma']).map((boardId) => ({
-              sourceSystem: 'greenhouse',
-              boardId,
-            }));
-
-      for (const sourceConfig of sourcesToScan) {
+      for (const sourceConfig of target.sources) {
         let adapter;
         let normalizer;
         try {
@@ -138,7 +145,7 @@ export function createDiscoveryHandlers(deps: {
             // ACCEPTED MATCH
             acceptedCount++;
 
-            let existingListing = await sourceRepo.findListingByExternalId(
+            const existingListing = await sourceRepo.findListingByExternalId(
               record.sourceSystem,
               record.sourceExternalId,
             );
@@ -156,17 +163,18 @@ export function createDiscoveryHandlers(deps: {
               record.observedAt.getTime(),
             );
 
-            existingListing = await sourceRepo.getListing(listingId);
-            let oppId = existingListing?.opportunityId ?? null;
-
-            if (!oppId) {
-              oppId = opportunityId(`opp_${randomUUID()}`);
-              await oppRepo.createOpportunity(opportunityId(oppId));
-              await sourceRepo.associateListingWithOpportunity(
-                listingId,
-                opportunityId(oppId),
-              );
-            }
+            const resolution = await sourceRepo.resolveCanonicalOpportunity({
+              listingId,
+              proposedOpportunityId: opportunityId(`opp_${randomUUID()}`),
+              identityEvidence: deriveOpportunityIdentityEvidence(
+                record,
+                normalized,
+              ),
+              title: normalized.title,
+              ...(normalized.location ? { location: normalized.location } : {}),
+              observedAt: record.observedAt.getTime(),
+            });
+            const oppId = resolution.opportunityId;
 
             const rawHash = createHash('sha256')
               .update(record.rawPayload)
@@ -185,6 +193,9 @@ export function createDiscoveryHandlers(deps: {
                 {
                   rawPayload: record.rawPayload,
                   fingerprint: rawHash,
+                  ...(record.updatedAt
+                    ? { sourceUpdatedAt: record.updatedAt }
+                    : {}),
                 },
                 record.observedAt.getTime(),
               );
@@ -224,6 +235,10 @@ export function createDiscoveryHandlers(deps: {
                   : {}),
                 ...(obsId ? { sourceObservationId: obsId } : {}),
               });
+            }
+
+            if (snapId) {
+              await oppRepo.linkSnapshotSource(snapId, obsId);
             }
 
             // Record Candidate Discovery Match

@@ -144,6 +144,23 @@ function detailBody(options: { readonly evaluated?: boolean } = {}) {
 }
 
 describe('ApiProductRepository', () => {
+  it('starts API mode with an empty non-fictional product snapshot', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ data: [] }));
+    const repository = new ApiProductRepository(
+      'http://api.test',
+      'candidate-1',
+      fetcher,
+    );
+
+    const snapshot = await repository.getSnapshot();
+
+    expect(snapshot.profile.name).toBe('Career profile');
+    expect(snapshot.profile.completeness).toBe(0);
+    expect(snapshot.searchPreferences.sources).toEqual([]);
+    expect(snapshot.sourceStatuses).toEqual([]);
+    expect(JSON.stringify(snapshot)).not.toContain('Amara Okafor');
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });

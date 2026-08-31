@@ -9,7 +9,11 @@ import type { WorkerConfig } from '@oca/config/server';
 import type { BackgroundTaskHandler } from '../worker.js';
 import type { BackgroundTask } from '@oca/database';
 import { opportunityId, snapshotId } from '@oca/domain';
-import { GreenhouseAdapter, GreenhouseNormalizer } from '@oca/sources';
+import {
+  deriveOpportunityIdentityEvidence,
+  GreenhouseAdapter,
+  GreenhouseNormalizer,
+} from '@oca/sources';
 
 export function createTaskHandlers(deps: {
   db: DatabaseHandle;
@@ -23,7 +27,10 @@ export function createTaskHandlers(deps: {
     'system.noop': () => undefined,
     'source.greenhouse.discover': async (task: BackgroundTask) => {
       let boards = deps.config.greenhouseBoards;
-      const payload = (task.payload ?? {}) as { boardId?: string };
+      const payload = (task.payload ?? {}) as {
+        boardId?: string;
+        candidateId?: string;
+      };
       if (payload.boardId) {
         boards = [payload.boardId];
       }
@@ -33,7 +40,14 @@ export function createTaskHandlers(deps: {
 
       for (const board of boards) {
         for await (const record of adapter.discover(board)) {
-          let existingListing = await sourceRepo.findListingByExternalId(
+          let normalized;
+          try {
+            normalized = normalizer.normalize(record);
+          } catch {
+            continue; // Skip malformed payloads
+          }
+
+          const existingListing = await sourceRepo.findListingByExternalId(
             record.sourceSystem,
             record.sourceExternalId,
           );
@@ -51,24 +65,18 @@ export function createTaskHandlers(deps: {
             record.observedAt.getTime(),
           );
 
-          existingListing = await sourceRepo.getListing(listingId);
-          let oppId = existingListing?.opportunityId ?? null;
-
-          if (!oppId) {
-            oppId = opportunityId(`opp_${randomUUID()}`);
-            await oppRepo.createOpportunity(opportunityId(oppId));
-            await sourceRepo.associateListingWithOpportunity(
-              listingId,
-              opportunityId(oppId),
-            );
-          }
-
-          let normalized;
-          try {
-            normalized = normalizer.normalize(record);
-          } catch {
-            continue; // Skip malformed payloads
-          }
+          const resolution = await sourceRepo.resolveCanonicalOpportunity({
+            listingId,
+            proposedOpportunityId: opportunityId(`opp_${randomUUID()}`),
+            identityEvidence: deriveOpportunityIdentityEvidence(
+              record,
+              normalized,
+            ),
+            title: normalized.title,
+            ...(normalized.location ? { location: normalized.location } : {}),
+            observedAt: record.observedAt.getTime(),
+          });
+          const oppId = resolution.opportunityId;
 
           const rawHash = createHash('sha256')
             .update(record.rawPayload)
@@ -87,6 +95,9 @@ export function createTaskHandlers(deps: {
               {
                 rawPayload: record.rawPayload,
                 fingerprint: rawHash,
+                ...(record.updatedAt
+                  ? { sourceUpdatedAt: record.updatedAt }
+                  : {}),
               },
               record.observedAt.getTime(),
             );
@@ -97,11 +108,14 @@ export function createTaskHandlers(deps: {
             opportunityId(oppId),
           );
 
+          let snapId = latestSnapshot?.id
+            ? snapshotId(latestSnapshot.id)
+            : undefined;
           if (
             !latestSnapshot ||
             latestSnapshot.fingerprint !== snapshotFingerprint
           ) {
-            const snapId = snapshotId(`snap_${randomUUID()}`);
+            snapId = snapshotId(`snap_${randomUUID()}`);
             await oppRepo.appendSnapshot({
               id: snapId,
               opportunityId: opportunityId(oppId),
@@ -121,11 +135,19 @@ export function createTaskHandlers(deps: {
                 : {}),
               ...(obsId ? { sourceObservationId: obsId } : {}),
             });
-            await taskLedger.enqueue({
-              taskType: 'eligibility.evaluate',
-              payload: { snapshotId: snapId },
-              idempotencyKey: `eligibility-${snapId}`,
-            });
+            if (payload.candidateId) {
+              await taskLedger.enqueue({
+                taskType: 'eligibility.evaluate',
+                payload: {
+                  snapshotId: snapId,
+                  candidateId: payload.candidateId,
+                },
+                idempotencyKey: `eligibility-${payload.candidateId}-${snapId}`,
+              });
+            }
+          }
+          if (snapId) {
+            await oppRepo.linkSnapshotSource(snapId, obsId);
           }
         }
       }

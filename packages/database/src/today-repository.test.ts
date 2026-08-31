@@ -66,7 +66,7 @@ describe('TodayRepository', () => {
   it('returns an empty dashboard structure for candidate with no discovery targets or opportunities', async () => {
     const dashboard = await todayRepo.getTodayDashboard(candidateAlex, { now });
 
-    expect(dashboard.greetingName).toBe('Alex');
+    expect(dashboard.greetingName).toBe('there');
     expect(dashboard.summaryText).toBe(
       'No high-priority opportunities right now.',
     );
@@ -266,7 +266,7 @@ describe('TodayRepository', () => {
       now,
     });
 
-    expect(dashboardAlex.greetingName).toBe('Alex');
+    expect(dashboardAlex.greetingName).toBe('there');
     expect(dashboardAlex.priorityOpportunities).toHaveLength(1);
     expect(dashboardAlex.priorityOpportunities[0]!.opportunityId).toBe('opp-1');
     expect(dashboardAlex.priorityOpportunities[0]!.decisionState).toBe(
@@ -280,7 +280,7 @@ describe('TodayRepository', () => {
     const dashboardJordan = await todayRepo.getTodayDashboard(candidateJordan, {
       now,
     });
-    expect(dashboardJordan.greetingName).toBe('Jordan');
+    expect(dashboardJordan.greetingName).toBe('there');
     expect(dashboardJordan.priorityOpportunities).toHaveLength(0);
     expect(dashboardJordan.needsAttention).toHaveLength(0);
   });

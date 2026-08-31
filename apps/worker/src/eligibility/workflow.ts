@@ -4,7 +4,6 @@ import {
   CandidateRepository,
   EvaluationRepository,
   BackgroundTaskLedger,
-  getTables,
 } from '@oca/database';
 import type { BackgroundTaskHandler } from '../worker.js';
 import type { BackgroundTask } from '@oca/database';
@@ -57,6 +56,10 @@ export function createEligibilityHandlers(deps: {
       };
       const snapId = payload.snapshotId;
 
+      if (!payload.candidateId) {
+        throw new Error('eligibility.evaluate payload missing candidateId');
+      }
+
       const snapshot = await oppRepo.getSnapshot(
         snapId as unknown as SnapshotId,
       );
@@ -64,17 +67,7 @@ export function createEligibilityHandlers(deps: {
         throw new Error(`Snapshot not found: ${snapId}`);
       }
 
-      let candId = payload.candidateId;
-      if (!candId) {
-        const { candidates } = getTables(deps.db);
-        const db = deps.db.db as any;
-        const dbCandidates = await db.select().from(candidates);
-        if (dbCandidates.length === 0) return;
-        candId = dbCandidates[0]?.id;
-        if (!candId) return;
-      }
-
-      if (!candId) return;
+      const candId = payload.candidateId;
       const claims = await candidateRepo.getClaims(
         candId as unknown as CandidateId,
       );

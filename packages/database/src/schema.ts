@@ -256,6 +256,21 @@ export const sourceListings = sqliteTable(
   ],
 );
 
+export const opportunityIdentityKeys = sqliteTable(
+  'opportunity_identity_keys',
+  {
+    identityKey: text('identity_key').primaryKey(),
+    kind: text('kind').notNull(),
+    opportunityId: text('opportunity_id')
+      .notNull()
+      .references(() => opportunities.id, { onDelete: 'restrict' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    index('opportunity_identity_keys_opportunity_idx').on(table.opportunityId),
+  ],
+);
+
 export const sourceObservations = sqliteTable(
   'source_observations',
   {

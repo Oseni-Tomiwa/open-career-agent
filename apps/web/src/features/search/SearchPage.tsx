@@ -7,7 +7,13 @@ import type {
   CreateSearchTargetInput,
   DiscoveryRun,
   SearchTarget,
+  SearchTargetSource,
 } from '../../data/types.js';
+
+const EMPTY_SOURCE: SearchTargetSource = {
+  sourceSystem: 'greenhouse',
+  boardId: '',
+};
 
 export function SearchPage() {
   const {
@@ -25,36 +31,33 @@ export function SearchPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Form State
-  const [name, setName] = useState('Backend Engineer Target');
+  const [name, setName] = useState('');
   const [enabled, setEnabled] = useState(true);
-  const [targetRoles, setTargetRoles] = useState(
-    'Backend Engineer, Platform Engineer',
-  );
-  const [skills, setSkills] = useState('TypeScript, Node.js');
-  const [locations, setLocations] = useState('Germany, Remote Europe');
-  const [locationIsHardFilter, setLocationIsHardFilter] = useState(true);
+  const [targetRoles, setTargetRoles] = useState('');
+  const [skills, setSkills] = useState('');
+  const [locations, setLocations] = useState('');
+  const [locationIsHardFilter, setLocationIsHardFilter] = useState(false);
   const [workModels, setWorkModels] = useState<
     ('remote' | 'hybrid' | 'onsite')[]
-  >(['remote', 'hybrid']);
+  >([]);
   const [workModelIsHardFilter, setWorkModelIsHardFilter] = useState(false);
   const [seniorityLevels, setSeniorityLevels] = useState<
     ('internship' | 'entry' | 'junior' | 'mid' | 'senior')[]
-  >(['mid', 'senior']);
+  >([]);
   const [seniorityIsHardFilter, setSeniorityIsHardFilter] = useState(false);
   const [employmentTypes, setEmploymentTypes] = useState<
     ('full-time' | 'contract' | 'internship')[]
-  >(['full-time']);
+  >([]);
   const [employmentTypeIsHardFilter, setEmploymentTypeIsHardFilter] =
     useState(false);
-  const [requiredTerms, setRequiredTerms] = useState('TypeScript');
-  const [excludedTerms, setExcludedTerms] = useState('Internship');
-  const [minSalary, setMinSalary] = useState<number | ''>(90000);
-  const [currency, setCurrency] = useState('EUR');
+  const [requiredTerms, setRequiredTerms] = useState('');
+  const [excludedTerms, setExcludedTerms] = useState('');
+  const [minSalary, setMinSalary] = useState<number | ''>('');
+  const [currency, setCurrency] = useState('');
   const [freshnessDays, setFreshnessDays] = useState(30);
-  const [sourceSystem, setSourceSystem] = useState<
-    'greenhouse' | 'lever' | 'ashby'
-  >('greenhouse');
-  const [boardId, setBoardId] = useState('figma');
+  const [sources, setSources] = useState<readonly SearchTargetSource[]>([
+    EMPTY_SOURCE,
+  ]);
 
   // Discovery Run Status Feedback
   const [runStatusNotice, setRunStatusNotice] = useState<string | null>(null);
@@ -88,11 +91,7 @@ export function SearchPage() {
             setMinSalary(t.minSalary ?? '');
             setCurrency(t.currency ?? 'EUR');
             setFreshnessDays(t.freshnessDays ?? 30);
-            setSourceSystem(
-              (t.sources[0]?.sourceSystem as
-                'greenhouse' | 'lever' | 'ashby') || 'greenhouse',
-            );
-            setBoardId(t.sources[0]?.boardId ?? 'figma');
+            setSources(t.sources.length > 0 ? [...t.sources] : [EMPTY_SOURCE]);
           }
         }
         setLoading(false);
@@ -131,34 +130,29 @@ export function SearchPage() {
     setMinSalary(t.minSalary ?? '');
     setCurrency(t.currency ?? 'EUR');
     setFreshnessDays(t.freshnessDays ?? 30);
-    setSourceSystem(
-      (t.sources[0]?.sourceSystem as 'greenhouse' | 'lever' | 'ashby') ||
-        'greenhouse',
-    );
-    setBoardId(t.sources[0]?.boardId ?? 'figma');
+    setSources(t.sources.length > 0 ? [...t.sources] : [EMPTY_SOURCE]);
   }
 
   function handleNewTarget() {
     setSelectedTargetId(null);
-    setName('New Search Preference');
+    setName('');
     setEnabled(true);
-    setTargetRoles('Full Stack Engineer');
-    setSkills('TypeScript, React');
-    setLocations('Remote');
+    setTargetRoles('');
+    setSkills('');
+    setLocations('');
     setLocationIsHardFilter(false);
-    setWorkModels(['remote']);
+    setWorkModels([]);
     setWorkModelIsHardFilter(false);
-    setSeniorityLevels(['mid', 'senior']);
+    setSeniorityLevels([]);
     setSeniorityIsHardFilter(false);
-    setEmploymentTypes(['full-time']);
+    setEmploymentTypes([]);
     setEmploymentTypeIsHardFilter(false);
     setRequiredTerms('');
     setExcludedTerms('');
     setMinSalary('');
-    setCurrency('USD');
+    setCurrency('');
     setFreshnessDays(30);
-    setSourceSystem('greenhouse');
-    setBoardId('figma');
+    setSources([EMPTY_SOURCE]);
   }
 
   function parseCsv(val: string): string[] {
@@ -173,6 +167,24 @@ export function SearchPage() {
     setError(null);
     setRunStatusNotice(null);
 
+    const normalizedSources = sources.map((source) => ({
+      sourceSystem: source.sourceSystem,
+      boardId: source.boardId.trim(),
+    }));
+    const invalidSourceIndex = normalizedSources.findIndex(
+      (source) => !source.boardId,
+    );
+    if (invalidSourceIndex >= 0) {
+      setError(`Source ${invalidSourceIndex + 1} requires an identifier.`);
+      return;
+    }
+    const sourceKeys = normalizedSources.map(
+      (source) => `${source.sourceSystem}:${source.boardId.toLowerCase()}`,
+    );
+    if (new Set(sourceKeys).size !== sourceKeys.length) {
+      setError('Remove duplicate job sources before saving.');
+      return;
+    }
     const inputData: CreateSearchTargetInput = {
       name,
       enabled,
@@ -191,7 +203,7 @@ export function SearchPage() {
       freshnessDays,
       requiredTerms: parseCsv(requiredTerms),
       excludedTerms: parseCsv(excludedTerms),
-      sources: [{ sourceSystem, boardId: boardId.trim() || 'figma' }],
+      sources: normalizedSources,
     };
 
     try {
@@ -217,6 +229,15 @@ export function SearchPage() {
 
   async function handleRunDiscovery() {
     if (!selectedTargetId) return;
+    const savedTarget = targets.find(
+      (target) => target.id === selectedTargetId,
+    );
+    if (!savedTarget || savedTarget.sources.length === 0) {
+      setError(
+        'Configure and save at least one valid job source before discovery.',
+      );
+      return;
+    }
     setIsRunning(true);
     setRunStatusNotice('Discovery queued...');
     setError(null);
@@ -224,7 +245,11 @@ export function SearchPage() {
     try {
       const result = await runDiscovery(selectedTargetId);
       setRunStatusNotice(
-        `Discovery completed. Discovered: ${result.run.discoveredCount}, Accepted: ${result.run.acceptedCount}, Rejected: ${result.run.rejectedCount}`,
+        result.run.status === 'COMPLETED'
+          ? `Discovery completed. Discovered: ${result.run.discoveredCount}, Accepted: ${result.run.acceptedCount}, Rejected: ${result.run.rejectedCount}`
+          : result.run.status === 'FAILED'
+            ? `Discovery failed: ${result.run.errorSummary ?? 'No error detail was recorded.'}`
+            : `Discovery queued. Current status: ${result.run.status.toLowerCase()}.`,
       );
       const updatedRuns = await getDiscoveryRuns();
       setRuns(updatedRuns);
@@ -479,43 +504,82 @@ export function SearchPage() {
                   <p>Choose the hiring sites this search should scan.</p>
                 </div>
               </div>
-              <div className="field-row">
-                <label>
-                  <span>Job source</span>
-                  <select
-                    value={sourceSystem}
-                    onChange={(e) =>
-                      setSourceSystem(
-                        e.target.value as 'greenhouse' | 'lever' | 'ashby',
-                      )
-                    }
-                  >
-                    <option value="greenhouse">Greenhouse</option>
-                    <option value="lever">Lever</option>
-                    <option value="ashby">Ashby</option>
-                  </select>
-                </label>
-                <label>
-                  <span>
-                    {sourceSystem === 'greenhouse'
-                      ? 'Greenhouse Board Token'
-                      : sourceSystem === 'lever'
-                        ? 'Lever Company/Site Identifier'
-                        : 'Ashby Board Identifier'}
-                  </span>
-                  <input
-                    onChange={(e) => setBoardId(e.target.value)}
-                    placeholder={
-                      sourceSystem === 'greenhouse'
-                        ? 'figma'
-                        : sourceSystem === 'lever'
-                          ? 'netflix'
-                          : 'linear'
-                    }
-                    value={boardId}
-                  />
-                </label>
-              </div>
+              {sources.map((source, index) => (
+                <div
+                  className="field-row"
+                  key={`${index}-${source.sourceSystem}`}
+                >
+                  <label>
+                    <span>Job source {index + 1}</span>
+                    <select
+                      aria-label={`Job source ${index + 1}`}
+                      value={source.sourceSystem}
+                      onChange={(e) =>
+                        setSources((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? {
+                                  ...item,
+                                  sourceSystem: e.target.value,
+                                }
+                              : item,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="greenhouse">Greenhouse</option>
+                      <option value="lever">Lever</option>
+                      <option value="ashby">Ashby</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>
+                      {source.sourceSystem === 'greenhouse'
+                        ? 'Greenhouse Board Token'
+                        : source.sourceSystem === 'lever'
+                          ? 'Lever Company/Site Identifier'
+                          : 'Ashby Board Identifier'}
+                    </span>
+                    <input
+                      aria-label={`${source.sourceSystem} identifier ${index + 1}`}
+                      onChange={(e) =>
+                        setSources((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, boardId: e.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                      placeholder="Company-provided identifier"
+                      required
+                      value={source.boardId}
+                    />
+                  </label>
+                  {sources.length > 1 && (
+                    <button
+                      className="button button-outline"
+                      onClick={() =>
+                        setSources((current) =>
+                          current.filter((_, itemIndex) => itemIndex !== index),
+                        )
+                      }
+                      type="button"
+                    >
+                      Remove source {index + 1}
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                className="button button-secondary"
+                onClick={() =>
+                  setSources((current) => [...current, { ...EMPTY_SOURCE }])
+                }
+                type="button"
+              >
+                + Add job source
+              </button>
             </section>
 
             <div className="form-actions">

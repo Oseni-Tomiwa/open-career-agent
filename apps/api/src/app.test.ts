@@ -728,6 +728,11 @@ describe('API application', () => {
         targetRoles: ['Backend Engineer'],
         locations: ['Germany'],
         locationIsHardFilter: true,
+        sources: [
+          { sourceSystem: 'greenhouse', boardId: 'company-greenhouse' },
+          { sourceSystem: 'lever', boardId: 'company-lever' },
+          { sourceSystem: 'ashby', boardId: 'company-ashby' },
+        ],
       },
     });
     expect(createRes.statusCode).toBe(201);
@@ -790,6 +795,39 @@ describe('API application', () => {
     });
     expect(runsListRes.statusCode).toBe(200);
     expect(runsListRes.json<{ data: unknown[] }>().data).toHaveLength(1);
+  });
+
+  it('rejects discovery without a valid source and rejects duplicate source authoring', async () => {
+    const candidate = candidateId('cand-api-source-validation');
+    new CandidateRepository(database).createCandidate(candidate);
+    const target = await new SearchTargetRepository(
+      database,
+    ).createSearchTarget(candidate, { name: 'Draft without sources' });
+
+    const run = await app.inject({
+      method: 'POST',
+      url: `/candidates/${candidate}/search-targets/${target.id}/run`,
+    });
+    expect(run.statusCode).toBe(400);
+    expect(run.json()).toMatchObject({
+      error: { code: 'INVALID_SOURCE_CONFIGURATION' },
+    });
+
+    const duplicate = await app.inject({
+      method: 'POST',
+      url: `/candidates/${candidate}/search-targets`,
+      payload: {
+        name: 'Duplicate sources',
+        sources: [
+          { sourceSystem: 'lever', boardId: 'same-site' },
+          { sourceSystem: 'lever', boardId: 'SAME-SITE' },
+        ],
+      },
+    });
+    expect(duplicate.statusCode).toBe(400);
+    expect(duplicate.json()).toMatchObject({
+      error: { code: 'INVALID_SOURCE_CONFIGURATION' },
+    });
   });
 
   it('proves Candidate B discovery matches never leak into Candidate A opportunity list', async () => {

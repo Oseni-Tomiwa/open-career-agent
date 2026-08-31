@@ -15,7 +15,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=../../.env src/cli/migrate.ts",
     "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
-    "test": "vitest run",
+    "test": "vitest run --no-file-parallelism",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

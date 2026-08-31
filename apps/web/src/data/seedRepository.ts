@@ -156,7 +156,7 @@ export class SeedProductRepository implements ProductRepository {
       freshnessDays: 30,
       requiredTerms: ['TypeScript'],
       excludedTerms: ['Internship'],
-      sources: [{ sourceSystem: 'greenhouse', boardId: 'figma' }],
+      sources: [],
       createdAt: '2026-08-28T09:00:00.000Z',
       updatedAt: '2026-08-28T09:00:00.000Z',
     },
@@ -194,7 +194,7 @@ export class SeedProductRepository implements ProductRepository {
       freshnessDays: input.freshnessDays ?? 30,
       requiredTerms: input.requiredTerms ?? [],
       excludedTerms: input.excludedTerms ?? [],
-      sources: input.sources ?? [{ sourceSystem: 'greenhouse', boardId: 'figma' }],
+      sources: input.sources ?? [],
       createdAt: now,
       updatedAt: now,
     };
@@ -232,11 +232,16 @@ export class SeedProductRepository implements ProductRepository {
   ): Promise<{ run: DiscoveryRun; taskEnqueued: boolean }> {
     const now = new Date().toISOString();
     const target = this.searchTargets.find((t) => t.id === targetId);
+    if (!target || target.sources.length === 0) {
+      return Promise.reject(
+        new Error('Configure at least one valid job source before discovery.'),
+      );
+    }
     const run: DiscoveryRun = {
       id: `dr-seed-${Date.now()}`,
       candidateId: 'fictional-seed-candidate',
       searchTargetId: targetId,
-      sourceSystem: target?.sources[0]?.sourceSystem ?? 'greenhouse',
+      sourceSystem: target.sources.map((source) => source.sourceSystem).join(', '),
       startedAt: now,
       completedAt: now,
       status: 'COMPLETED',

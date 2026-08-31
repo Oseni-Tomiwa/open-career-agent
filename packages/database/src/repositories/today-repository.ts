@@ -29,10 +29,7 @@ export interface TodayDashboardOptions {
 }
 
 function deriveGreetingName(cId: string): string {
-  const lower = cId.toLowerCase();
-  if (lower.includes('alex')) return 'Alex';
-  if (lower.includes('jordan')) return 'Jordan';
-  if (lower.includes('sam')) return 'Sam';
+  void cId;
   return 'there';
 }
 

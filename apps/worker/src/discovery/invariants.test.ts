@@ -506,9 +506,7 @@ describe('Multi-Source Discovery V1 Invariants Audit', () => {
       targetRoles: ['Backend Engineer'],
     });
 
-    expect(legacyTarget.sources).toHaveLength(1);
-    expect(legacyTarget.sources[0]?.sourceSystem).toBe('greenhouse');
-    expect(legacyTarget.sources[0]?.boardId).toBe('figma');
+    expect(legacyTarget.sources).toEqual([]);
   });
 
   it('6. SOURCE CONFIG VALIDATION & SSRF SAFETY: invalid board identifiers and unsafe URLs fail or sanitize honestly', async () => {

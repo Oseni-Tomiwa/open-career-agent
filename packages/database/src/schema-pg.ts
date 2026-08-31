@@ -267,6 +267,26 @@ export const sourceListingsPg = pgTable(
   ],
 );
 
+export const opportunityIdentityKeysPg = pgTable(
+  'opportunity_identity_keys',
+  {
+    identityKey: text('identity_key').primaryKey(),
+    kind: text('kind').notNull(),
+    opportunityId: text('opportunity_id')
+      .notNull()
+      .references(() => opportunitiesPg.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+  },
+  (table) => [
+    index('pg_opportunity_identity_keys_opportunity_idx').on(
+      table.opportunityId,
+    ),
+  ],
+);
+
 export const sourceObservationsPg = pgTable(
   'source_observations',
   {

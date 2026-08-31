@@ -38,10 +38,21 @@ import { createFitHandlers } from '../../../apps/worker/src/fit/workflow.js';
 import { createQualityHandlers } from '../../../apps/worker/src/quality/workflow.js';
 import { createDecisionHandlers } from '../../../apps/worker/src/decision/workflow.js';
 
-const POSTGRES_URL =
-  process.env.TEST_POSTGRES_URL ||
-  process.env.DATABASE_URL ||
-  'postgres://postgres:postgres@127.0.0.1:5432/rolevia_test';
+const POSTGRES_URL = process.env.TEST_POSTGRES_URL;
+
+function assertDisposablePostgresUrl(value: string): void {
+  const url = new URL(value);
+  const databaseName = url.pathname.slice(1);
+  const isLocal = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+  if (!isLocal || !databaseName.startsWith('rolevia_test')) {
+    throw new Error(
+      'TEST_POSTGRES_URL must identify a local disposable database whose name starts with rolevia_test',
+    );
+  }
+}
+
+if (POSTGRES_URL) assertDisposablePostgresUrl(POSTGRES_URL);
+const d = POSTGRES_URL ? describe : describe.skip;
 
 const postgresBaselineSql = readFileSync(
   fileURLToPath(
@@ -52,17 +63,27 @@ const postgresBaselineSql = readFileSync(
   ),
   'utf8',
 );
+const postgresCanonicalIdentitySql = readFileSync(
+  fileURLToPath(
+    new URL(
+      '../migrations-postgres/0001_canonical_opportunity_identity.sql',
+      import.meta.url,
+    ),
+  ),
+  'utf8',
+).replaceAll('--> statement-breakpoint', '');
 
-describe('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
+d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
   let handle: DatabaseHandle;
 
   beforeEach(async () => {
-    handle = openDatabase({ engine: 'postgres', databaseUrl: POSTGRES_URL });
+    handle = openDatabase({ engine: 'postgres', databaseUrl: POSTGRES_URL! });
     if (handle.pgPool) {
       await handle.pgPool.query(
         'DROP SCHEMA public CASCADE; CREATE SCHEMA public;',
       );
       await handle.pgPool.query(postgresBaselineSql);
+      await handle.pgPool.query(postgresCanonicalIdentitySql);
     }
   });
 
@@ -82,6 +103,110 @@ describe('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', ()
     expect(res.rows.length).toBe(1);
     const versionString = res.rows[0].version as string;
     expect(versionString).toContain('PostgreSQL 16');
+  });
+
+  it('Section 1: resolves strong cross-source identity atomically on PostgreSQL', async () => {
+    const sourceRepo = new SourceListingRepository(handle);
+    await sourceRepo.persistListing('pg-listing-gh', {
+      sourceSystem: 'greenhouse',
+      sourceExternalId: 'gh-42',
+    });
+    const first = await sourceRepo.resolveCanonicalOpportunity({
+      listingId: 'pg-listing-gh',
+      proposedOpportunityId: opportunityId('pg-canonical-first'),
+      identityEvidence: [
+        {
+          kind: 'canonical-application-url',
+          key: 'url:https://careers.acme.test/jobs/42',
+        },
+      ],
+      title: 'Platform Engineer',
+      location: 'Remote',
+    });
+    await new OpportunityRepository(handle).appendSnapshot({
+      id: snapshotId('pg-canonical-snapshot'),
+      opportunityId: first.opportunityId,
+      title: 'Platform Engineer',
+      organization: 'Acme',
+      location: 'Remote',
+      content: 'Role content',
+      fingerprint: 'pg-canonical-fingerprint',
+    });
+    await sourceRepo.persistListing('pg-listing-lever', {
+      sourceSystem: 'lever',
+      sourceExternalId: 'lever-99',
+    });
+    const second = await sourceRepo.resolveCanonicalOpportunity({
+      listingId: 'pg-listing-lever',
+      proposedOpportunityId: opportunityId('pg-canonical-second'),
+      identityEvidence: [
+        {
+          kind: 'canonical-application-url',
+          key: 'url:https://careers.acme.test/jobs/42',
+        },
+      ],
+      title: 'Platform Engineer',
+      location: 'Remote',
+    });
+    expect(second.opportunityId).toBe(first.opportunityId);
+  });
+
+  it('Section 1: converges concurrent cross-source identity claims on PostgreSQL', async () => {
+    const sourceRepo = new SourceListingRepository(handle);
+    await Promise.all([
+      sourceRepo.persistListing('pg-race-gh', {
+        sourceSystem: 'greenhouse',
+        sourceExternalId: 'race-gh',
+      }),
+      sourceRepo.persistListing('pg-race-ashby', {
+        sourceSystem: 'ashby',
+        sourceExternalId: 'race-ashby',
+      }),
+    ]);
+    const evidence = [
+      {
+        kind: 'canonical-application-url',
+        key: 'url:https://careers.acme.test/jobs/race',
+      },
+    ];
+    const [greenhouse, ashby] = await Promise.all([
+      sourceRepo.resolveCanonicalOpportunity({
+        listingId: 'pg-race-gh',
+        proposedOpportunityId: opportunityId('pg-race-opportunity-gh'),
+        identityEvidence: evidence,
+        title: 'Site Reliability Engineer',
+      }),
+      sourceRepo.resolveCanonicalOpportunity({
+        listingId: 'pg-race-ashby',
+        proposedOpportunityId: opportunityId('pg-race-opportunity-ashby'),
+        identityEvidence: evidence,
+        title: 'Site Reliability Engineer',
+      }),
+    ]);
+    expect(ashby.opportunityId).toBe(greenhouse.opportunityId);
+  });
+
+  it('Section 1: upgrades PostgreSQL identity storage without changing existing associations', async () => {
+    await handle.pgPool!.query('DROP TABLE opportunity_identity_keys');
+    await handle.pgPool!.query(
+      `INSERT INTO opportunities (id, created_at)
+       VALUES ('pg-upgrade-opportunity', now())`,
+    );
+    await handle.pgPool!.query(
+      `INSERT INTO source_listings
+         (id, opportunity_id, source_system, source_external_id, created_at)
+       VALUES
+         ('pg-upgrade-listing', 'pg-upgrade-opportunity', 'greenhouse', 'pg-upgrade-id', now())`,
+    );
+    await handle.pgPool!.query(postgresCanonicalIdentitySql);
+    const association = await handle.pgPool!.query(
+      `SELECT opportunity_id FROM source_listings WHERE id = 'pg-upgrade-listing'`,
+    );
+    const keys = await handle.pgPool!.query(
+      'SELECT count(*)::int AS count FROM opportunity_identity_keys',
+    );
+    expect(association.rows[0]?.opportunity_id).toBe('pg-upgrade-opportunity');
+    expect(keys.rows[0]?.count).toBe(0);
   });
 
   // ==================================================
@@ -711,7 +836,7 @@ describe('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', ()
   it('Section 16: verifies PostgreSQL connection pool closes cleanly without leaked handles', async () => {
     const testHandle = openDatabase({
       engine: 'postgres',
-      databaseUrl: POSTGRES_URL,
+      databaseUrl: POSTGRES_URL!,
     });
     expect(testHandle.pgPool).toBeDefined();
 

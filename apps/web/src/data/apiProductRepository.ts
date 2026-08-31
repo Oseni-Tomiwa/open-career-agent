@@ -12,7 +12,6 @@ import type {
 import type { Static } from '@sinclair/typebox';
 
 import { browserConfig } from '../config.js';
-import { initialSeedSnapshot } from './seed.js';
 import type {
   AddApplicationEventInput,
   ApplicationDetailResponse,
@@ -63,9 +62,37 @@ export class ApiProductRepository implements ProductRepository {
   public readonly dataSource = 'api' as const;
   private readonly client: RoleviaApiClient;
   private snapshot: ProductSnapshot = {
-    ...initialSeedSnapshot,
     opportunities: [],
     applications: [],
+    profile: {
+      name: 'Career profile',
+      initials: 'CP',
+      headline: '',
+      summary: '',
+      location: '',
+      targetRoles: [],
+      skills: [],
+      experience: [],
+      projects: [],
+      education: [],
+      certifications: [],
+      preferences: [],
+      evidence: [],
+      completeness: 0,
+    },
+    searchPreferences: {
+      targetRoles: [],
+      locations: [],
+      remotePreferences: [],
+      salaryMinimum: 0,
+      currency: '',
+      employmentTypes: [],
+      requiresSponsorship: false,
+      willingToRelocate: false,
+      sources: [],
+      freshnessDays: 0,
+    },
+    sourceStatuses: [],
   };
   private readonly summaries = new Map<string, Summary>();
 

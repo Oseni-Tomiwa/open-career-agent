@@ -383,6 +383,19 @@ export async function createApiApp(
     targetId: Type.String(),
   });
 
+  function sourceConfigurationError(
+    sources: readonly { sourceSystem: string; boardId: string }[] | undefined,
+  ): string | null {
+    if (!sources) return null;
+    const keys = sources.map(
+      (source) =>
+        `${source.sourceSystem}:${source.boardId.trim().toLowerCase()}`,
+    );
+    return new Set(keys).size === keys.length
+      ? null
+      : 'Duplicate source configurations are not allowed.';
+  }
+
   app.get(
     '/candidates/:candidateId/search-targets',
     {
@@ -414,10 +427,21 @@ export async function createApiApp(
         body: CreateSearchTargetInputSchema,
         response: {
           201: SearchTargetSchema,
+          400: ApiErrorEnvelopeSchema,
         },
       },
     },
     async (request: any, reply: any) => {
+      const sourceError = sourceConfigurationError(request.body.sources);
+      if (sourceError) {
+        return await reply.status(400).send({
+          error: {
+            code: 'INVALID_SOURCE_CONFIGURATION',
+            message: sourceError,
+            requestId: request.id,
+          },
+        });
+      }
       const repo = new SearchTargetRepository(options.database);
       const created = await repo.createSearchTarget(
         candidateId(request.params.candidateId),
@@ -470,11 +494,22 @@ export async function createApiApp(
         body: UpdateSearchTargetInputSchema,
         response: {
           200: SearchTargetSchema,
+          400: ApiErrorEnvelopeSchema,
           404: ApiErrorEnvelopeSchema,
         },
       },
     },
     async (request: any, reply: any) => {
+      const sourceError = sourceConfigurationError(request.body.sources);
+      if (sourceError) {
+        return await reply.status(400).send({
+          error: {
+            code: 'INVALID_SOURCE_CONFIGURATION',
+            message: sourceError,
+            requestId: request.id,
+          },
+        });
+      }
       const repo = new SearchTargetRepository(options.database);
       const updated = await repo.updateSearchTarget(
         candidateId(request.params.candidateId),
@@ -537,6 +572,7 @@ export async function createApiApp(
         params: targetParams,
         response: {
           202: TriggerDiscoveryRunResponseSchema,
+          400: ApiErrorEnvelopeSchema,
           404: ApiErrorEnvelopeSchema,
         },
       },
@@ -558,12 +594,34 @@ export async function createApiApp(
         return;
       }
 
+      const sourceKeys = target.sources.map(
+        (source) =>
+          `${source.sourceSystem}:${source.boardId.trim().toLowerCase()}`,
+      );
+      if (
+        target.sources.length === 0 ||
+        target.sources.some((source) => !source.boardId.trim()) ||
+        new Set(sourceKeys).size !== sourceKeys.length
+      ) {
+        await reply.status(400).send({
+          error: {
+            code: 'INVALID_SOURCE_CONFIGURATION',
+            message:
+              'Configure at least one valid, non-duplicate job source before discovery.',
+            requestId: request.id,
+          },
+        });
+        return;
+      }
+
       const runId = discoveryRunId(`dr_${crypto.randomUUID()}`);
       const runRecord = await repo.createDiscoveryRun(
         runId,
         cId,
         tId,
-        target.sources[0]?.sourceSystem ?? 'greenhouse',
+        [...new Set(target.sources.map((source) => source.sourceSystem))].join(
+          ', ',
+        ) || 'unconfigured',
       );
 
       const taskLedger = new BackgroundTaskLedger(options.database);

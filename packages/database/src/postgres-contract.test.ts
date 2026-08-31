@@ -148,14 +148,29 @@ describe('Production Data Layer V1 Dual-Engine Contract & Parity Suite', () => {
     });
   });
 
-  const postgresUrl = process.env.TEST_POSTGRES_URL || process.env.DATABASE_URL;
+  const postgresUrl = process.env.TEST_POSTGRES_URL;
+
+  if (postgresUrl) {
+    const url = new URL(postgresUrl);
+    const databaseName = url.pathname.slice(1);
+    const isLocal =
+      url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+    if (!isLocal || !databaseName.startsWith('rolevia_test')) {
+      throw new Error(
+        'TEST_POSTGRES_URL must identify a local disposable database whose name starts with rolevia_test',
+      );
+    }
+  }
 
   if (postgresUrl && postgresUrl.startsWith('postgres')) {
     describe('Engine Abstraction & Portable Repositories (PostgreSQL Integration)', () => {
       let handle: DatabaseHandle;
 
       beforeEach(async () => {
-        handle = openDatabase(postgresUrl);
+        handle = openDatabase({
+          engine: 'postgres',
+          databaseUrl: postgresUrl,
+        });
         await applyMigrations(handle);
       });
 

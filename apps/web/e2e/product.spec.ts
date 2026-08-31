@@ -181,3 +181,32 @@ test('mobile navigation and dark theme remain usable', async ({
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
 });
+
+test('authors, edits, removes, and runs a multi-source Search Preference', async ({
+  page,
+}) => {
+  await page.goto('/discover?tab=preferences');
+  await page.getByLabel('greenhouse identifier 1').fill('company-greenhouse');
+  await page.getByRole('button', { name: '+ Add job source' }).click();
+  await page.getByLabel('Job source 2').selectOption('lever');
+  await page.getByLabel('lever identifier 2').fill('company-lever');
+  await page.getByRole('button', { name: '+ Add job source' }).click();
+  await page.getByLabel('Job source 3').selectOption('ashby');
+  await page.getByLabel('ashby identifier 3').fill('company-ashby');
+  await page.getByRole('button', { name: 'Save Search Preference' }).click();
+  await expect(page.getByText(/updated successfully/i)).toBeVisible();
+
+  await page.getByLabel('lever identifier 2').fill('company-lever-edited');
+  await page.getByRole('button', { name: 'Remove source 1' }).click();
+  await page.getByRole('button', { name: 'Save Search Preference' }).click();
+  await expect(
+    page.locator('input[value="company-lever-edited"]'),
+  ).toBeVisible();
+  await expect(page.locator('input[value="company-ashby"]')).toBeVisible();
+  await expect(page.locator('input[value="company-greenhouse"]')).toHaveCount(
+    0,
+  );
+
+  await page.getByRole('button', { name: 'Run Discovery Now' }).click();
+  await expect(page.getByText(/Discovery completed/i)).toBeVisible();
+});

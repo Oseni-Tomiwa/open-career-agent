@@ -502,7 +502,10 @@ describe('quality.evaluate durable workflow', () => {
     const qualityHandlers = createQualityHandlers({ db: database });
 
     await taskHandlers['source.greenhouse.discover']!(
-      task('source.greenhouse.discover', { boardId: 'stripe' }),
+      task('source.greenhouse.discover', {
+        boardId: 'stripe',
+        candidateId: candidate,
+      }),
     );
 
     const ledger = new BackgroundTaskLedger(database);

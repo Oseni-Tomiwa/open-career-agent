@@ -45,8 +45,8 @@ export default function MatchesPage() {
         <div>
           <h1>Matches</h1>
           <p className="subtitle">
-            Curated job recommendations based on your Career Profile,
-            eligibility evidence, and fit criteria.
+            Candidate-specific discovered jobs grouped by their persisted
+            recommendation state.
           </p>
         </div>
       </header>
@@ -204,6 +204,7 @@ export default function MatchesPage() {
 }
 
 function recommendationHeading(decision: Opportunity['decision']): string {
+  if (!decision) return 'Not evaluated:';
   if (decision === 'blocked') return 'Why this job is blocked:';
   if (decision === 'investigate') return 'What needs investigation:';
   if (decision === 'low-priority') return 'Why this is lower priority:';

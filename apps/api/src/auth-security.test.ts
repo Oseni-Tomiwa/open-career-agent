@@ -348,7 +348,12 @@ describe('Cloud authentication adversarial security', () => {
       method: 'POST',
       url: `/candidates/${account.session.primaryCandidateId}/search-targets`,
       headers: { authorization },
-      payload: { name: 'Target' },
+      payload: {
+        name: 'Target',
+        sources: [
+          { sourceSystem: 'greenhouse', boardId: 'security-test-board' },
+        ],
+      },
     });
     expect(created.statusCode).toBe(201);
     const target = created.json<{ id: string }>();

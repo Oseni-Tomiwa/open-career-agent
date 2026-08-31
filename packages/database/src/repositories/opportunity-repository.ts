@@ -77,6 +77,17 @@ export class OpportunityRepository {
     return result[result.length - 1] ?? null;
   }
 
+  public async linkSnapshotSource(
+    id: SnapshotId,
+    sourceObservationId: string,
+  ): Promise<void> {
+    const { opportunitySnapshotSources } = getTables(this.db);
+    await (this.db.db as any)
+      .insert(opportunitySnapshotSources)
+      .values({ snapshotId: id, sourceObservationId })
+      .onConflictDoNothing();
+  }
+
   public async getSnapshot(snapshotId: SnapshotId): Promise<any | null> {
     const { opportunitySnapshots } = getTables(this.db);
     const db = this.db.db as any;

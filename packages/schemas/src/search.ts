@@ -28,8 +28,8 @@ export const SourceSystemSchema = Type.Union([
 
 export const SearchSourceConfigSchema = Type.Object(
   {
-    sourceSystem: Type.String(),
-    boardId: Type.String(),
+    sourceSystem: SourceSystemSchema,
+    boardId: Type.String({ minLength: 1 }),
   },
   { additionalProperties: false },
 );
@@ -88,7 +88,9 @@ export const CreateSearchTargetInputSchema = Type.Object(
     freshnessDays: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     requiredTerms: Type.Optional(Type.Array(Type.String())),
     excludedTerms: Type.Optional(Type.Array(Type.String())),
-    sources: Type.Optional(Type.Array(SearchSourceConfigSchema)),
+    sources: Type.Optional(
+      Type.Array(SearchSourceConfigSchema, { uniqueItems: true }),
+    ),
   },
   { additionalProperties: false },
 );

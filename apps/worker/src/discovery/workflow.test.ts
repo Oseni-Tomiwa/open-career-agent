@@ -11,6 +11,7 @@ import {
   openDatabase,
   OpportunityRepository,
   SearchTargetRepository,
+  type BackgroundTask,
   type DatabaseHandle,
 } from '@oca/database';
 import {
@@ -78,6 +79,61 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
     vi.restoreAllMocks();
     await db.close();
     rmSync(directory, { recursive: true, force: true });
+  });
+
+  it('fails an unconfigured search target without scanning an implicit employer board', async () => {
+    const target = await targetRepo.createSearchTarget(candidateA, {
+      name: 'Unconfigured target',
+    });
+    const runId = discoveryRunId('dr-unconfigured');
+    await targetRepo.createDiscoveryRun(
+      runId,
+      candidateA,
+      searchTargetId(target.id),
+      'unconfigured',
+    );
+    await ledger.enqueue({
+      taskType: 'discovery.run',
+      payload: {
+        candidateId: candidateA,
+        searchTargetId: target.id,
+        discoveryRunId: runId,
+      },
+    });
+
+    await worker.runOnce(new Date());
+
+    const run = (await targetRepo.listDiscoveryRuns(candidateA)).find(
+      (item) => item.id === runId,
+    );
+    expect(run).toMatchObject({
+      status: 'FAILED',
+      sourceSystem: 'unconfigured',
+      errorSummary: 'No job sources are configured for this search target',
+    });
+  });
+
+  it('rejects legacy candidate-less eligibility tasks before reading any candidate', async () => {
+    const handler = createEligibilityHandlers({ db })['eligibility.evaluate']!;
+    const task: BackgroundTask = {
+      id: 'task-candidate-less',
+      taskType: 'eligibility.evaluate',
+      payload: { snapshotId: 'snapshot-any' },
+      state: 'RUNNING',
+      attempts: 1,
+      maxAttempts: 3,
+      availableAt: new Date(),
+      leaseOwner: 'test-worker',
+      leaseExpiresAt: new Date(Date.now() + 30_000),
+      idempotencyKey: null,
+      lastError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    await expect(handler(task)).rejects.toThrow(
+      'eligibility.evaluate payload missing candidateId',
+    );
   });
 
   it('runs E2E discovery scenario with 4 discovered, 2 accepted, 2 rejected, cascading accepted into intelligence pipeline', async () => {
@@ -197,11 +253,13 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
     const targetA = await targetRepo.createSearchTarget(candidateA, {
       name: 'Target A',
       targetRoles: ['Full Stack'],
+      sources: [{ sourceSystem: 'greenhouse', boardId: 'testboard' }],
     });
 
     const targetB = await targetRepo.createSearchTarget(candidateB, {
       name: 'Target B',
       targetRoles: ['Full Stack'],
+      sources: [{ sourceSystem: 'greenhouse', boardId: 'testboard' }],
     });
 
     const sharedJobFixture = {
@@ -284,6 +342,7 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       workModels: ['remote'],
       workModelIsHardFilter: false,
       requiredTerms: ['TypeScript'],
+      sources: [{ sourceSystem: 'greenhouse', boardId: 'testboard' }],
     });
 
     const target2 = await targetRepo.createSearchTarget(candidateA, {
@@ -294,6 +353,7 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       workModels: ['onsite'],
       workModelIsHardFilter: false,
       requiredTerms: [],
+      sources: [{ sourceSystem: 'greenhouse', boardId: 'testboard' }],
     });
 
     const jobFixture = {
@@ -412,6 +472,8 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
         categories: { team: 'Acme Corp', location: 'Remote' },
         descriptionPlain: 'TypeScript Backend role.',
         hostedUrl: 'https://jobs.lever.co/acme/lever-opp-1',
+        applicationUrl:
+          'https://careers.acme.test/jobs/backend-1?utm_source=lever',
         workplaceType: 'remote',
       },
     ];
@@ -425,6 +487,8 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
           locationName: 'Remote',
           descriptionPlain: 'TypeScript Backend role.',
           jobUrl: 'https://jobs.ashbyhq.com/acme/ashby-opp-1',
+          applicationUrl:
+            'https://careers.acme.test/jobs/backend-1?utm_source=ashby',
           isRemote: true,
         },
       ],
@@ -478,7 +542,7 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
     expect(runRecord?.acceptedCount).toBe(2);
 
     const matches = await targetRepo.listDiscoveryMatches(candidateA);
-    expect(matches).toHaveLength(2);
+    expect(matches).toHaveLength(1);
 
     for (const match of matches) {
       const snap = (await oppRepo.getLatestSnapshot(
@@ -496,6 +560,13 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       );
       expect(decision).not.toBeNull();
       expect(decision?.priority).toBeDefined();
+      const observations = await oppRepo.getObservationsForOpportunity(
+        opportunityId(match.opportunityId),
+      );
+      expect(observations.map((item) => item.sourceSystem).sort()).toEqual([
+        'ashby',
+        'lever',
+      ]);
     }
   });
 

@@ -133,6 +133,7 @@ export class SearchTargetRepository {
     input: CreateSearchTargetInput,
     idOverride?: SearchTargetId,
   ): Promise<SearchTarget> {
+    if (input.sources) assertValidSourceConfigs(input.sources);
     const id = idOverride ?? searchTargetId(`st_${crypto.randomUUID()}`);
     const now = new Date();
     const nowIso = now.toISOString();
@@ -161,9 +162,7 @@ export class SearchTargetRepository {
       freshnessDays: input.freshnessDays ?? 30,
       requiredTermsJson: JSON.stringify(input.requiredTerms ?? []),
       excludedTermsJson: JSON.stringify(input.excludedTerms ?? []),
-      sourcesJson: JSON.stringify(
-        input.sources ?? [{ sourceSystem: 'greenhouse', boardId: 'figma' }],
-      ),
+      sourcesJson: JSON.stringify(input.sources ?? []),
       createdAt: now,
       updatedAt: now,
     };
@@ -203,6 +202,7 @@ export class SearchTargetRepository {
     tId: SearchTargetId,
     input: UpdateSearchTargetInput,
   ): Promise<SearchTarget | null> {
+    if (input.sources) assertValidSourceConfigs(input.sources);
     const existing = await this.getSearchTarget(cId, tId);
     if (!existing) return null;
 
@@ -537,5 +537,23 @@ export class SearchTargetRepository {
         : null,
       errorSummary: row.errorSummary,
     };
+  }
+}
+
+function assertValidSourceConfigs(
+  sources: readonly SearchSourceConfig[],
+): void {
+  const supported = new Set(['greenhouse', 'lever', 'ashby']);
+  const keys = sources.map((source) => {
+    const boardId = source.boardId.trim();
+    if (!supported.has(source.sourceSystem) || !boardId) {
+      throw new Error(
+        'Each source requires a supported ATS and non-empty identifier',
+      );
+    }
+    return `${source.sourceSystem}:${boardId.toLowerCase()}`;
+  });
+  if (new Set(keys).size !== keys.length) {
+    throw new Error('Duplicate source configurations are not allowed');
   }
 }

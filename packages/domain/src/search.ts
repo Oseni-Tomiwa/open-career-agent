@@ -21,7 +21,7 @@ export const SOURCE_SYSTEMS = ['greenhouse', 'lever', 'ashby'] as const;
 export type SourceSystem = (typeof SOURCE_SYSTEMS)[number];
 
 export interface SearchSourceConfig {
-  sourceSystem: SourceSystem | (string & {});
+  sourceSystem: SourceSystem;
   boardId: string;
 }
 

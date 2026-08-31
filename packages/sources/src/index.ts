@@ -1,4 +1,5 @@
 export * from './core/index.js';
+export * from './core/opportunity-identity.js';
 export * from './greenhouse/adapter.js';
 export * from './greenhouse/normalizer.js';
 export * from './lever/adapter.js';

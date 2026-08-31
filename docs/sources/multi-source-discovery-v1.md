@@ -76,9 +76,13 @@ Within a single source provider, the composite tuple `(sourceSystem, sourceExter
 Rediscovering the same external listing attaches a new `source_observation` record to the existing `source_listing`. If the normalized snapshot fingerprint matches the latest snapshot, no duplicate `Opportunity` or `OpportunitySnapshot` is created.
 
 ### Cross-Source Deduplication Policy (V1)
-Employer roles posted across multiple ATS platforms (e.g. Acme posting Backend Engineer on both Greenhouse and Lever) are intentionally preserved as separate canonical `Opportunity` records in V1.
+Cross-source listings link to one canonical `Opportunity` only when they share deterministic strong identity evidence: a normalized employer-hosted canonical application/job URL, or an explicit requisition identifier scoped by a canonical employer domain. Provider-hosted ATS URLs and `(sourceSystem, sourceExternalId)` identify a source listing but never establish identity across providers.
 
-**Rationale**: Heuristic or fuzzy-matching title/company deduplication across different sources creates false-positive merges, corrupting candidate evaluation history. Explicit cross-source identity evidence is required before merging opportunities across providers.
+Title, displayed organization, location, and work model are weak evidence. They never cause a merge. Normalized role and location are collision guards: conflicting values keep listings separate even when a strong key collides. Existing source-listing associations remain stable when a provider later changes or removes a URL. Ambiguous claims remain separate and do not take ownership of a contested identity key.
+
+Every linked provider retains its own `source_listing`, immutable observations, raw payload, URL, and timestamps. An unchanged canonical snapshot is linked to each supporting observation, so deduplication does not discard provenance. Historical rows are not backfilled or merged from weak evidence; new or updated observations participate in resolution.
+
+See [ADR-009](../adrs/ADR-009-conservative-canonical-opportunity-identity.md) for the exact hierarchy and collision policy.
 
 ---
 
