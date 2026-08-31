@@ -171,6 +171,9 @@ describe('Production Data Layer V1 Dual-Engine Contract & Parity Suite', () => {
           engine: 'postgres',
           databaseUrl: postgresUrl,
         });
+        await handle.pgPool!.query(
+          'DROP SCHEMA public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public;',
+        );
         await applyMigrations(handle);
       });
 

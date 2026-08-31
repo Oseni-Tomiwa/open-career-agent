@@ -474,7 +474,11 @@ export class ApplicationRepository {
         });
       }
 
-      return (await this.findApplication(input.id))!;
+      const rows = await tx
+        .select()
+        .from(applications)
+        .where(eq(applications.id, input.id));
+      return rows[0]!;
     });
   }
 

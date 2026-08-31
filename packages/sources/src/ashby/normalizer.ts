@@ -26,9 +26,12 @@ export class AshbyNormalizer implements OpportunityNormalizer {
     };
 
     const title = payload.title?.trim() ?? 'Unknown Title';
+    // Ashby's public job-board payload exposes department/team metadata but
+    // not a separate employer field. The board identifier supplied by the
+    // adapter is therefore the authoritative organization context.
     const organization =
-      payload.department?.trim() ||
       payload._boardId?.trim() ||
+      payload.department?.trim() ||
       'Unknown Organization';
 
     const content = (

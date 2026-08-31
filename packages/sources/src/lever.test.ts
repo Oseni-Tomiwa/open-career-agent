@@ -44,7 +44,7 @@ describe('Lever Adapter and Normalizer', () => {
     const normalizer = new LeverNormalizer();
     const normalized = normalizer.normalize(records[0]!);
     expect(normalized.title).toBe('Senior Backend Software Engineer');
-    expect(normalized.organization).toBe('Infrastructure');
+    expect(normalized.organization).toBe('acme');
     expect(normalized.location).toBe('Berlin, Germany');
     expect(normalized.workModel).toBe('hybrid');
     expect(normalized.employmentType).toBe('full-time');

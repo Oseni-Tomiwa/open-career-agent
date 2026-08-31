@@ -410,7 +410,7 @@ function Overview({ opportunity }: { readonly opportunity: Opportunity }) {
   return (
     <div className="detail-overview-grid">
       <AnalysisSection
-        description="A concise reading of the fictional role fixture."
+        description="A concise reading of the role data received from the source."
         title="Role overview"
       >
         {opportunity.description.map((paragraph) => (

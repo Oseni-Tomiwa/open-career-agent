@@ -28,10 +28,13 @@ export class LeverNormalizer implements OpportunityNormalizer {
     };
 
     const title = payload.text?.trim() ?? 'Unknown Title';
+    // Lever's team and department describe the role, not its employer. The
+    // adapter-provided site identifier is the authoritative organization
+    // context available from the public postings API.
     const organization =
-      payload.categories?.team?.trim() ||
-      payload.categories?.department?.trim() ||
       payload._siteId?.trim() ||
+      payload.categories?.department?.trim() ||
+      payload.categories?.team?.trim() ||
       'Unknown Organization';
 
     const content = (

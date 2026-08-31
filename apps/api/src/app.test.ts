@@ -1286,6 +1286,21 @@ describe('Cloud identity and candidate isolation', () => {
       'https://app.rolevia.test',
     );
     expect(allowed.headers['access-control-allow-credentials']).toBe('true');
+    expect(allowed.headers['access-control-allow-methods']).toContain('PATCH');
+    expect(allowed.headers['access-control-allow-methods']).toContain('DELETE');
+
+    const patchAllowed = await cloudApp.inject({
+      method: 'OPTIONS',
+      url: '/candidates/candidate-1/applications/application-1',
+      headers: {
+        origin: 'https://app.rolevia.test',
+        'access-control-request-method': 'PATCH',
+      },
+    });
+    expect(patchAllowed.statusCode).toBe(204);
+    expect(patchAllowed.headers['access-control-allow-origin']).toBe(
+      'https://app.rolevia.test',
+    );
 
     const denied = await cloudApp.inject({
       method: 'OPTIONS',

@@ -47,7 +47,7 @@ describe('Ashby Adapter and Normalizer', () => {
     const normalizer = new AshbyNormalizer();
     const normalized = normalizer.normalize(records[0]!);
     expect(normalized.title).toBe('Full Stack Staff Engineer');
-    expect(normalized.organization).toBe('Core Product');
+    expect(normalized.organization).toBe('linear');
     expect(normalized.location).toBe('San Francisco, CA');
     expect(normalized.workModel).toBe('remote');
     expect(normalized.employmentType).toBe('full-time');

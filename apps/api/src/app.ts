@@ -123,6 +123,7 @@ export async function createApiApp(
   await app.register(cors, {
     origin: [options.config.webOrigin],
     credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
   await app.register(helmet, {

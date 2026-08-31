@@ -57,7 +57,7 @@ const d = POSTGRES_URL ? describe : describe.skip;
 const postgresBaselineSql = readFileSync(
   fileURLToPath(
     new URL(
-      '../migrations-postgres/0000_baseline_postgres.sql',
+      '../migrations-postgres/20250831000000_baseline_postgres/migration.sql',
       import.meta.url,
     ),
   ),
@@ -66,7 +66,7 @@ const postgresBaselineSql = readFileSync(
 const postgresCanonicalIdentitySql = readFileSync(
   fileURLToPath(
     new URL(
-      '../migrations-postgres/0001_canonical_opportunity_identity.sql',
+      '../migrations-postgres/20260831000000_canonical_opportunity_identity/migration.sql',
       import.meta.url,
     ),
   ),
@@ -80,7 +80,7 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
     handle = openDatabase({ engine: 'postgres', databaseUrl: POSTGRES_URL! });
     if (handle.pgPool) {
       await handle.pgPool.query(
-        'DROP SCHEMA public CASCADE; CREATE SCHEMA public;',
+        'DROP SCHEMA public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public;',
       );
       await handle.pgPool.query(postgresBaselineSql);
       await handle.pgPool.query(postgresCanonicalIdentitySql);
@@ -226,7 +226,7 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
     });
 
     try {
-      await freshHandle.pgPool!.query(postgresBaselineSql);
+      await applyMigrations(freshHandle);
 
       const tableRes = await freshHandle.pgPool!.query(`
         SELECT table_name 
@@ -370,6 +370,26 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
 
     const events = await appRepo.getEvents(cId, aId);
     expect(events.length).toBe(3);
+
+    const sequentialId = applicationId(`app-sequential-${Date.now()}`);
+    const sequentialOpportunityId = opportunityId(
+      `opp-app-sequential-${Date.now()}`,
+    );
+    await oppRepo.createOpportunity(sequentialOpportunityId);
+    const preparing = await appRepo.createApplication({
+      id: sequentialId,
+      candidateId: cId,
+      opportunityId: sequentialOpportunityId,
+      status: 'Preparing',
+    });
+    const applied = await appRepo.updateApplication({
+      id: sequentialId,
+      candidateId: cId,
+      expectedUpdatedAt: preparing.updatedAt,
+      status: 'Applied',
+    });
+    expect(applied.status).toBe('Applied');
+    expect(applied.submittedAt).not.toBeNull();
   });
 
   // ==================================================
