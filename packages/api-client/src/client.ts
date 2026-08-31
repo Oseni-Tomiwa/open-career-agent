@@ -5,6 +5,7 @@ import {
   AttachClaimEvidenceInputSchema,
   CandidateProfileResponseSchema,
   CareerMemoryMutationResponseSchema,
+  CareerSignalsResponseSchema,
   CreateApplicationInputSchema,
   CreateCandidateClaimInputSchema,
   CreateSearchTargetInputSchema,
@@ -274,6 +275,19 @@ export class RoleviaApiClient {
     return this.request(
       `/candidates/${encodeURIComponent(candidateId)}/today${query}`,
       TodayDashboardResponseSchema,
+      'GET',
+      undefined,
+      options,
+    );
+  }
+
+  public async getCareerSignals(
+    candidateId: string,
+    options?: RequestOptions,
+  ): Promise<Static<typeof CareerSignalsResponseSchema>> {
+    return this.request(
+      `/candidates/${encodeURIComponent(candidateId)}/career-signals`,
+      CareerSignalsResponseSchema,
       'GET',
       undefined,
       options,

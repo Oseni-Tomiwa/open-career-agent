@@ -212,4 +212,39 @@ describe('RoleviaApiClient', () => {
       expect.objectContaining({ signal: controller.signal }),
     );
   });
+
+  it('fetches getCareerSignals with schema validation', async () => {
+    const mockSignals = {
+      candidateId,
+      generatedAt: '2026-08-31T00:00:00.000Z',
+      summary: 'Market signals summary',
+      activeOpportunityCount: 0,
+      repeatedGaps: [],
+      strongAlignments: [],
+      transferableCapabilities: [],
+      eligibilityUncertainties: [],
+      eligibilityBlockers: [],
+      evidenceGaps: [],
+      marketDemand: [],
+    };
+
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(mockSignals), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const client = new RoleviaApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetcher,
+    });
+
+    const signals = await client.getCareerSignals(candidateId);
+    expect(signals).toEqual(mockSignals);
+    expect(fetcher).toHaveBeenCalledWith(
+      `http://localhost:3000/candidates/${candidateId}/career-signals`,
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
 });

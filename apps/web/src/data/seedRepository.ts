@@ -16,6 +16,7 @@ import type {
   UpdateSearchTargetInput,
   DiscoveryRun,
   TodayDashboardResponse,
+  CareerSignalsResponse,
   ApplicationItem,
   ApplicationDetailResponse,
   ApplicationStatus,
@@ -311,6 +312,22 @@ export class SeedProductRepository implements ProductRepository {
       discoveryActivity: [],
       applicationActivity: [],
       careerMemoryAttention: [],
+    });
+  }
+
+  public getCareerSignals(): Promise<CareerSignalsResponse> {
+    return Promise.resolve({
+      candidateId: 'dev_candidate',
+      generatedAt: new Date().toISOString(),
+      summary: 'Seed mode default career signals across active market.',
+      activeOpportunityCount: this.snapshot.opportunities.length,
+      repeatedGaps: [],
+      strongAlignments: [],
+      transferableCapabilities: [],
+      eligibilityUncertainties: [],
+      eligibilityBlockers: [],
+      evidenceGaps: [],
+      marketDemand: [],
     });
   }
 

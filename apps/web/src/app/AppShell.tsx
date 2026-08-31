@@ -14,6 +14,7 @@ const primaryNavigation: readonly {
   { to: '/today', label: 'Today', icon: 'today' },
   { to: '/opportunities', label: 'Opportunities', icon: 'opportunities' },
   { to: '/applications', label: 'Applications', icon: 'applications' },
+  { to: '/signals', label: 'Career Signals', icon: 'signals' },
   { to: '/profile', label: 'Career Profile', icon: 'profile' },
   { to: '/search', label: 'Search', icon: 'search' },
 ];

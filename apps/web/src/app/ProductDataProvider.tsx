@@ -28,6 +28,7 @@ import type {
   DiscoveryRun,
   UpdateCandidateClaimInput,
   TodayDashboardResponse,
+  CareerSignalsResponse,
   ApplicationItem,
   ApplicationDetailResponse,
   CreateApplicationInput,
@@ -80,6 +81,9 @@ interface ProductDataContextValue {
     timeWindowDays?: number,
     signal?: AbortSignal,
   ) => Promise<TodayDashboardResponse>;
+  readonly getCareerSignals: (
+    signal?: AbortSignal,
+  ) => Promise<CareerSignalsResponse>;
   readonly getApplications: (
     signal?: AbortSignal,
   ) => Promise<readonly ApplicationItem[]>;
@@ -250,6 +254,11 @@ export function ProductDataProvider({
     [repository],
   );
 
+  const getCareerSignals = useCallback(
+    (signal?: AbortSignal) => repository.getCareerSignals(signal),
+    [repository],
+  );
+
   const getApplications = useCallback(
     (signal?: AbortSignal) => repository.getApplications(signal),
     [repository],
@@ -299,6 +308,7 @@ export function ProductDataProvider({
             runDiscovery,
             getDiscoveryRuns,
             getTodayDashboard,
+            getCareerSignals,
             getApplications,
             getApplication,
             createApplication,
@@ -323,6 +333,7 @@ export function ProductDataProvider({
       runDiscovery,
       getDiscoveryRuns,
       getTodayDashboard,
+      getCareerSignals,
       getApplications,
       getApplication,
       createApplication,

@@ -4,6 +4,7 @@ export type IconName =
   | 'today'
   | 'opportunities'
   | 'applications'
+  | 'signals'
   | 'profile'
   | 'search'
   | 'settings'
@@ -34,6 +35,7 @@ const paths: Record<IconName, readonly string[]> = {
   today: ['M4 5.5h16v14H4z', 'M8 3v5M16 3v5M4 10h16'],
   opportunities: ['M4 7h16v12H4z', 'M9 7V5h6v2', 'M4 12h16', 'M10 12v2h4v-2'],
   applications: ['M6 3h12v18H6z', 'M9 8h6M9 12h6M9 16h4'],
+  signals: ['M4 19h16', 'M7 14v5', 'M12 9v10', 'M17 4v15'],
   profile: [
     'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',
     'M4.5 21a7.5 7.5 0 0 1 15 0',

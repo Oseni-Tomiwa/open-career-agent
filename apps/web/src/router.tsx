@@ -15,6 +15,9 @@ const OpportunityDetailPage = lazy(
 const ApplicationsPage = lazy(
   () => import('./features/applications/ApplicationsPage.js'),
 );
+const CareerSignalsPage = lazy(
+  () => import('./features/signals/CareerSignalsPage.js'),
+);
 const ProfilePage = lazy(() => import('./features/profile/ProfilePage.js'));
 const SearchPage = lazy(() => import('./features/search/SearchPage.js'));
 const NotFoundPage = lazy(() => import('./features/NotFoundPage.js'));
@@ -37,6 +40,7 @@ export const router = createBrowserRouter([
         element: lazyPage(<OpportunityDetailPage />),
       },
       { path: 'applications', element: lazyPage(<ApplicationsPage />) },
+      { path: 'signals', element: lazyPage(<CareerSignalsPage />) },
       { path: 'profile', element: lazyPage(<ProfilePage />) },
       { path: 'search', element: lazyPage(<SearchPage />) },
       { path: '*', element: lazyPage(<NotFoundPage />) },

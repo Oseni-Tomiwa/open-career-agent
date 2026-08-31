@@ -36,6 +36,7 @@ import type {
   SearchPreferences,
   SearchTarget,
   TodayDashboardResponse,
+  CareerSignalsResponse,
   UpdateApplicationInput,
   UpdateCandidateClaimInput,
   UpdateSearchTargetInput,
@@ -267,6 +268,18 @@ export class ApiProductRepository implements ProductRepository {
         timeWindowDays,
         { signal },
       );
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
+  }
+
+  public async getCareerSignals(
+    signal?: AbortSignal,
+  ): Promise<CareerSignalsResponse> {
+    try {
+      return await this.client.getCareerSignals(this.candidateId!, {
+        signal,
+      });
     } catch (error) {
       throw this.normalizeError(error);
     }

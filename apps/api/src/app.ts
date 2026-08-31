@@ -10,6 +10,7 @@ import {
   TodayRepository,
   ApplicationRepository,
   SourceListingRepository,
+  CareerSignalsRepository,
   databaseIsReady,
   EvaluationRepository,
   EvidenceRepository,
@@ -48,6 +49,7 @@ import {
   DiscoveryRunListResponseSchema,
   TriggerDiscoveryRunResponseSchema,
   TodayDashboardResponseSchema,
+  CareerSignalsResponseSchema,
   ApplicationListResponseSchema,
   ApplicationDetailResponseSchema,
   CreateApplicationInputSchema,
@@ -605,6 +607,27 @@ export async function createApiApp(
         },
       );
       return dashboard;
+    },
+  );
+
+  app.get(
+    '/candidates/:candidateId/career-signals',
+    {
+      schema: {
+        tags: ['signals'],
+        summary: 'Get candidate aggregated career market signals',
+        params: profileParams,
+        response: {
+          200: CareerSignalsResponseSchema,
+        },
+      },
+    },
+    (request) => {
+      const repo = new CareerSignalsRepository(options.database);
+      const signals = repo.getCareerSignals(
+        candidateId(request.params.candidateId),
+      );
+      return signals;
     },
   );
 

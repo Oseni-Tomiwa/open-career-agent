@@ -18,6 +18,7 @@ import {
   OpportunityDetailResponseSchema,
   OpportunityListResponseSchema,
   TodayDashboardResponseSchema,
+  CareerSignalsResponseSchema,
 } from '@oca/schemas';
 import {
   candidateId,
@@ -867,6 +868,34 @@ describe('API application', () => {
       discoveryActivity: [],
       applicationActivity: [],
       careerMemoryAttention: [],
+    });
+  });
+
+  it('returns Career Signals aggregation with schema validation and candidate isolation', async () => {
+    const candidateA = candidateId('cand-sig-api-a');
+    const candidateB = candidateId('cand-sig-api-b');
+    const candRepo = new CandidateRepository(database);
+    candRepo.createCandidate(candidateA);
+    candRepo.createCandidate(candidateB);
+
+    const resA = await app.inject({
+      method: 'GET',
+      url: `/candidates/${candidateA}/career-signals`,
+    });
+
+    expect(resA.statusCode).toBe(200);
+    const bodyA: unknown = resA.json();
+    expect(Value.Check(CareerSignalsResponseSchema, bodyA)).toBe(true);
+    expect(bodyA).toMatchObject({
+      candidateId: candidateA,
+      activeOpportunityCount: 0,
+      repeatedGaps: [],
+      strongAlignments: [],
+      transferableCapabilities: [],
+      eligibilityUncertainties: [],
+      eligibilityBlockers: [],
+      evidenceGaps: [],
+      marketDemand: [],
     });
   });
 

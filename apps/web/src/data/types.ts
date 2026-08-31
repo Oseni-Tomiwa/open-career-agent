@@ -352,6 +352,9 @@ import type {
   UpdateApplicationInput,
   AddApplicationEventInput,
   ApplicationListResponse,
+  CareerSignalsResponse,
+  CareerSignal,
+  SampleOpportunityItem,
 } from '@oca/schemas';
 
 export type {
@@ -370,6 +373,9 @@ export type {
   UpdateApplicationInput,
   AddApplicationEventInput,
   ApplicationListResponse,
+  CareerSignalsResponse,
+  CareerSignal,
+  SampleOpportunityItem,
 };
 
 export interface ProductRepository {
@@ -414,6 +420,7 @@ export interface ProductRepository {
     timeWindowDays?: number,
     signal?: AbortSignal,
   ): Promise<TodayDashboardResponse>;
+  getCareerSignals(signal?: AbortSignal): Promise<CareerSignalsResponse>;
   getApplications(signal?: AbortSignal): Promise<readonly ApplicationItem[]>;
   getApplication(
     applicationId: string,

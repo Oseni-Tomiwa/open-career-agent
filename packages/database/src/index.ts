@@ -42,3 +42,7 @@ export {
   TodayRepository,
   type TodayDashboardOptions,
 } from './repositories/today-repository.js';
+export {
+  CareerSignalsRepository,
+  type CareerSignalsOptions,
+} from './repositories/career-signals-repository.js';
