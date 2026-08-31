@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { isSafeHttpUrl } from '@oca/api-client';
 
 import { useProductData } from '../../app/ProductDataProvider.js';
 import { CompanyMark } from '../../components/CompanyMark.js';
@@ -341,16 +342,17 @@ export function ApplicationsPage() {
                           )}
                         </div>
                         <div style={{ display: 'flex', gap: '8px' }}>
-                          {detail?.opportunity?.sourceUrl && (
-                            <a
-                              className="button button-primary"
-                              href={detail.opportunity.sourceUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              Open external application
-                            </a>
-                          )}
+                          {detail?.opportunity?.sourceUrl &&
+                            isSafeHttpUrl(detail.opportunity.sourceUrl) && (
+                              <a
+                                className="button button-primary"
+                                href={detail.opportunity.sourceUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Open external application
+                              </a>
+                            )}
                           <Link
                             className="button button-secondary"
                             to={`/opportunities/${application.opportunityId}`}

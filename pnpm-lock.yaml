@@ -80,6 +80,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@oca/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
       '@oca/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -147,6 +150,15 @@ importers:
       pino:
         specifier: 10.3.1
         version: 10.3.1
+
+  packages/api-client:
+    dependencies:
+      '@oca/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+      '@sinclair/typebox':
+        specifier: 0.34.52
+        version: 0.34.52
 
   packages/config:
     dependencies:

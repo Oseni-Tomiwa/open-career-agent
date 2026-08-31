@@ -194,10 +194,9 @@ describe('ApiProductRepository', () => {
       state: 'neutral',
     });
     expect(opportunity?.evidence).toHaveLength(2);
-    expect(fetcher).toHaveBeenLastCalledWith(
-      'http://api.test/opportunities/opp-1?candidateId=candidate-1',
-      { headers: { accept: 'application/json' } },
-    );
+    const lastCall = fetcher.mock.calls.at(-1);
+    expect(lastCall?.[0]).toBe('http://api.test/opportunities/opp-1?candidateId=candidate-1');
+    expect(lastCall?.[1]?.headers).toEqual({ accept: 'application/json' });
   });
 
   it('preserves missing dimensions and Evidence as not evaluated instead of inventing results', async () => {

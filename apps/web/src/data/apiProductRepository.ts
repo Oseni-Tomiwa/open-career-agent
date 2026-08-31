@@ -1,52 +1,44 @@
 import {
-  AttachClaimEvidenceInputSchema,
-  CandidateProfileResponseSchema,
-  CareerMemoryMutationResponseSchema,
-  CreateCandidateClaimInputSchema,
+  ApiClientError,
+  NotFoundError,
+  RoleviaApiClient,
+} from '@oca/api-client';
+import type {
+  CreateSearchTargetInputSchema,
   OpportunityDetailResponseSchema,
   OpportunityListResponseSchema,
-  UpdateCandidateClaimInputSchema,
-  SearchTargetSchema,
-  CreateSearchTargetInputSchema,
   UpdateSearchTargetInputSchema,
-  SearchTargetListResponseSchema,
-  DiscoveryRunListResponseSchema,
-  TriggerDiscoveryRunResponseSchema,
-  TodayDashboardResponseSchema,
-  ApplicationListResponseSchema,
-  ApplicationDetailResponseSchema,
 } from '@oca/schemas';
-import type { Static, TSchema } from '@sinclair/typebox';
-import { Value } from '@sinclair/typebox/value';
+import type { Static } from '@sinclair/typebox';
 
 import { browserConfig } from '../config.js';
 import { initialSeedSnapshot } from './seed.js';
 import type {
-  Decision,
+  AddApplicationEventInput,
+  ApplicationDetailResponse,
+  ApplicationItem,
   CandidateClaimState,
   CareerMemoryProfile,
+  CreateApplicationInput,
   CreateCandidateClaimInput,
+  CreateSearchTargetInput,
+  Decision,
+  DiscoveryRun,
   EligibilityState,
   EvidenceReference,
   EvidenceState,
   FitSignal,
+  ManualEvidenceInput,
   Opportunity,
   ProductRepository,
   ProductSnapshot,
   QualitySignal,
   SearchPreferences,
-  ManualEvidenceInput,
-  UpdateCandidateClaimInput,
   SearchTarget,
-  CreateSearchTargetInput,
-  UpdateSearchTargetInput,
-  DiscoveryRun,
   TodayDashboardResponse,
-  ApplicationItem,
-  ApplicationDetailResponse,
-  CreateApplicationInput,
   UpdateApplicationInput,
-  AddApplicationEventInput,
+  UpdateCandidateClaimInput,
+  UpdateSearchTargetInput,
 } from './types.js';
 
 type ListResponse = Static<typeof OpportunityListResponseSchema>;
@@ -68,6 +60,7 @@ export class ApiProductRepositoryError extends Error {
 
 export class ApiProductRepository implements ProductRepository {
   public readonly dataSource = 'api' as const;
+  private readonly client: RoleviaApiClient;
   private snapshot: ProductSnapshot = {
     ...initialSeedSnapshot,
     opportunities: [],
@@ -76,28 +69,30 @@ export class ApiProductRepository implements ProductRepository {
   private readonly summaries = new Map<string, Summary>();
 
   public constructor(
-    private readonly baseUrl = browserConfig.apiBaseUrl,
+    baseUrl = browserConfig.apiBaseUrl,
     private readonly candidateId = browserConfig.developmentCandidateId,
-    private readonly fetcher: typeof fetch = (...args) => fetch(...args),
+    fetcher: typeof fetch = (...args) => fetch(...args),
   ) {
     if (!candidateId) {
       throw new ApiProductRepositoryError(
         'A development candidate ID is required in API mode.',
       );
     }
+    this.client = new RoleviaApiClient({ baseUrl, fetcher });
   }
 
   public async getSnapshot(): Promise<ProductSnapshot> {
-    const response = await this.getValidated(
-      `/opportunities?candidateId=${encodeURIComponent(this.candidateId!)}`,
-      OpportunityListResponseSchema,
-    );
-    const opportunities = response.data.map((item) => {
-      this.summaries.set(item.id, item);
-      return mapSummary(item);
-    });
-    this.snapshot = { ...this.snapshot, opportunities };
-    return this.snapshot;
+    try {
+      const response = await this.client.listOpportunities(this.candidateId!);
+      const opportunities = response.data.map((item) => {
+        this.summaries.set(item.id, item);
+        return mapSummary(item);
+      });
+      this.snapshot = { ...this.snapshot, opportunities };
+      return this.snapshot;
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
   }
 
   public async getOpportunity(
@@ -105,11 +100,12 @@ export class ApiProductRepository implements ProductRepository {
     signal?: AbortSignal,
   ): Promise<Opportunity | null> {
     try {
-      const response = await this.getValidated(
-        `/opportunities/${encodeURIComponent(opportunityId)}?candidateId=${encodeURIComponent(this.candidateId!)}`,
-        OpportunityDetailResponseSchema,
-        signal,
+      const response = await this.client.getOpportunity(
+        opportunityId,
+        this.candidateId!,
+        { signal },
       );
+      if (!response) return null;
       const opportunity = mapDetail(
         response,
         this.summaries.get(opportunityId),
@@ -122,10 +118,8 @@ export class ApiProductRepository implements ProductRepository {
       };
       return opportunity;
     } catch (error) {
-      if (error instanceof ApiProductRepositoryError && error.status === 404) {
-        return null;
-      }
-      throw error;
+      if (error instanceof NotFoundError) return null;
+      throw this.normalizeError(error);
     }
   }
 
@@ -144,37 +138,41 @@ export class ApiProductRepository implements ProductRepository {
   }
 
   public async getCareerMemory(): Promise<CareerMemoryProfile> {
-    return this.getValidated(
-      `/candidates/${encodeURIComponent(this.candidateId!)}/profile`,
-      CandidateProfileResponseSchema,
-    );
+    try {
+      return await this.client.getCareerProfile(this.candidateId!);
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
   }
 
   public async createCandidateClaim(
     input: CreateCandidateClaimInput,
   ): Promise<CareerMemoryProfile> {
-    if (!Value.Check(CreateCandidateClaimInputSchema, input)) {
-      throw new ApiProductRepositoryError('The claim input is invalid.');
+    try {
+      const response = await this.client.createCandidateClaim(
+        this.candidateId!,
+        input,
+      );
+      return { candidate: response.candidate, claims: response.claims };
+    } catch (error) {
+      throw this.normalizeError(error);
     }
-    return this.mutateCareerMemory(
-      `/candidates/${encodeURIComponent(this.candidateId!)}/claims`,
-      'POST',
-      input,
-    );
   }
 
   public async updateCandidateClaim(
     claimId: string,
     input: UpdateCandidateClaimInput,
   ): Promise<CareerMemoryProfile> {
-    if (!Value.Check(UpdateCandidateClaimInputSchema, input)) {
-      throw new ApiProductRepositoryError('The claim update is invalid.');
+    try {
+      const response = await this.client.updateCandidateClaim(
+        this.candidateId!,
+        claimId,
+        input,
+      );
+      return { candidate: response.candidate, claims: response.claims };
+    } catch (error) {
+      throw this.normalizeError(error);
     }
-    return this.mutateCareerMemory(
-      `/candidates/${encodeURIComponent(this.candidateId!)}/claims/${encodeURIComponent(claimId)}`,
-      'PATCH',
-      input,
-    );
   }
 
   public async attachClaimEvidence(
@@ -182,122 +180,109 @@ export class ApiProductRepository implements ProductRepository {
     evidence: ManualEvidenceInput,
     transitionTo?: CandidateClaimState,
   ): Promise<CareerMemoryProfile> {
-    const input = { evidence, ...(transitionTo ? { transitionTo } : {}) };
-    if (!Value.Check(AttachClaimEvidenceInputSchema, input)) {
-      throw new ApiProductRepositoryError('The Evidence input is invalid.');
+    try {
+      const input = { evidence, ...(transitionTo ? { transitionTo } : {}) };
+      const response = await this.client.attachClaimEvidence(
+        this.candidateId!,
+        claimId,
+        input,
+      );
+      return { candidate: response.candidate, claims: response.claims };
+    } catch (error) {
+      throw this.normalizeError(error);
     }
-    return this.mutateCareerMemory(
-      `/candidates/${encodeURIComponent(this.candidateId!)}/claims/${encodeURIComponent(claimId)}/evidence`,
-      'POST',
-      input,
-    );
   }
 
   public async getSearchTargets(): Promise<readonly SearchTarget[]> {
-    const res = await this.getValidated(
-      `/candidates/${encodeURIComponent(this.candidateId!)}/search-targets`,
-      SearchTargetListResponseSchema,
-    );
-    return res.data;
+    try {
+      const res = await this.client.listSearchTargets(this.candidateId!);
+      return res.data;
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
   }
 
   public async createSearchTarget(
     input: CreateSearchTargetInput,
   ): Promise<SearchTarget> {
-    if (!Value.Check(CreateSearchTargetInputSchema, input)) {
-      throw new ApiProductRepositoryError('The Search Target input is invalid.');
+    try {
+      return await this.client.createSearchTarget(
+        this.candidateId!,
+        input as Static<typeof CreateSearchTargetInputSchema>,
+      );
+    } catch (error) {
+      throw this.normalizeError(error);
     }
-    return this.getValidated(
-      `/candidates/${encodeURIComponent(this.candidateId!)}/search-targets`,
-      SearchTargetSchema,
-      undefined,
-      {
-        method: 'POST',
-        headers: {
-          accept: 'application/json',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify(input),
-      },
-    );
   }
 
   public async updateSearchTarget(
     targetId: string,
     input: UpdateSearchTargetInput,
   ): Promise<SearchTarget> {
-    if (!Value.Check(UpdateSearchTargetInputSchema, input)) {
-      throw new ApiProductRepositoryError('The Search Target update is invalid.');
+    try {
+      return await this.client.updateSearchTarget(
+        this.candidateId!,
+        targetId,
+        input as Static<typeof UpdateSearchTargetInputSchema>,
+      );
+    } catch (error) {
+      throw this.normalizeError(error);
     }
-    return this.getValidated(
-      `/candidates/${encodeURIComponent(this.candidateId!)}/search-targets/${encodeURIComponent(targetId)}`,
-      SearchTargetSchema,
-      undefined,
-      {
-        method: 'PATCH',
-        headers: {
-          accept: 'application/json',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify(input),
-      },
-    );
   }
 
   public async deleteSearchTarget(targetId: string): Promise<boolean> {
-    const response = await this.fetcher(
-      `${this.baseUrl}/candidates/${encodeURIComponent(this.candidateId!)}/search-targets/${encodeURIComponent(targetId)}`,
-      { method: 'DELETE', headers: { accept: 'application/json' } },
-    );
-    return response.ok;
+    try {
+      return await this.client.deleteSearchTarget(this.candidateId!, targetId);
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
   }
 
   public async runDiscovery(
     targetId: string,
   ): Promise<{ run: DiscoveryRun; taskEnqueued: boolean }> {
-    return this.getValidated(
-      `/candidates/${encodeURIComponent(this.candidateId!)}/search-targets/${encodeURIComponent(targetId)}/run`,
-      TriggerDiscoveryRunResponseSchema,
-      undefined,
-      {
-        method: 'POST',
-        headers: {
-          accept: 'application/json',
-          'content-type': 'application/json',
-        },
-      },
-    );
+    try {
+      return await this.client.runDiscovery(this.candidateId!, targetId);
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
   }
 
   public async getDiscoveryRuns(): Promise<readonly DiscoveryRun[]> {
-    const res = await this.getValidated(
-      `/candidates/${encodeURIComponent(this.candidateId!)}/discovery-runs`,
-      DiscoveryRunListResponseSchema,
-    );
-    return res.data;
+    try {
+      const res = await this.client.getDiscoveryRuns(this.candidateId!);
+      return res.data;
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
   }
 
   public async getTodayDashboard(
     timeWindowDays?: number,
     signal?: AbortSignal,
   ): Promise<TodayDashboardResponse> {
-    const query = timeWindowDays ? `?timeWindowDays=${timeWindowDays}` : '';
-    return this.getValidated(
-      `/candidates/${encodeURIComponent(this.candidateId!)}/today${query}`,
-      TodayDashboardResponseSchema,
-      signal,
-    );
+    try {
+      return await this.client.getTodayDashboard(
+        this.candidateId!,
+        timeWindowDays,
+        { signal },
+      );
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
   }
 
   public async getApplications(
     signal?: AbortSignal,
   ): Promise<readonly ApplicationItem[]> {
-    const res = await this.getValidated(
-      `/candidates/${encodeURIComponent(this.candidateId!)}/applications`,
-      ApplicationListResponseSchema,
-      signal,
-    );
-    return res.data;
+    try {
+      const res = await this.client.listApplications(this.candidateId!, {
+        signal,
+      });
+      return res.data;
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
   }
 
   public async getApplication(
@@ -305,127 +290,65 @@ export class ApiProductRepository implements ProductRepository {
     signal?: AbortSignal,
   ): Promise<ApplicationDetailResponse | null> {
     try {
-      return await this.getValidated(
-        `/candidates/${encodeURIComponent(this.candidateId!)}/applications/${encodeURIComponent(applicationId)}`,
-        ApplicationDetailResponseSchema,
-        signal,
+      return await this.client.getApplication(
+        this.candidateId!,
+        applicationId,
+        { signal },
       );
     } catch (error) {
-      if (error instanceof ApiProductRepositoryError && error.status === 404) {
-        return null;
-      }
-      throw error;
+      if (error instanceof NotFoundError) return null;
+      throw this.normalizeError(error);
     }
   }
 
   public async createApplication(
     input: CreateApplicationInput,
   ): Promise<ApplicationDetailResponse> {
-    return this.getValidated(
-      `/candidates/${encodeURIComponent(this.candidateId!)}/applications`,
-      ApplicationDetailResponseSchema,
-      undefined,
-      {
-        method: 'POST',
-        headers: {
-          accept: 'application/json',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify(input),
-      },
-    );
+    try {
+      return await this.client.createApplication(this.candidateId!, input);
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
   }
 
   public async updateApplication(
     applicationId: string,
     input: UpdateApplicationInput,
   ): Promise<ApplicationDetailResponse> {
-    return this.getValidated(
-      `/candidates/${encodeURIComponent(this.candidateId!)}/applications/${encodeURIComponent(applicationId)}`,
-      ApplicationDetailResponseSchema,
-      undefined,
-      {
-        method: 'PATCH',
-        headers: {
-          accept: 'application/json',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify(input),
-      },
-    );
+    try {
+      return await this.client.updateApplication(
+        this.candidateId!,
+        applicationId,
+        input,
+      );
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
   }
 
   public async addApplicationEvent(
     applicationId: string,
     input: AddApplicationEventInput,
   ): Promise<ApplicationDetailResponse> {
-    return this.getValidated(
-      `/candidates/${encodeURIComponent(this.candidateId!)}/applications/${encodeURIComponent(applicationId)}/events`,
-      ApplicationDetailResponseSchema,
-      undefined,
-      {
-        method: 'POST',
-        headers: {
-          accept: 'application/json',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify(input),
-      },
-    );
-  }
-
-  private async mutateCareerMemory(
-    path: string,
-    method: 'POST' | 'PATCH',
-    body: unknown,
-  ): Promise<CareerMemoryProfile> {
-    const response = await this.getValidated(
-      path,
-      CareerMemoryMutationResponseSchema,
-      undefined,
-      {
-        method,
-        headers: {
-          accept: 'application/json',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      },
-    );
-    return { candidate: response.candidate, claims: response.claims };
-  }
-
-  private async getValidated<TSchemaType extends TSchema>(
-    path: string,
-    schema: TSchemaType,
-    signal?: AbortSignal,
-    init?: RequestInit,
-  ): Promise<Static<TSchemaType>> {
-    let response: Response;
     try {
-      response = await this.fetcher(`${this.baseUrl}${path}`, {
-        ...init,
-        headers: { accept: 'application/json' },
-        ...(init?.headers ? { headers: init.headers } : {}),
-        ...(signal ? { signal } : {}),
-      });
+      return await this.client.addApplicationEvent(
+        this.candidateId!,
+        applicationId,
+        input,
+      );
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') throw error;
-      throw new ApiProductRepositoryError('The opportunity API is unavailable.');
+      throw this.normalizeError(error);
     }
-    if (!response.ok) {
-      throw new ApiProductRepositoryError(
-        `The opportunity API returned status ${response.status}.`,
-        response.status,
-      );
+  }
+
+  private normalizeError(error: unknown): Error {
+    if (error instanceof ApiClientError) {
+      return new ApiProductRepositoryError(error.message, error.statusCode);
     }
-    const body: unknown = await response.json();
-    if (!Value.Check(schema, body)) {
-      throw new ApiProductRepositoryError(
-        'The opportunity API response did not match its contract.',
-      );
+    if (error instanceof Error) {
+      return error;
     }
-    return body;
+    return new ApiProductRepositoryError('An unexpected error occurred.');
   }
 }
 
@@ -435,7 +358,8 @@ function mapSummary(summary: Summary): Opportunity {
     id: summary.id,
     company: company(summary.latestOrganization ?? 'Organization not stated'),
     role: summary.latestTitle ?? 'Untitled opportunity',
-    summary: 'Open this opportunity to load its latest evaluation and evidence.',
+    summary:
+      'Open this opportunity to load its latest evaluation and evidence.',
     description: [],
     location: nonEmpty(summary.latestLocation) ?? 'Location not stated',
     country: 'Not stated',
@@ -482,7 +406,9 @@ function mapDetail(response: DetailResponse, summary?: Summary): Opportunity {
   );
   const latest = snapshots.at(-1);
   if (!latest) {
-    return mapSummary(summary ?? { id: response.opportunity.id, sourceSystems: [] });
+    return mapSummary(
+      summary ?? { id: response.opportunity.id, sourceSystems: [] },
+    );
   }
   const evidence = collectEvidence(latest);
   const paragraphs = latest.content
@@ -619,7 +545,13 @@ function company(name: string): Opportunity['company'] {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('');
-  return { id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, initials, mark: 'none', color: '#475569' };
+  return {
+    id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    name,
+    initials,
+    mark: 'none',
+    color: '#475569',
+  };
 }
 
 function freshness(value: string): string {
@@ -632,19 +564,37 @@ function freshness(value: string): string {
 }
 
 function eligibilityLabel(state: EligibilityState): string {
-  return ({ eligible: 'Eligible', ineligible: 'Ineligible', investigate: 'Investigate', unknown: 'Unknown' })[state];
+  return {
+    eligible: 'Eligible',
+    ineligible: 'Ineligible',
+    investigate: 'Investigate',
+    unknown: 'Unknown',
+  }[state];
 }
 
 function decisionLabel(state?: Decision): string {
   if (!state) return 'Not evaluated';
-  return ({ 'high-priority': 'High priority', consider: 'Consider', investigate: 'Investigate', 'low-priority': 'Low priority', blocked: 'Blocked' })[state];
+  return {
+    'high-priority': 'High priority',
+    consider: 'Consider',
+    investigate: 'Investigate',
+    'low-priority': 'Low priority',
+    blocked: 'Blocked',
+  }[state];
 }
 
 function actionLabel(action: DecisionAction): string {
-  return ({ apply: 'Apply', review: 'Review evidence', investigate: 'Verify details', do_not_apply: 'Do not apply' })[action];
+  return {
+    apply: 'Apply',
+    review: 'Review evidence',
+    investigate: 'Verify details',
+    do_not_apply: 'Do not apply',
+  }[action];
 }
 
-function eligibilitySignalState(state: string): 'pass' | 'blocker' | 'unknown' | 'inferred' {
+function eligibilitySignalState(
+  state: string,
+): 'pass' | 'blocker' | 'unknown' | 'inferred' {
   if (state === 'eligible') return 'pass';
   if (state === 'ineligible') return 'blocker';
   if (state === 'investigate') return 'inferred';
@@ -664,7 +614,9 @@ function fitState(state: ApiFitState): FitSignal['state'] {
   return 'missing';
 }
 
-function qualityState(state: 'STRONG' | 'ADEQUATE' | 'WEAK' | 'RISK' | 'UNKNOWN'): QualitySignal['state'] {
+function qualityState(
+  state: 'STRONG' | 'ADEQUATE' | 'WEAK' | 'RISK' | 'UNKNOWN',
+): QualitySignal['state'] {
   if (state === 'STRONG') return 'positive';
   if (state === 'ADEQUATE') return 'neutral';
   if (state === 'RISK') return 'risk';
@@ -672,7 +624,13 @@ function qualityState(state: 'STRONG' | 'ADEQUATE' | 'WEAK' | 'RISK' | 'UNKNOWN'
 }
 
 function evidenceState(state: string): EvidenceState {
-  if (state === 'source-verified' || state === 'candidate-confirmed' || state === 'unreviewed' || state === 'disputed') return state;
+  if (
+    state === 'source-verified' ||
+    state === 'candidate-confirmed' ||
+    state === 'unreviewed' ||
+    state === 'disputed'
+  )
+    return state;
   return 'unreviewed';
 }
 
