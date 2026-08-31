@@ -5,6 +5,7 @@ import { getBootstrapStatus } from '../api.js';
 import { Icon, type IconName } from '../components/Icon.js';
 import { useProductData } from './ProductDataProvider.js';
 import { useTheme, type ThemePreference } from './ThemeProvider.js';
+import { useAuth } from './authContext.js';
 
 const primaryNavigation: readonly {
   readonly to: string;
@@ -24,6 +25,7 @@ type ApiState = 'checking' | 'available' | 'unavailable';
 export function AppShell() {
   const { dataSource, snapshot } = useProductData();
   const { preference, setPreference } = useTheme();
+  const auth = useAuth();
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [apiState, setApiState] = useState<ApiState>(
     dataSource === 'seed' ? 'available' : 'checking',
@@ -107,9 +109,18 @@ export function AppShell() {
             </span>
             <span>
               <strong>{snapshot.profile.name}</strong>
-              <small>Development profile</small>
+              <small>{auth.session?.user.email ?? 'Development profile'}</small>
             </span>
           </div>
+          {auth.cloud && (
+            <button
+              className="auth-switch"
+              onClick={() => void auth.signOut()}
+              type="button"
+            >
+              Sign out
+            </button>
+          )}
         </div>
       </aside>
 

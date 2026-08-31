@@ -123,6 +123,7 @@ describe('Greenhouse Ingestion Flow', () => {
       const config = {
         environment: 'test' as const,
         databasePath: TEST_DB_PATH,
+        migrationMode: 'auto' as const,
         pollIntervalMs: 1000,
         leaseDurationMs: 30000,
         greenhouseBoards: ['acme'],

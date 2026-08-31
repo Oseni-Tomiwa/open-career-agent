@@ -40,7 +40,10 @@ export function openDatabase(databasePath: string): DatabaseHandle {
 }
 
 export function databaseIsReady(handle: DatabaseHandle): boolean {
-  const result = handle.sqlite.prepare('select 1 as ready').get() as
-    { ready: number } | undefined;
-  return result?.ready === 1;
+  const result = handle.sqlite
+    .prepare(
+      "select count(*) as count from sqlite_master where type = 'table' and name in ('background_tasks', 'candidates', 'users', 'sessions', 'user_candidates')",
+    )
+    .get() as { count: number } | undefined;
+  return result?.count === 5;
 }

@@ -73,13 +73,20 @@ export class ApiProductRepository implements ProductRepository {
     baseUrl = browserConfig.apiBaseUrl,
     private readonly candidateId = browserConfig.developmentCandidateId,
     fetcher: typeof fetch = (...args) => fetch(...args),
+    credentialProvider?: ConstructorParameters<
+      typeof RoleviaApiClient
+    >[0]['credentialProvider'],
   ) {
     if (!candidateId) {
       throw new ApiProductRepositoryError(
         'A development candidate ID is required in API mode.',
       );
     }
-    this.client = new RoleviaApiClient({ baseUrl, fetcher });
+    this.client = new RoleviaApiClient({
+      baseUrl,
+      fetcher,
+      ...(credentialProvider ? { credentialProvider } : {}),
+    });
   }
 
   public async getSnapshot(): Promise<ProductSnapshot> {

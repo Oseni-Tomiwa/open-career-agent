@@ -33,7 +33,9 @@ components do not calculate Eligibility, Fit, Quality, or Decision.
 ```dotenv
 VITE_PRODUCT_DATA_SOURCE=api
 VITE_API_BASE_URL=http://localhost:3000
+VITE_DEPLOYMENT_MODE=development
 VITE_DEVELOPMENT_CANDIDATE_ID=<fictional-candidate-id-in-your-local-database>
+TRUSTED_CANDIDATE_ID=<the-same-fictional-candidate-id>
 ```
 
 `VITE_PRODUCT_DATA_SOURCE=seed` remains the default and does not require a
@@ -71,7 +73,10 @@ The single-process development commands build shared packages first. The full `p
 
 SQLite is canonical v0.1 state. By default the database is stored at `data/open-career-agent.sqlite`, relative to the repository root. The `data/` directory and SQLite sidecar files are ignored by Git.
 
-Migrations live in `packages/database/migrations` and are applied by both process startup and `pnpm db:migrate`. Generate a reviewed migration after changing the Drizzle schema with `pnpm db:generate`. Do not edit a migration that has shipped.
+Migrations live in `packages/database/migrations`. Local modes apply them at
+process startup by default; Cloud mode defaults to an explicit
+`pnpm db:migrate` release step. Generate a reviewed migration after changing the
+Drizzle schema with `pnpm db:generate`. Do not edit a migration that has shipped.
 
 The browser seed repository contains fictional publishable development data.
 In API mode, only Opportunities list/detail are real-backed in Phase 1. Today
@@ -100,9 +105,10 @@ Run `pnpm test:e2e` after installing Playwright's Chromium binary with `pnpm exe
 
 CI performs these checks on Node 24 and installs Chromium for the bootstrap browser smoke test. No deployment is configured.
 
-## Deferred web integration
+## Cloud identity
 
-- Today aggregation
-- Applications persistence/workflows
-- Candidate Career Memory and Search configuration
-- Authentication, deployment, and generated API clients
+Set `IDENTITY_MODE=cloud`, `APP_ENV=production`, `MIGRATION_MODE=manual`, and a
+production `WEB_ORIGIN` on the API. Set `VITE_DEPLOYMENT_MODE=cloud` and omit
+`VITE_DEVELOPMENT_CANDIDATE_ID` from the web build. Cloud mode provides the
+minimal sign-in/session shell; it is a foundation and is not public-launch
+ready. See [Cloud V1 foundation](../architecture/cloud-foundation-v1.md).

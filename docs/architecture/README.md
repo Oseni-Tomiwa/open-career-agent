@@ -13,6 +13,7 @@ These documents define the logical architecture for the first usable version. Th
 - [Source adapters and Opportunity identity](source-adapters.md)
 - [Intelligence and AI provider boundary](intelligence-boundary.md)
 - [Deployment model](deployment-model.md)
+- [Cloud V1 foundation](cloud-foundation-v1.md)
 - [Architecture decision records](../adrs/README.md)
 - [Architecture diagrams](../diagrams/README.md)
 - [Implementation stack evaluation](../implementation/stack-evaluation.md)
@@ -53,11 +54,10 @@ These architectural choices follow the [product principles](../product/principle
 
 ## Unresolved decisions
 
-- Authentication and authorization
 - Product-domain physical schema and future task-ledger evolution
 - Exact Source Adapter API
 - Concrete AI provider/model configuration, semantic matching, embeddings, and vector search
 - Ranking formula and caching
-- Packaging, hosted tenancy, encryption, secrets management, and observability
+- Packaging, production deployment, encryption, secret management, and observability
 
 Unresolved choices should remain proposals until evidence justifies an ADR.

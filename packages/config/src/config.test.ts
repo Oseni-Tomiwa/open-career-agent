@@ -9,6 +9,65 @@ describe('configuration', () => {
     expect(parseWorkerConfig({}).pollIntervalMs).toBe(1000);
     expect(parseBrowserConfig({}).apiBaseUrl).toBe('http://localhost:3000');
     expect(parseBrowserConfig({}).productDataSource).toBe('seed');
+    expect(parseBrowserConfig({}).deploymentMode).toBe('development');
+  });
+
+  it('requires Cloud identity and rejects a development identity override', () => {
+    expect(
+      parseBrowserConfig({
+        VITE_PRODUCT_DATA_SOURCE: 'api',
+        VITE_DEPLOYMENT_MODE: 'cloud',
+      }),
+    ).toMatchObject({ deploymentMode: 'cloud', productDataSource: 'api' });
+    expect(() =>
+      parseBrowserConfig({
+        VITE_DEPLOYMENT_MODE: 'cloud',
+        VITE_PRODUCT_DATA_SOURCE: 'api',
+        VITE_DEVELOPMENT_CANDIDATE_ID: 'must-not-win',
+      }),
+    ).toThrow('must not be set in Cloud mode');
+    expect(() =>
+      parseBrowserConfig({
+        VITE_DEPLOYMENT_MODE: 'cloud',
+        VITE_PRODUCT_DATA_SOURCE: 'seed',
+      }),
+    ).toThrow('must be api in Cloud mode');
+  });
+
+  it('defaults Cloud processes to explicit migrations', () => {
+    const cloud = parseApiConfig({
+      APP_ENV: 'production',
+      IDENTITY_MODE: 'cloud',
+      TRUSTED_CANDIDATE_ID: 'must-not-win',
+    });
+    expect(cloud).toMatchObject({
+      identityMode: 'cloud',
+      migrationMode: 'manual',
+    });
+    expect(cloud.trustedCandidateId).toBeUndefined();
+  });
+
+  it('fails closed when production identity mode is ambiguous', () => {
+    expect(() => parseApiConfig({ APP_ENV: 'production' })).toThrow(
+      'IDENTITY_MODE is required in production',
+    );
+    expect(() =>
+      parseApiConfig({
+        APP_ENV: 'production',
+        IDENTITY_MODE: 'development',
+        TRUSTED_CANDIDATE_ID: 'candidate',
+      }),
+    ).toThrow('development identity is not allowed in production');
+    expect(
+      parseApiConfig({
+        APP_ENV: 'production',
+        IDENTITY_MODE: 'self-hosted',
+        TRUSTED_CANDIDATE_ID: 'self-hosted-candidate',
+      }),
+    ).toMatchObject({
+      identityMode: 'self-hosted',
+      trustedCandidateId: 'self-hosted-candidate',
+    });
   });
 
   it('requires a development candidate in API mode', () => {
@@ -36,5 +95,14 @@ describe('configuration', () => {
     expect(() => parseBrowserConfig({ VITE_API_BASE_URL: '/api' })).toThrow(
       'VITE_API_BASE_URL',
     );
+  });
+
+  it('rejects server-only keys at the browser configuration boundary', () => {
+    expect(() =>
+      parseBrowserConfig({
+        VITE_PRODUCT_DATA_SOURCE: 'seed',
+        SESSION_SIGNING_SECRET: 'must-never-enter-vite',
+      } as never),
+    ).toThrow('Invalid browser configuration');
   });
 });

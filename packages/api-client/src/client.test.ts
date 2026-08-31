@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   ConflictError,
+  CredentialError,
   ForbiddenError,
   NetworkError,
   RoleviaApiClient,
@@ -14,7 +15,7 @@ describe('RoleviaApiClient', () => {
   const candidateId = 'cand_123';
 
   it('normalizes base URL by stripping trailing slashes', async () => {
-    const fetcher = vi.fn().mockResolvedValue(
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ data: [], meta: { count: 0 } }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -211,6 +212,98 @@ describe('RoleviaApiClient', () => {
       expect.any(String),
       expect.objectContaining({ signal: controller.signal }),
     );
+  });
+
+  it('injects portable bearer or cookie credentials without changing callers', async () => {
+    const session = {
+      user: { id: 'usr_1', email: 'person@example.com' },
+      candidateIds: [candidateId],
+      primaryCandidateId: candidateId,
+      expiresAt: '2026-09-07T00:00:00.000Z',
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify(session), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const credentialProvider = vi.fn().mockResolvedValue({
+      headers: { authorization: 'Bearer portable-token' },
+      credentials: 'include' as const,
+    });
+    const client = new RoleviaApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetcher,
+      credentialProvider,
+    });
+
+    await expect(client.getSession()).resolves.toEqual(session);
+    expect(credentialProvider).toHaveBeenCalledOnce();
+    const [url, request] = fetcher.mock.calls[0]!;
+    expect(url).toBe('http://localhost:3000/auth/session');
+    expect(request?.credentials).toBe('include');
+    expect(new Headers(request?.headers).get('authorization')).toBe(
+      'Bearer portable-token',
+    );
+  });
+
+  it('validates login input and preserves auth-envelope error messages', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 'INVALID_CREDENTIALS',
+            message: 'The email or password is invalid.',
+          },
+        }),
+        { status: 401, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    const client = new RoleviaApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetcher,
+    });
+
+    await expect(
+      client.login({ email: 'person@example.com', password: 'wrong' }),
+    ).rejects.toThrow('The email or password is invalid.');
+    await expect(client.login({ email: '', password: '' })).rejects.toThrow(
+      ValidationError,
+    );
+  });
+
+  it('types credential-provider failures without exposing provider details', async () => {
+    const secret = 'bearer-secret-that-must-not-escape';
+    const client = new RoleviaApiClient({
+      baseUrl: 'http://localhost:3000',
+      credentialProvider: () => {
+        throw new Error(secret);
+      },
+    });
+
+    const error = await client.getSession().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(CredentialError);
+    expect(String(error)).not.toContain(secret);
+  });
+
+  it('does not retain bearer tokens in auth response validation errors', async () => {
+    const token = 'raw-token-that-must-not-enter-errors';
+    const client = new RoleviaApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetcher: vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(JSON.stringify({ token, malformed: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    });
+
+    const error = await client
+      .login({ email: 'person@example.com', password: 'wrong' })
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ValidationError);
+    expect(error).toMatchObject({ details: undefined });
+    expect(String(error)).not.toContain(token);
   });
 
   it('fetches getCareerSignals with schema validation', async () => {

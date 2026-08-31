@@ -1,12 +1,11 @@
 import { StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { RouterProvider } from 'react-router-dom';
 
 import { AppLoading } from './app/AppLoading.js';
-import { ProductDataProvider } from './app/ProductDataProvider.js';
+import { AuthenticatedApplication } from './app/AuthenticatedApplication.js';
+import { AuthProvider } from './app/AuthProvider.js';
 import { ThemeProvider } from './app/ThemeProvider.js';
 import './styles.css';
-import { router } from './router.js';
 
 const root = document.getElementById('root');
 
@@ -18,9 +17,9 @@ createRoot(root).render(
   <StrictMode>
     <ThemeProvider>
       <Suspense fallback={<AppLoading />}>
-        <ProductDataProvider>
-          <RouterProvider router={router} />
-        </ProductDataProvider>
+        <AuthProvider>
+          <AuthenticatedApplication />
+        </AuthProvider>
       </Suspense>
     </ThemeProvider>
   </StrictMode>,

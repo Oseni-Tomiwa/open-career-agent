@@ -12,7 +12,7 @@ async function main(): Promise<void> {
   const database = openDatabase(resolve(workspaceRoot, config.databasePath));
 
   try {
-    applyMigrations(database);
+    if (config.migrationMode === 'auto') applyMigrations(database);
     const app = await createApiApp({ config, database });
     let shuttingDown = false;
 

@@ -59,7 +59,18 @@ import {
 } from '@oca/schemas';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 
+import { registerAuthBoundary } from './auth.js';
+
 const SERVICE = { name: 'api', version: '0.0.0' } as const;
+
+export const API_LOG_REDACTION_PATHS = [
+  'req.headers.authorization',
+  'req.headers.cookie',
+  'req.body.password',
+  'res.headers["set-cookie"]',
+  '*.passwordHash',
+  '*.tokenHash',
+] as const;
 
 function publicStatusCode(error: unknown): number {
   if (error instanceof Error && 'statusCode' in error) {
@@ -87,7 +98,15 @@ export async function createApiApp(
   options: CreateApiAppOptions,
 ): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: options.logger ?? true,
+    logger:
+      options.logger === false
+        ? false
+        : {
+            redact: {
+              paths: [...API_LOG_REDACTION_PATHS],
+              censor: '[REDACTED]',
+            },
+          },
     requestIdHeader: 'x-request-id',
   }).withTypeProvider<TypeBoxTypeProvider>();
 
@@ -95,8 +114,12 @@ export async function createApiApp(
     contentSecurityPolicy: false,
   });
   await app.register(cors, {
-    origin: options.config.webOrigin,
-    methods: ['GET', 'POST', 'PATCH'],
+    origin: (origin, callback) => {
+      callback(null, origin === options.config.webOrigin);
+    },
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    credentials: options.config.identityMode === 'cloud',
+    allowedHeaders: ['authorization', 'content-type', 'x-request-id'],
   });
   await app.register(swagger, {
     openapi: {
@@ -191,6 +214,7 @@ export async function createApiApp(
   });
 
   app.addSchema(ApiErrorEnvelopeSchema);
+  registerAuthBoundary(app, options.config, options.database);
 
   const profileParams = Type.Object({ candidateId: Type.String() });
   const claimParams = Type.Object({

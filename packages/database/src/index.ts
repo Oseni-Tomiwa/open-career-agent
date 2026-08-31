@@ -22,6 +22,11 @@ export * from './schema.js';
 // Repositories
 export { CandidateRepository } from './repositories/candidate-repository.js';
 export {
+  AuthRepository,
+  normalizeEmail,
+  type AuthenticatedPrincipalRecord,
+} from './repositories/auth-repository.js';
+export {
   CareerMemoryRepository,
   CareerMemoryError,
   type ManualEvidenceInput,

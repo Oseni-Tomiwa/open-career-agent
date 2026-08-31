@@ -19,6 +19,11 @@ import {
   UpdateApplicationInputSchema,
   UpdateCandidateClaimInputSchema,
   UpdateSearchTargetInputSchema,
+  AuthResponseSchema,
+  AuthSessionSchema,
+  LoginInputSchema,
+  LogoutResponseSchema,
+  RegisterInputSchema,
 } from '@oca/schemas';
 import type { Static, TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
@@ -26,6 +31,7 @@ import { Value } from '@sinclair/typebox/value';
 import {
   ApiClientError,
   ConflictError,
+  CredentialError,
   ForbiddenError,
   NetworkError,
   NotFoundError,
@@ -43,7 +49,15 @@ export interface RoleviaApiClientOptions {
   readonly baseUrl: string;
   readonly fetcher?: FetchImplementation;
   readonly defaultHeaders?: Record<string, string>;
+  readonly credentialProvider?: CredentialProvider;
 }
+
+export interface ApiCredentials {
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly credentials?: RequestCredentials;
+}
+
+export type CredentialProvider = () => ApiCredentials | Promise<ApiCredentials>;
 
 export interface RequestOptions {
   readonly signal?: AbortSignal | undefined;
@@ -54,6 +68,7 @@ export class RoleviaApiClient {
   private readonly baseUrl: string;
   private readonly fetcher: FetchImplementation;
   private readonly defaultHeaders: Record<string, string>;
+  private readonly credentialProvider: CredentialProvider;
 
   public constructor(options: RoleviaApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -62,6 +77,66 @@ export class RoleviaApiClient {
       accept: 'application/json',
       ...options.defaultHeaders,
     };
+    this.credentialProvider =
+      options.credentialProvider ?? (() => ({ credentials: 'same-origin' }));
+  }
+
+  public async register(
+    input: Static<typeof RegisterInputSchema>,
+    options?: RequestOptions,
+  ): Promise<Static<typeof AuthResponseSchema>> {
+    if (!Value.Check(RegisterInputSchema, input)) {
+      throw new ValidationError('Invalid registration input.', input);
+    }
+    return this.request(
+      '/auth/register',
+      AuthResponseSchema,
+      'POST',
+      input,
+      options,
+      true,
+    );
+  }
+
+  public async login(
+    input: Static<typeof LoginInputSchema>,
+    options?: RequestOptions,
+  ): Promise<Static<typeof AuthResponseSchema>> {
+    if (!Value.Check(LoginInputSchema, input)) {
+      throw new ValidationError('Invalid login input.', input);
+    }
+    return this.request(
+      '/auth/login',
+      AuthResponseSchema,
+      'POST',
+      input,
+      options,
+      true,
+    );
+  }
+
+  public async getSession(
+    options?: RequestOptions,
+  ): Promise<Static<typeof AuthSessionSchema>> {
+    return this.request(
+      '/auth/session',
+      AuthSessionSchema,
+      'GET',
+      undefined,
+      options,
+    );
+  }
+
+  public async logout(
+    options?: RequestOptions,
+  ): Promise<Static<typeof LogoutResponseSchema>> {
+    return this.request(
+      '/auth/logout',
+      LogoutResponseSchema,
+      'POST',
+      undefined,
+      options,
+    );
   }
 
   public async getCareerProfile(
@@ -218,11 +293,19 @@ export class RoleviaApiClient {
     options?: RequestOptions,
   ): Promise<boolean> {
     const url = `${this.baseUrl}/candidates/${encodeURIComponent(candidateId)}/search-targets/${encodeURIComponent(targetId)}`;
-    const headers = { ...this.defaultHeaders, ...options?.headers };
+    const credentials = await this.resolveCredentials();
+    const headers = {
+      ...this.defaultHeaders,
+      ...credentials.headers,
+      ...options?.headers,
+    };
     try {
       const res = await this.fetcher(url, {
         method: 'DELETE',
         headers,
+        ...(credentials.credentials
+          ? { credentials: credentials.credentials }
+          : {}),
         ...(options?.signal ? { signal: options.signal } : {}),
       });
       if (res.status === 404) return false;
@@ -387,10 +470,13 @@ export class RoleviaApiClient {
     method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     body?: unknown,
     options?: RequestOptions,
+    sensitiveResponse = false,
   ): Promise<Static<TSchemaType>> {
     const url = `${this.baseUrl}${path}`;
+    const credentials = await this.resolveCredentials();
     const headers: Record<string, string> = {
       ...this.defaultHeaders,
+      ...credentials.headers,
       ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
       ...options?.headers,
     };
@@ -400,6 +486,9 @@ export class RoleviaApiClient {
       response = await this.fetcher(url, {
         method,
         headers,
+        ...(credentials.credentials
+          ? { credentials: credentials.credentials }
+          : {}),
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         ...(options?.signal ? { signal: options.signal } : {}),
       });
@@ -436,10 +525,18 @@ export class RoleviaApiClient {
     if (!Value.Check(schema, responseBody)) {
       throw new ValidationError(
         'Response did not match schema contract.',
-        responseBody,
+        sensitiveResponse ? undefined : responseBody,
       );
     }
     return responseBody;
+  }
+
+  private async resolveCredentials(): Promise<ApiCredentials> {
+    try {
+      return await this.credentialProvider();
+    } catch {
+      throw new CredentialError();
+    }
   }
 
   private createErrorFromStatus(
@@ -447,13 +544,18 @@ export class RoleviaApiClient {
     body?: unknown,
   ): ApiClientError {
     let message = `The opportunity API returned status ${status}.`;
-    if (
-      body &&
-      typeof body === 'object' &&
-      'message' in body &&
-      typeof body.message === 'string'
-    ) {
-      message = body.message;
+    if (body && typeof body === 'object') {
+      if ('message' in body && typeof body.message === 'string') {
+        message = body.message;
+      } else if (
+        'error' in body &&
+        body.error &&
+        typeof body.error === 'object' &&
+        'message' in body.error &&
+        typeof body.error.message === 'string'
+      ) {
+        message = body.error.message;
+      }
     }
     switch (status) {
       case 401:

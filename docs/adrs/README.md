@@ -39,6 +39,8 @@ Other decisions may qualify as the system is specified. Listing an example here 
 - [ADR-004: Fastify for an independent API application](ADR-004-fastify-api.md) — Accepted
 - [ADR-005: Drizzle for SQLite database access and migrations](ADR-005-drizzle-database-access.md) — Accepted
 - [ADR-006: pnpm workspace without an initial task orchestrator](ADR-006-pnpm-workspace.md) — Accepted
+- [ADR-007: Rolevia multi-client platform architecture and boundaries](ADR-007-rolevia-platform-architecture.md) — Accepted
+- [ADR-008: Cloud identity and authorization boundary](ADR-008-cloud-identity-authorization.md) — Accepted
 
 ## Suggested record structure
 

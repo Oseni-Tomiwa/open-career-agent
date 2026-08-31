@@ -2,6 +2,7 @@ export {
   ApiClientError,
   NetworkError,
   ValidationError,
+  CredentialError,
   NotFoundError,
   ConflictError,
   UnauthorizedError,
@@ -15,6 +16,8 @@ export {
   type RoleviaApiClientOptions,
   type RequestOptions,
   type FetchImplementation,
+  type ApiCredentials,
+  type CredentialProvider,
 } from './client.js';
 
 export { isSafeHttpUrl } from './url.js';

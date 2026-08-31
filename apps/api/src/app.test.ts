@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -50,9 +51,12 @@ describe('API application', () => {
       config: {
         environment: 'test',
         databasePath: database.path,
+        migrationMode: 'auto',
         host: '127.0.0.1',
         port: 3000,
         webOrigin: 'http://localhost:5173',
+        identityMode: 'development',
+        sessionTtlHours: 168,
       },
       database,
       logger: false,
@@ -1061,5 +1065,344 @@ describe('API application', () => {
         .prepare('select count(*) as count from application_events')
         .get(),
     ).toEqual(beforeReads.events);
+  });
+});
+
+describe('Cloud identity and candidate isolation', () => {
+  let directory: string;
+  let database: DatabaseHandle;
+  let cloudApp: Awaited<ReturnType<typeof createApiApp>>;
+
+  beforeEach(async () => {
+    directory = mkdtempSync(join(tmpdir(), 'oca-cloud-api-'));
+    database = openDatabase(join(directory, 'cloud.sqlite'));
+    applyMigrations(database);
+    cloudApp = await createApiApp({
+      config: {
+        environment: 'test',
+        databasePath: database.path,
+        migrationMode: 'auto',
+        host: '127.0.0.1',
+        port: 3000,
+        webOrigin: 'https://app.rolevia.test',
+        identityMode: 'cloud',
+        sessionTtlHours: 24,
+      },
+      database,
+      logger: false,
+    });
+  });
+
+  afterEach(async () => {
+    await cloudApp.close();
+    database.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  async function registerBearer(email: string) {
+    const response = await cloudApp.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: {
+        email,
+        password: 'correct horse battery staple',
+        transport: 'bearer',
+      },
+    });
+    expect(response.statusCode).toBe(201);
+    return response.json<{
+      token: string;
+      session: { primaryCandidateId: string; user: { id: string } };
+    }>();
+  }
+
+  it('enforces the User/Candidate authorization matrix before route handlers', async () => {
+    const accountA = await registerBearer('user-a@example.com');
+    const accountB = await registerBearer('USER-B@example.com');
+    const authorization = `Bearer ${accountA.token}`;
+
+    const ownRoutes = [
+      `/candidates/${accountA.session.primaryCandidateId}/profile`,
+      `/candidates/${accountA.session.primaryCandidateId}/search-targets`,
+      `/candidates/${accountA.session.primaryCandidateId}/discovery-runs`,
+      `/candidates/${accountA.session.primaryCandidateId}/today`,
+      `/candidates/${accountA.session.primaryCandidateId}/applications`,
+      `/candidates/${accountA.session.primaryCandidateId}/career-signals`,
+      `/opportunities?candidateId=${accountA.session.primaryCandidateId}`,
+    ];
+    for (const url of ownRoutes) {
+      const response = await cloudApp.inject({
+        method: 'GET',
+        url,
+        headers: { authorization },
+      });
+      expect(response.statusCode, url).toBe(200);
+    }
+
+    const foreignRoutes = [
+      `/candidates/${accountB.session.primaryCandidateId}/profile`,
+      `/candidates/${accountB.session.primaryCandidateId}/search-targets`,
+      `/candidates/${accountB.session.primaryCandidateId}/discovery-runs`,
+      `/candidates/${accountB.session.primaryCandidateId}/today`,
+      `/candidates/${accountB.session.primaryCandidateId}/applications`,
+      `/candidates/${accountB.session.primaryCandidateId}/career-signals`,
+      `/opportunities?candidateId=${accountB.session.primaryCandidateId}`,
+      `/opportunities/known-shared-id?candidateId=${accountB.session.primaryCandidateId}`,
+    ];
+    for (const url of foreignRoutes) {
+      const response = await cloudApp.inject({
+        method: 'GET',
+        url,
+        headers: { authorization },
+      });
+      expect(response.statusCode, url).toBe(403);
+      expect(response.json()).toMatchObject({
+        error: { code: 'FORBIDDEN' },
+      });
+    }
+
+    const mutation = await cloudApp.inject({
+      method: 'POST',
+      url: `/candidates/${accountB.session.primaryCandidateId}/claims`,
+      headers: { authorization },
+      payload: {
+        kind: 'skill',
+        value: 'Must not cross tenant boundary',
+        state: 'UNKNOWN',
+      },
+    });
+    expect(mutation.statusCode).toBe(403);
+
+    const unauthenticated = await cloudApp.inject({
+      method: 'GET',
+      url: `/candidates/${accountA.session.primaryCandidateId}/profile`,
+    });
+    expect(unauthenticated.statusCode).toBe(401);
+  });
+
+  it('normalizes email, persists only token hashes, expires and revokes sessions', async () => {
+    const account = await registerBearer('Person@Example.COM');
+    const stored = database.sqlite
+      .prepare('select normalized_email from users where id = ?')
+      .get(account.session.user.id) as { normalized_email: string };
+    expect(stored.normalized_email).toBe('person@example.com');
+
+    const tokenHash = createHash('sha256')
+      .update(account.token, 'utf8')
+      .digest('hex');
+    const storedSession = database.sqlite
+      .prepare('select token_hash from sessions where token_hash = ?')
+      .get(tokenHash) as { token_hash: string };
+    expect(storedSession.token_hash).toBe(tokenHash);
+    expect(storedSession.token_hash).not.toContain(account.token);
+
+    const loggedOut = await cloudApp.inject({
+      method: 'POST',
+      url: '/auth/logout',
+      headers: { authorization: `Bearer ${account.token}` },
+    });
+    expect(loggedOut.statusCode).toBe(200);
+    expect(loggedOut.json()).toEqual({ revoked: true });
+    expect(
+      (
+        await cloudApp.inject({
+          method: 'GET',
+          url: '/auth/session',
+          headers: { authorization: `Bearer ${account.token}` },
+        })
+      ).statusCode,
+    ).toBe(401);
+
+    const expiring = await registerBearer('expiring@example.com');
+    const expiringHash = createHash('sha256')
+      .update(expiring.token, 'utf8')
+      .digest('hex');
+    database.sqlite
+      .prepare('update sessions set expires_at = 0 where token_hash = ?')
+      .run(expiringHash);
+    expect(
+      (
+        await cloudApp.inject({
+          method: 'GET',
+          url: '/auth/session',
+          headers: { authorization: `Bearer ${expiring.token}` },
+        })
+      ).statusCode,
+    ).toBe(401);
+  });
+
+  it('allows credentialed browser CORS only from the configured origin', async () => {
+    const allowed = await cloudApp.inject({
+      method: 'OPTIONS',
+      url: '/auth/session',
+      headers: {
+        origin: 'https://app.rolevia.test',
+        'access-control-request-method': 'GET',
+      },
+    });
+    expect(allowed.headers['access-control-allow-origin']).toBe(
+      'https://app.rolevia.test',
+    );
+    expect(allowed.headers['access-control-allow-credentials']).toBe('true');
+
+    const denied = await cloudApp.inject({
+      method: 'OPTIONS',
+      url: '/auth/session',
+      headers: {
+        origin: 'https://attacker.example',
+        'access-control-request-method': 'GET',
+      },
+    });
+    expect(denied.headers['access-control-allow-origin']).not.toBe(
+      'https://attacker.example',
+    );
+    expect(denied.headers['access-control-allow-origin']).not.toBe('*');
+  });
+
+  it('supports HttpOnly browser sessions, origin-protected logout, and generic login failures', async () => {
+    const registered = await cloudApp.inject({
+      method: 'POST',
+      url: '/auth/register',
+      headers: { origin: 'https://app.rolevia.test' },
+      payload: {
+        email: 'browser@example.com',
+        password: 'correct horse battery staple',
+        transport: 'cookie',
+      },
+    });
+    expect(registered.statusCode).toBe(201);
+    const cookie = registered.headers['set-cookie'];
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('SameSite=Lax');
+
+    expect(
+      (
+        await cloudApp.inject({
+          method: 'GET',
+          url: '/auth/session',
+          headers: { cookie },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await cloudApp.inject({
+          method: 'POST',
+          url: '/auth/logout',
+          headers: { cookie, origin: 'https://attacker.example' },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await cloudApp.inject({
+          method: 'POST',
+          url: '/auth/logout',
+          headers: { cookie, origin: 'https://app.rolevia.test' },
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    for (const email of ['browser@example.com', 'missing@example.com']) {
+      const failure = await cloudApp.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: {
+          email,
+          password: 'definitely incorrect',
+          transport: 'bearer',
+        },
+      });
+      expect(failure.statusCode).toBe(401);
+      expect(failure.json()).toMatchObject({
+        error: {
+          code: 'INVALID_CREDENTIALS',
+          message: 'The email or password is invalid.',
+        },
+      });
+    }
+
+    const signedIn = await cloudApp.inject({
+      method: 'POST',
+      url: '/auth/login',
+      headers: { origin: 'https://app.rolevia.test' },
+      payload: {
+        email: 'BROWSER@EXAMPLE.COM',
+        password: 'correct horse battery staple',
+        transport: 'cookie',
+      },
+    });
+    expect(signedIn.statusCode).toBe(200);
+    expect(signedIn.headers['set-cookie']).toContain('HttpOnly');
+
+    const duplicate = await cloudApp.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: {
+        email: 'browser@example.com',
+        password: 'correct horse battery staple',
+        transport: 'bearer',
+      },
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toMatchObject({
+      error: {
+        code: 'ACCOUNT_NOT_CREATED',
+        message: 'The account could not be created.',
+      },
+    });
+  });
+
+  it('keeps the trusted self-hosted identity explicit and rejects another Candidate', async () => {
+    const localDirectory = mkdtempSync(join(tmpdir(), 'oca-local-identity-'));
+    const localDatabase = openDatabase(join(localDirectory, 'local.sqlite'));
+    applyMigrations(localDatabase);
+    const trusted = candidateId('candidate-trusted-local');
+    const other = candidateId('candidate-not-trusted');
+    const candidates = new CandidateRepository(localDatabase);
+    candidates.createCandidate(trusted);
+    candidates.createCandidate(other);
+    const localApp = await createApiApp({
+      config: {
+        environment: 'production',
+        databasePath: localDatabase.path,
+        migrationMode: 'auto',
+        host: '127.0.0.1',
+        port: 3000,
+        webOrigin: 'http://localhost:5173',
+        identityMode: 'self-hosted',
+        trustedCandidateId: trusted,
+        sessionTtlHours: 168,
+      },
+      database: localDatabase,
+      closeDatabaseOnClose: false,
+      logger: false,
+    });
+    try {
+      expect(
+        (
+          await localApp.inject({
+            method: 'GET',
+            url: `/candidates/${trusted}/profile`,
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await localApp.inject({
+            method: 'GET',
+            url: `/candidates/${other}/profile`,
+          })
+        ).statusCode,
+      ).toBe(403);
+      expect(
+        (await localApp.inject({ method: 'GET', url: '/auth/session' }))
+          .statusCode,
+      ).toBe(403);
+    } finally {
+      await localApp.close();
+      localDatabase.close();
+      rmSync(localDirectory, { recursive: true, force: true });
+    }
   });
 });

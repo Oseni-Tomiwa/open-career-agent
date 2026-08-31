@@ -487,6 +487,7 @@ describe('quality.evaluate durable workflow', () => {
     const config = {
       environment: 'test' as const,
       databasePath: join(directory, 'qual.sqlite'),
+      migrationMode: 'auto' as const,
       pollIntervalMs: 1000,
       leaseDurationMs: 30000,
       greenhouseBoards: ['stripe'],

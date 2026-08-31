@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `user_candidates_primary_user_unique` ON `user_candidates` (`user_id`) WHERE "user_candidates"."is_primary" = 1;

@@ -1,6 +1,7 @@
 export type ApiClientErrorCode =
   | 'NETWORK_ERROR'
   | 'VALIDATION_ERROR'
+  | 'CREDENTIAL_ERROR'
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'UNAUTHORIZED'
@@ -37,6 +38,15 @@ export class ValidationError extends ApiClientError {
   ) {
     super(message, 'VALIDATION_ERROR', undefined, details);
     this.name = 'ValidationError';
+  }
+}
+
+export class CredentialError extends ApiClientError {
+  public constructor(
+    message = 'Authentication credentials could not be resolved.',
+  ) {
+    super(message, 'CREDENTIAL_ERROR');
+    this.name = 'CredentialError';
   }
 }
 

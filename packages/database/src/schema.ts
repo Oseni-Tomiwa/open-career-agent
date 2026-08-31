@@ -91,6 +91,76 @@ export const candidates = sqliteTable('candidates', {
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
+// Accounts authenticate people. Candidates remain separate career-domain
+// subjects; the join deliberately permits more than one Candidate per User.
+export const users = sqliteTable(
+  'users',
+  {
+    id: text('id').primaryKey(),
+    email: text('email').notNull(),
+    normalizedEmail: text('normalized_email').notNull(),
+    passwordHash: text('password_hash').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('users_normalized_email_unique').on(table.normalizedEmail),
+  ],
+);
+
+export const userCandidates = sqliteTable(
+  'user_candidates',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    candidateId: text('candidate_id')
+      .notNull()
+      .references(() => candidates.id, { onDelete: 'restrict' }),
+    relationship: text('relationship').notNull().default('OWNER'),
+    isPrimary: integer('is_primary', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('user_candidates_user_candidate_unique').on(
+      table.userId,
+      table.candidateId,
+    ),
+    uniqueIndex('user_candidates_candidate_unique').on(table.candidateId),
+    uniqueIndex('user_candidates_primary_user_unique')
+      .on(table.userId)
+      .where(sql`${table.isPrimary} = 1`),
+    index('user_candidates_user_idx').on(table.userId),
+    check(
+      'user_candidates_relationship_check',
+      sql`${table.relationship} in ('OWNER')`,
+    ),
+  ],
+);
+
+export const sessions = sqliteTable(
+  'sessions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('sessions_token_hash_unique').on(table.tokenHash),
+    index('sessions_user_idx').on(table.userId),
+    index('sessions_expiration_idx').on(table.expiresAt),
+  ],
+);
+
 export const CLAIM_STATES = [
   'SUPPORTED',
   'INFERRED',
