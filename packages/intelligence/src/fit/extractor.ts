@@ -83,6 +83,12 @@ const TERMS: readonly TermDefinition[] = [
     aliases: ['docker', 'containerization', 'containerised', 'containerized'],
   },
   {
+    value: 'docker',
+    dimension: 'technical_skill',
+    aliases: ['container', 'containers'],
+  },
+  { value: 'linux', dimension: 'tool_platform', aliases: ['linux'] },
+  {
     value: 'aws',
     dimension: 'cloud_devops',
     aliases: ['aws', 'amazon web services'],
@@ -204,6 +210,12 @@ function includesAlias(text: string, alias: string): boolean {
   return new RegExp(`(^|[^a-z0-9+#])${escaped}([^a-z0-9+#]|$)`, 'i').test(text);
 }
 
+function termMatchesText(term: TermDefinition, text: string): boolean {
+  const comparable =
+    term.value === 'go' ? text.replace(/\bgo[- ]to[- ]market\b/gi, '') : text;
+  return term.aliases.some((alias) => includesAlias(comparable, alias));
+}
+
 function requirementId(
   dimension: FitDimension,
   value: string,
@@ -233,7 +245,7 @@ export class FitRequirementExtractor {
       if (!hasCue || NEGATED_REQUIREMENT_CUE.test(sourceText)) continue;
 
       const matchedTerms = TERMS.filter((term) =>
-        term.aliases.some((alias) => includesAlias(sourceText, alias)),
+        termMatchesText(term, sourceText),
       );
       const alternatives = /\bor\b/i.test(sourceText)
         ? new Set(
@@ -333,7 +345,7 @@ function normalizeExperienceFocus(
   if (!value) return undefined;
   const normalized = value.toLowerCase().trim();
   const term = TERMS.find((candidate) =>
-    candidate.aliases.some((alias) => includesAlias(normalized, alias)),
+    termMatchesText(candidate, normalized),
   );
   return term?.value;
 }
@@ -351,7 +363,7 @@ export function extractSeniority(title: string): string | undefined {
 export function normalizeFitValue(value: string): string {
   const normalized = value.toLowerCase().trim();
   const term = TERMS.find((candidate) =>
-    candidate.aliases.some((alias) => includesAlias(normalized, alias)),
+    termMatchesText(candidate, normalized),
   );
   return term?.value ?? normalized.replace(/\s+/g, ' ');
 }

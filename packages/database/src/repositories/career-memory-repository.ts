@@ -444,10 +444,23 @@ export class CareerMemoryRepository {
     const db = this.handle.db as any;
 
     const snapshots = await db
-      .select({ id: opportunitySnapshots.id })
+      .select({
+        id: opportunitySnapshots.id,
+        opportunityId: opportunitySnapshots.opportunityId,
+        observedAt: opportunitySnapshots.observedAt,
+        createdAt: opportunitySnapshots.createdAt,
+      })
       .from(opportunitySnapshots);
 
+    const latestByOpportunity = new Map<string, (typeof snapshots)[number]>();
     for (const snapshot of snapshots) {
+      const current = latestByOpportunity.get(snapshot.opportunityId);
+      if (!current || compareSnapshots(current, snapshot) < 0) {
+        latestByOpportunity.set(snapshot.opportunityId, snapshot);
+      }
+    }
+
+    for (const snapshot of latestByOpportunity.values()) {
       await this.ledger.enqueue({
         taskType: 'eligibility.evaluate',
         payload: { snapshotId: snapshot.id, candidateId },
@@ -455,6 +468,25 @@ export class CareerMemoryRepository {
       });
     }
   }
+}
+
+function compareSnapshots(
+  left: {
+    readonly id: string;
+    readonly observedAt: Date;
+    readonly createdAt: Date;
+  },
+  right: {
+    readonly id: string;
+    readonly observedAt: Date;
+    readonly createdAt: Date;
+  },
+): number {
+  const observed = left.observedAt.getTime() - right.observedAt.getTime();
+  if (observed !== 0) return observed;
+  const created = left.createdAt.getTime() - right.createdAt.getTime();
+  if (created !== 0) return created;
+  return left.id.localeCompare(right.id);
 }
 
 function normalize(value: string, label: string): string {

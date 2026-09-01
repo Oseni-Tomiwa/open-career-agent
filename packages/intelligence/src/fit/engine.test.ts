@@ -67,6 +67,21 @@ describe('FitRequirementExtractor', () => {
     });
   });
 
+  it('preserves conjunctive platform requirements outside a provider alternative group', () => {
+    const result = new FitRequirementExtractor().extract({
+      content:
+        'Hands-on experience with a major cloud provider (AWS, Azure, or GCP), Linux, and containers is required.',
+    });
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ normalizedValue: 'aws|azure|gcp' }),
+        expect.objectContaining({ normalizedValue: 'linux' }),
+        expect.objectContaining({ normalizedValue: 'docker' }),
+      ]),
+    );
+    expect(result).toHaveLength(3);
+  });
+
   it('does not turn an explicit negation into a requirement', () => {
     const result = new FitRequirementExtractor().extract({
       content: "You don't need to be a Ruby language specialist.",
@@ -77,6 +92,14 @@ describe('FitRequirementExtractor', () => {
         content: 'You don’t need to be a Ruby language specialist.',
       }),
     ).toHaveLength(0);
+  });
+
+  it('does not mistake go-to-market language for the Go programming language', () => {
+    const result = new FitRequirementExtractor().extract({
+      content:
+        'Experience building a repeatable go-to-market strategy is required.',
+    });
+    expect(result).toHaveLength(0);
   });
 });
 
@@ -90,6 +113,83 @@ describe('FitEngine technical and evidence semantics', () => {
       state: 'STRONG_MATCH',
       candidateEvidenceReferences: ['claim:claim-node'],
     });
+  });
+
+  it('does not overstate explicitly limited proficiency as a strong match', () => {
+    const language = engine.evaluate(
+      { content: 'Strong programming experience in Ruby is required.' },
+      [
+        {
+          ...supported('programming_language', 'Ruby'),
+          scope: 'Introductory',
+        },
+      ],
+    );
+    expect(language.findings[0]).toMatchObject({
+      state: 'PARTIAL',
+      confidence: 'high',
+    });
+    expect(language.findings[0]?.explanation).toContain(
+      'does not establish the proficiency requested',
+    );
+
+    const cloud = engine.evaluate(
+      { content: 'Extensive expertise in GCP is required.' },
+      [
+        {
+          ...supported('cloud_platform', 'GCP'),
+          scope: 'Foundation / lab exposure',
+        },
+      ],
+    );
+    expect(cloud.findings[0]?.state).toBe('PARTIAL');
+  });
+
+  it('allows limited scope to satisfy a requirement that asks only for familiarity', () => {
+    const result = engine.evaluate(
+      { content: 'Familiarity with GCP is preferred.' },
+      [
+        {
+          ...supported('cloud_platform', 'GCP'),
+          scope: 'Foundation / lab exposure',
+        },
+      ],
+    );
+    expect(result.findings[0]?.state).toBe('STRONG_MATCH');
+  });
+
+  it('treats beginner evidence as partial when experience is requested', () => {
+    const result = engine.evaluate(
+      { content: 'Experience with Ruby is required.' },
+      [
+        {
+          ...supported('programming_language', 'Ruby'),
+          scope: 'Introductory',
+        },
+      ],
+    );
+    expect(result.findings[0]?.state).toBe('PARTIAL');
+  });
+
+  it('does not treat one matched conjunct as satisfying a compound requirement', () => {
+    const result = engine.evaluate(
+      {
+        content:
+          'Hands-on experience with a major cloud provider (AWS, Azure, or GCP), Linux, and containers is required.',
+      },
+      [
+        {
+          ...supported('cloud_platform', 'GCP'),
+          scope: 'Foundation / lab exposure',
+        },
+        supported('containerization', 'Docker'),
+      ],
+    );
+    expect(result.findings).toHaveLength(3);
+    expect(
+      result.findings.find((finding) => finding.label === 'linux'),
+    ).toMatchObject({ state: 'NO_EVIDENCE' });
+    expect(result.overallLevel).toBe('moderate');
   });
 
   it('uses NO_EVIDENCE, not a fabricated negative, when Kubernetes evidence is absent', () => {

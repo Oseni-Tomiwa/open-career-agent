@@ -22,6 +22,7 @@ import {
   opportunityId,
   snapshotId,
 } from '@oca/domain';
+import { FIT_ENGINE_VERSION } from '@oca/intelligence';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createFitHandlers } from './workflow.js';
@@ -132,7 +133,7 @@ describe('fit.evaluate durable workflow', () => {
       eligibilityState: 'ineligible',
       eligibilityEngineVersion: 'eligibility-v1',
       fitLevel: 'strong',
-      fitEngineVersion: 'fit-v1',
+      fitEngineVersion: FIT_ENGINE_VERSION,
       qualityLevel: null,
     });
     const findings = await repository.getFitFindings(evaluation);
@@ -228,10 +229,10 @@ describe('fit.evaluate durable workflow', () => {
 
     const repository = new EvaluationRepository(database);
     expect((await repository.getEvaluation(first))?.fitEngineVersion).toBe(
-      'fit-v1',
+      FIT_ENGINE_VERSION,
     );
     expect((await repository.getEvaluation(second))?.fitEngineVersion).toBe(
-      'fit-v1',
+      FIT_ENGINE_VERSION,
     );
     expect(await repository.getFitFindings(second)).not.toHaveLength(0);
   });
@@ -265,7 +266,7 @@ describe('fit.evaluate durable workflow', () => {
 
     const repository = new EvaluationRepository(database);
     expect((await repository.getEvaluation(second))?.fitEngineVersion).toBe(
-      'fit-v1',
+      FIT_ENGINE_VERSION,
     );
     expect(
       (await repository.getEvaluation(second))?.fitInputFingerprint,

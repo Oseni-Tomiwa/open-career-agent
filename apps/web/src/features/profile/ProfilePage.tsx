@@ -155,7 +155,8 @@ export function ProfilePage() {
 
       {reevaluating ? (
         <p className="profile-notice" role="status">
-          Career Profile saved. Updating affected job recommendations…
+          Career Profile saved. Reevaluation was requested for current
+          opportunities.
         </p>
       ) : null}
       {mutationError ? (

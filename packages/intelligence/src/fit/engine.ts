@@ -6,7 +6,7 @@ import {
   type FitRequirement,
 } from './extractor.js';
 
-export const FIT_ENGINE_VERSION = 'fit-v1';
+export const FIT_ENGINE_VERSION = 'fit-v1.3';
 
 export type FitFindingState =
   | 'STRONG_MATCH'
@@ -79,6 +79,30 @@ function claimCanSupport(claim: FitCandidateClaim): boolean {
 
 function isProjectClaim(claim: FitCandidateClaim): boolean {
   return /project/i.test(claim.kind) || /project/i.test(claim.scope ?? '');
+}
+
+function hasLimitedProficiencyScope(claim: FitCandidateClaim): boolean {
+  return /\b(beginner|basic|novice|introductory|foundation(?:al)?|active learning|learning)\b/i.test(
+    claim.scope ?? '',
+  );
+}
+
+function hasEarlyLearningScope(claim: FitCandidateClaim): boolean {
+  return /\b(beginner|novice|introductory|active learning|learning)\b/i.test(
+    claim.scope ?? '',
+  );
+}
+
+function requiresEstablishedProficiency(requirement: FitRequirement): boolean {
+  return /\b(strong|proficien(?:t|cy)|expert(?:ise)?|extensive|advanced|deep|substantial|significant|\d+\+?\s*years?)\b/i.test(
+    requirement.sourceText,
+  );
+}
+
+function explicitlyAllowsEarlyLearning(requirement: FitRequirement): boolean {
+  return /\b(familiarity|basic|beginner|entry[- ]level|exposure)\b/i.test(
+    requirement.sourceText,
+  );
 }
 
 function matchesRequirement(
@@ -267,6 +291,21 @@ function evaluateRequirement(
   );
   if (directSupported) {
     const project = isProjectClaim(directSupported);
+    if (
+      !project &&
+      hasLimitedProficiencyScope(directSupported) &&
+      (requiresEstablishedProficiency(requirement) ||
+        (hasEarlyLearningScope(directSupported) &&
+          !explicitlyAllowsEarlyLearning(requirement)))
+    ) {
+      return finding(
+        requirement,
+        'PARTIAL',
+        `The candidate has supported ${directSupported.value} evidence, but its recorded scope (${directSupported.scope}) does not establish the proficiency requested by this requirement.`,
+        [directSupported],
+        'high',
+      );
+    }
     return finding(
       requirement,
       project ? 'MATCH' : 'STRONG_MATCH',
@@ -309,7 +348,7 @@ function evaluateRequirement(
       cloudProviders.includes(source) &&
       cloudProviders.includes(transferableMatch.target)
         ? `${source} supports only broad cloud-provider familiarity relevant to ${transferableMatch.target}; it does not establish ${transferableMatch.target} or provider-specific service expertise.`
-        : `${source} is an explicit fit-v1 transfer relationship to ${transferableMatch.target}; it is not an exact match.`;
+        : `${source} is an explicit ${FIT_ENGINE_VERSION} transfer relationship to ${transferableMatch.target}; it is not an exact match.`;
     return finding(
       requirement,
       'TRANSFERABLE',

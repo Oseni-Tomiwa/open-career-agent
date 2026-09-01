@@ -198,4 +198,71 @@ describe('Career Memory repository', () => {
     });
     expect(await db.select().from(backgroundTasks)).toHaveLength(2);
   });
+
+  it('reevaluates only the latest snapshot of each canonical Opportunity', async () => {
+    const candidate = candidateId('candidate-memory-current-snapshots');
+    await new CandidateRepository(database).createCandidate(candidate);
+    const opportunities = new OpportunityRepository(database);
+    const firstOpportunity = opportunityId('opportunity-memory-current-first');
+    const secondOpportunity = opportunityId(
+      'opportunity-memory-current-second',
+    );
+    await opportunities.createOpportunity(firstOpportunity);
+    await opportunities.createOpportunity(secondOpportunity);
+    await opportunities.appendSnapshot(
+      {
+        id: snapshotId('snapshot-memory-current-old'),
+        opportunityId: firstOpportunity,
+        title: 'Backend Engineer',
+        organization: 'Example',
+        content: 'Node.js required.',
+        fingerprint: 'memory-current-old',
+      },
+      Date.parse('2026-01-01T00:00:00.000Z'),
+    );
+    await opportunities.appendSnapshot(
+      {
+        id: snapshotId('snapshot-memory-current-new'),
+        opportunityId: firstOpportunity,
+        title: 'Backend Engineer',
+        organization: 'Example',
+        content: 'Node.js and PostgreSQL required.',
+        fingerprint: 'memory-current-new',
+      },
+      Date.parse('2026-01-02T00:00:00.000Z'),
+    );
+    await opportunities.appendSnapshot(
+      {
+        id: snapshotId('snapshot-memory-current-other'),
+        opportunityId: secondOpportunity,
+        title: 'Frontend Engineer',
+        organization: 'Example',
+        content: 'React required.',
+        fingerprint: 'memory-current-other',
+      },
+      Date.parse('2026-01-01T00:00:00.000Z'),
+    );
+
+    await new CareerMemoryRepository(database).createClaim({
+      candidateId: candidate,
+      kind: 'skill',
+      value: 'Node.js',
+      state: 'UNKNOWN',
+    });
+
+    const { backgroundTasks } = getTables(database);
+    const tasks = await (database.db as any).select().from(backgroundTasks);
+    expect(tasks).toHaveLength(2);
+    expect(
+      tasks.map((task: any) => JSON.parse(task.payload).snapshotId),
+    ).toEqual(
+      expect.arrayContaining([
+        'snapshot-memory-current-new',
+        'snapshot-memory-current-other',
+      ]),
+    );
+    expect(
+      tasks.map((task: any) => JSON.parse(task.payload).snapshotId),
+    ).not.toContain('snapshot-memory-current-old');
+  });
 });

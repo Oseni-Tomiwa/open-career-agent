@@ -164,6 +164,11 @@ describe('Career Memory profile', () => {
         expect.objectContaining({ method: 'POST' }),
       ),
     );
+    expect(
+      await screen.findByText(
+        'Career Profile saved. Reevaluation was requested for current opportunities.',
+      ),
+    ).toBeInTheDocument();
     const createCall = fetcher.mock.calls.find(([input]) => {
       const target =
         typeof input === 'string'
