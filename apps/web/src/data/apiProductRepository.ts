@@ -28,6 +28,7 @@ import type {
   EvidenceState,
   FitSignal,
   ManualEvidenceInput,
+  ReplaceCandidateClaimInput,
   Opportunity,
   ProductRepository,
   ProductSnapshot,
@@ -174,7 +175,9 @@ export class ApiProductRepository implements ProductRepository {
 
   public async getCareerMemory(): Promise<CareerMemoryProfile> {
     try {
-      return await this.client.getCareerProfile(this.candidateId!);
+      return normalizeCareerProfile(
+        await this.client.getCareerProfile(this.candidateId!),
+      );
     } catch (error) {
       throw this.normalizeError(error);
     }
@@ -188,7 +191,21 @@ export class ApiProductRepository implements ProductRepository {
         this.candidateId!,
         input,
       );
-      return { candidate: response.candidate, claims: response.claims };
+      return normalizeCareerProfile(response);
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
+  }
+
+  public async createCandidateClaimsBatch(
+    inputs: readonly CreateCandidateClaimInput[],
+  ): Promise<CareerMemoryProfile> {
+    try {
+      const response = await this.client.createCandidateClaimsBatch(
+        this.candidateId!,
+        { claims: [...inputs] },
+      );
+      return normalizeCareerProfile(response);
     } catch (error) {
       throw this.normalizeError(error);
     }
@@ -204,7 +221,7 @@ export class ApiProductRepository implements ProductRepository {
         claimId,
         input,
       );
-      return { candidate: response.candidate, claims: response.claims };
+      return normalizeCareerProfile(response);
     } catch (error) {
       throw this.normalizeError(error);
     }
@@ -222,7 +239,48 @@ export class ApiProductRepository implements ProductRepository {
         claimId,
         input,
       );
-      return { candidate: response.candidate, claims: response.claims };
+      return normalizeCareerProfile(response);
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
+  }
+
+  public async replaceCandidateClaim(
+    claimId: string,
+    input: ReplaceCandidateClaimInput,
+  ): Promise<CareerMemoryProfile> {
+    try {
+      return normalizeCareerProfile(await this.client.replaceCandidateClaim(
+        this.candidateId!,
+        claimId,
+        input,
+      ));
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
+  }
+
+  public async retireCandidateClaim(
+    claimId: string,
+    note?: string,
+  ): Promise<CareerMemoryProfile> {
+    try {
+      return normalizeCareerProfile(await this.client.retireCandidateClaim(
+        this.candidateId!,
+        claimId,
+        note ? { note } : {},
+      ));
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
+  }
+
+  public async getCareerProfileReevaluation(reevaluationId: string) {
+    try {
+      return await this.client.getCareerProfileReevaluation(
+        this.candidateId!,
+        reevaluationId,
+      );
     } catch (error) {
       throw this.normalizeError(error);
     }
@@ -608,6 +666,20 @@ function freshness(value: string): string {
   const days = Math.max(0, Math.floor((Date.now() - timestamp) / 86_400_000));
   if (days === 0) return 'Observed today';
   return `Observed ${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+function normalizeCareerProfile(input: {
+  candidate: CareerMemoryProfile['candidate'];
+  claims: CareerMemoryProfile['claims'];
+  historicalClaims?: CareerMemoryProfile['historicalClaims'];
+  reevaluation?: CareerMemoryProfile['reevaluation'];
+}): CareerMemoryProfile {
+  return {
+    candidate: input.candidate,
+    claims: input.claims,
+    historicalClaims: input.historicalClaims ?? [],
+    ...(input.reevaluation ? { reevaluation: input.reevaluation } : {}),
+  };
 }
 
 function eligibilityLabel(state: EligibilityState): string {

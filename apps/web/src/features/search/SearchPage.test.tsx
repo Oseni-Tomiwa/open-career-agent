@@ -59,7 +59,7 @@ describe('Search & Discovery Configuration Page', () => {
 
   it('shows a clear validation error for duplicate source configurations', async () => {
     renderProduct(<SearchPage />);
-    await screen.findByText('Search & Discovery');
+    await screen.findByText('Backend Engineer - Germany/Europe');
     fireEvent.change(screen.getByLabelText('greenhouse identifier 1'), {
       target: { value: 'duplicate-board' },
     });

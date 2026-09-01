@@ -325,6 +325,14 @@ describe('Cloud authentication adversarial security', () => {
       ['PUT', `/candidates/${ownerCandidateId}/profile`],
       ['GET', `/candidates/${ownerCandidateId}/claims`],
       ['POST', `/candidates/${ownerCandidateId}/claims`],
+      ['POST', `/candidates/${ownerCandidateId}/claims/batch`],
+      ['POST', `/candidates/${ownerCandidateId}/claims/claim-private/replace`],
+      ['POST', `/candidates/${ownerCandidateId}/claims/claim-private/retire`],
+      ['POST', `/candidates/${ownerCandidateId}/claims/claim-private/evidence`],
+      [
+        'GET',
+        `/candidates/${ownerCandidateId}/profile/reevaluations/reevaluation-private`,
+      ],
       ['GET', `/candidates/${ownerCandidateId}/search-targets`],
       ['POST', `/candidates/${ownerCandidateId}/search-targets`],
       ['GET', `/candidates/${ownerCandidateId}/today`],
@@ -337,6 +345,77 @@ describe('Cloud authentication adversarial security', () => {
         headers: { authorization: attackerAuth },
       });
       expect(response.statusCode, `${method} ${path}`).toBe(403);
+    }
+  });
+
+  it('applies 401/403/404 semantics to every new private Career Profile route', async () => {
+    const owner = await registerBearer('profile-route-owner@example.com');
+    const attacker = await registerBearer('profile-route-attacker@example.com');
+    const candidate = owner.session.primaryCandidateId;
+    const cases = [
+      {
+        method: 'POST',
+        path: `/candidates/${candidate}/claims/batch`,
+        payload: {
+          claims: [{ kind: 'skill', value: 'Synthetic', state: 'UNKNOWN' }],
+        },
+      },
+      {
+        method: 'POST',
+        path: `/candidates/${candidate}/claims/missing/replace`,
+        payload: {
+          changeType: 'CORRECTION',
+          value: 'Synthetic',
+          state: 'UNKNOWN',
+        },
+      },
+      {
+        method: 'POST',
+        path: `/candidates/${candidate}/claims/missing/retire`,
+        payload: {},
+      },
+      {
+        method: 'POST',
+        path: `/candidates/${candidate}/claims/missing/evidence`,
+        payload: {
+          evidence: {
+            evidenceType: 'synthetic',
+            sourceReference: 'synthetic:test',
+            excerpt: 'Synthetic.',
+            state: 'unreviewed',
+          },
+        },
+      },
+      {
+        method: 'GET',
+        path: `/candidates/${candidate}/profile/reevaluations/missing`,
+      },
+    ] as const;
+
+    for (const item of cases) {
+      const anonymous = await app.inject({
+        method: item.method,
+        url: item.path,
+        ...('payload' in item ? { payload: item.payload } : {}),
+      });
+      expect(anonymous.statusCode, `anonymous ${item.path}`).toBe(401);
+      const foreign = await app.inject({
+        method: item.method,
+        url: item.path,
+        headers: { authorization: `Bearer ${attacker.token}` },
+        ...('payload' in item ? { payload: item.payload } : {}),
+      });
+      expect(foreign.statusCode, `foreign ${item.path}`).toBe(403);
+    }
+
+    for (const item of cases.slice(1)) {
+      const ownedMissing = await app.inject({
+        method: item.method,
+        url: item.path,
+        headers: { authorization: `Bearer ${owner.token}` },
+        ...('payload' in item ? { payload: item.payload } : {}),
+      });
+      expect(ownedMissing.statusCode, `owned missing ${item.path}`).toBe(404);
     }
   });
 

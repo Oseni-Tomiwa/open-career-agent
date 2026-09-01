@@ -85,6 +85,21 @@ function apiRepository(fetcher: typeof fetch) {
   );
 }
 
+function profileFetcher(body: unknown) {
+  return vi.fn<typeof fetch>((input) => {
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+    if (url.includes('/opportunities?')) {
+      return Promise.resolve(response({ data: [] }));
+    }
+    return Promise.resolve(response(body));
+  });
+}
+
 describe('Career Memory profile', () => {
   it('keeps the seed profile functional with canonical claim states', async () => {
     renderProduct(<ProfilePage />);
@@ -131,6 +146,47 @@ describe('Career Memory profile', () => {
     expect(screen.queryByText('Docker')).not.toBeInTheDocument();
   });
 
+  it('keeps an empty profile usable without pressuring the user to complete it', async () => {
+    const fetcher = profileFetcher({
+      candidate: profileBody().candidate,
+      claims: [],
+      historicalClaims: [],
+    });
+    renderProduct(<ProfilePage />, ['/profile'], apiRepository(fetcher));
+    expect(
+      await screen.findByText('Career Profile is empty'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Add a factual profile item and attach evidence when it is available.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/100%/)).not.toBeInTheDocument();
+  });
+
+  it('renders a 100-fact current profile with grouped controls intact', async () => {
+    const claims = Array.from({ length: 100 }, (_, index) => ({
+      ...profileBody().claims[1],
+      id: `claim-large-${index}`,
+      value: `Synthetic large-profile fact ${index + 1}`,
+    }));
+    const fetcher = profileFetcher({
+      candidate: profileBody().candidate,
+      claims,
+      historicalClaims: [],
+    });
+    renderProduct(<ProfilePage />, ['/profile'], apiRepository(fetcher));
+    expect(
+      await screen.findByText('Synthetic large-profile fact 100'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('100 profile items with 0 supporting evidence items'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Add multiple facts' }),
+    ).toBeEnabled();
+  });
+
   it('sends canonical create and Evidence mutations through ApiProductRepository', async () => {
     const fetcher = vi.fn<typeof fetch>((input) => {
       const url =
@@ -144,29 +200,46 @@ describe('Career Memory profile', () => {
       if (url.endsWith('/profile'))
         return Promise.resolve(response(profileBody()));
       return Promise.resolve(
-        response({ ...profileBody(), reevaluationRequested: true }, 201),
+        response(
+          {
+            ...profileBody(),
+            reevaluationRequested: true,
+            reevaluation: {
+              id: 'profile-reevaluation-test',
+              state: 'SUCCEEDED',
+              taskCount: 0,
+              completedTaskCount: 0,
+              failedTaskCount: 0,
+              requestedAt: timestamp,
+              updatedAt: timestamp,
+            },
+          },
+          201,
+        ),
       );
     });
     renderProduct(<ProfilePage />, ['/profile'], apiRepository(fetcher));
     await screen.findByText('Node.js');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add profile item' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add multiple facts' }));
     fireEvent.change(screen.getByLabelText('Profile category'), {
       target: { value: 'language' },
     });
-    fireEvent.change(screen.getByLabelText('Details'), {
+    fireEvent.change(screen.getByLabelText('Fact'), {
       target: { value: 'German' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save profile item' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review facts' }));
+    expect(screen.getByText('Review facts before saving')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save 1 fact' }));
     await waitFor(() =>
       expect(fetcher).toHaveBeenCalledWith(
-        'http://api.test/candidates/candidate-api-profile/claims',
+        'http://api.test/candidates/candidate-api-profile/claims/batch',
         expect.objectContaining({ method: 'POST' }),
       ),
     );
     expect(
       await screen.findByText(
-        'Career Profile saved. Reevaluation was requested for current opportunities.',
+        'Career Profile saved. Reevaluation completed for 0 current opportunities.',
       ),
     ).toBeInTheDocument();
     const createCall = fetcher.mock.calls.find(([input]) => {
@@ -176,14 +249,12 @@ describe('Career Memory profile', () => {
           : input instanceof URL
             ? input.toString()
             : input.url;
-      return target.endsWith('/claims');
+      return target.endsWith('/claims/batch');
     })!;
     const createBody =
       typeof createCall[1]?.body === 'string' ? createCall[1].body : '';
     expect(JSON.parse(createBody)).toMatchObject({
-      kind: 'language',
-      value: 'German',
-      state: 'UNKNOWN',
+      claims: [{ kind: 'language', value: 'German', state: 'UNKNOWN' }],
     });
 
     const unknownCard = screen.getByText('Kubernetes').closest('article')!;
@@ -241,15 +312,168 @@ describe('Career Memory profile', () => {
     });
     renderProduct(<ProfilePage />, ['/profile'], apiRepository(fetcher));
     await screen.findByText('Node.js');
-    fireEvent.click(screen.getByRole('button', { name: 'Add profile item' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add multiple facts' }));
     fireEvent.change(screen.getByLabelText('Profile category'), {
       target: { value: 'skill' },
     });
-    fireEvent.change(screen.getByLabelText('Details'), {
+    fireEvent.change(screen.getByLabelText('Fact'), {
       target: { value: 'Rust' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save profile item' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review facts' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save 1 fact' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('status 409');
     expect(screen.queryByText('Docker')).not.toBeInTheDocument();
+  });
+
+  it('authors explicit development succession, exposes history, and retires safely', async () => {
+    const lifecycleProfile = {
+      ...profileBody(),
+      claims: [
+        ...profileBody().claims,
+        {
+          ...profileBody().claims[1],
+          id: 'claim-current-correction',
+          value: 'Synthetic corrected current fact',
+          predecessorClaimId: 'claim-old-correction',
+          successionType: 'CORRECTION',
+          successionNote: 'Synthetic correction note.',
+        },
+      ],
+      historicalClaims: [
+        {
+          ...profileBody().claims[1],
+          id: 'claim-old-python',
+          value: 'Python',
+          scope: 'Beginner',
+          lifecycleState: 'SUPERSEDED',
+          successionType: null,
+          successionNote: null,
+          predecessorClaimId: null,
+          endedAt: timestamp,
+          evidence: [
+            {
+              id: 'evidence-old-python',
+              evidenceType: 'candidate statement',
+              sourceReference: 'candidate-confirmed/manual',
+              excerpt: 'Historical beginner evidence.',
+              state: 'candidate-confirmed',
+              createdAt: timestamp,
+            },
+          ],
+        },
+        {
+          ...profileBody().claims[1],
+          id: 'claim-old-correction',
+          value: 'Synthetic incorrect historical fact',
+          lifecycleState: 'SUPERSEDED',
+          successionType: null,
+          successionNote: null,
+          predecessorClaimId: null,
+          endedAt: timestamp,
+          evidence: [],
+        },
+      ],
+    };
+    const fetcher = vi.fn<typeof fetch>((input) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      if (url.includes('/opportunities?'))
+        return Promise.resolve(response({ data: [] }));
+      if (url.endsWith('/profile'))
+        return Promise.resolve(response(lifecycleProfile));
+      return Promise.resolve(
+        response(
+          {
+            ...lifecycleProfile,
+            reevaluationRequested: true,
+            reevaluation: {
+              id: 'profile-reevaluation-lifecycle',
+              state: 'PENDING',
+              taskCount: 2,
+              completedTaskCount: 0,
+              failedTaskCount: 0,
+              requestedAt: timestamp,
+              updatedAt: timestamp,
+            },
+          },
+          url.endsWith('/retire') ? 200 : 201,
+        ),
+      );
+    });
+    renderProduct(<ProfilePage />, ['/profile'], apiRepository(fetcher));
+    const nodeCard = (await screen.findByText('Node.js')).closest('article')!;
+    fireEvent.click(
+      within(nodeCard).getByRole('button', { name: 'Correct or update' }),
+    );
+    fireEvent.click(
+      within(nodeCard).getByLabelText(
+        /Professional development — the previous information was true/,
+      ),
+    );
+    fireEvent.change(within(nodeCard).getByLabelText('Updated scope'), {
+      target: { value: 'Intermediate' },
+    });
+    fireEvent.change(
+      within(nodeCard).getByLabelText(
+        'Supporting statement for the updated fact',
+      ),
+      { target: { value: 'Synthetic development evidence.' } },
+    );
+    fireEvent.click(
+      within(nodeCard).getByRole('button', { name: 'Confirm update' }),
+    );
+    await waitFor(() =>
+      expect(fetcher).toHaveBeenCalledWith(
+        'http://api.test/candidates/candidate-api-profile/claims/claim-supported/replace',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
+    const replaceCall = fetcher.mock.calls.find(([input]) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      return url.endsWith('/claim-supported/replace');
+    })!;
+    const replaceBody = replaceCall[1]?.body;
+    expect(
+      JSON.parse(typeof replaceBody === 'string' ? replaceBody : '{}'),
+    ).toMatchObject({
+      changeType: 'DEVELOPMENT',
+      scope: 'Intermediate',
+      evidence: { excerpt: 'Synthetic development evidence.' },
+    });
+
+    expect(screen.getByText('Profile history (2)')).toBeInTheDocument();
+    expect(screen.getByText('Corrected')).toBeInTheDocument();
+    expect(screen.getByText('Synthetic correction note.')).toBeInTheDocument();
+    expect(
+      screen.getByText('This current fact corrects an earlier profile item.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Historical beginner evidence.'),
+    ).toBeInTheDocument();
+
+    const unknownCard = screen.getByText('Kubernetes').closest('article')!;
+    fireEvent.click(
+      within(unknownCard).getByRole('button', { name: 'No longer current' }),
+    );
+    fireEvent.click(
+      within(unknownCard).getByRole('button', {
+        name: 'Confirm no longer current',
+      }),
+    );
+    await waitFor(() =>
+      expect(fetcher).toHaveBeenCalledWith(
+        'http://api.test/candidates/candidate-api-profile/claims/claim-unknown/retire',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
   });
 });

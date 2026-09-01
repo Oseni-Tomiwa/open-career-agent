@@ -104,8 +104,13 @@ function repository(item: Opportunity): ProductRepository {
     saveSearchPreferences: () => Promise.reject(new Error('unsupported')),
     getCareerMemory: () => Promise.resolve(emptyCareerMemory()),
     createCandidateClaim: () => Promise.reject(new Error('unsupported')),
+    createCandidateClaimsBatch: () => Promise.reject(new Error('unsupported')),
     updateCandidateClaim: () => Promise.reject(new Error('unsupported')),
     attachClaimEvidence: () => Promise.reject(new Error('unsupported')),
+    replaceCandidateClaim: () => Promise.reject(new Error('unsupported')),
+    retireCandidateClaim: () => Promise.reject(new Error('unsupported')),
+    getCareerProfileReevaluation: () =>
+      Promise.reject(new Error('unsupported')),
     getSearchTargets: () => Promise.reject(new Error('unsupported')),
     createSearchTarget: () => Promise.reject(new Error('unsupported')),
     updateSearchTarget: () => Promise.reject(new Error('unsupported')),
@@ -195,8 +200,14 @@ describe('API-mode Opportunities UI', () => {
       saveSearchPreferences: () => Promise.reject(new Error('unsupported')),
       getCareerMemory: () => Promise.reject(new Error('unsupported')),
       createCandidateClaim: () => Promise.reject(new Error('unsupported')),
+      createCandidateClaimsBatch: () =>
+        Promise.reject(new Error('unsupported')),
       updateCandidateClaim: () => Promise.reject(new Error('unsupported')),
       attachClaimEvidence: () => Promise.reject(new Error('unsupported')),
+      replaceCandidateClaim: () => Promise.reject(new Error('unsupported')),
+      retireCandidateClaim: () => Promise.reject(new Error('unsupported')),
+      getCareerProfileReevaluation: () =>
+        Promise.reject(new Error('unsupported')),
       getSearchTargets: () => Promise.reject(new Error('unsupported')),
       createSearchTarget: () => Promise.reject(new Error('unsupported')),
       updateSearchTarget: () => Promise.reject(new Error('unsupported')),

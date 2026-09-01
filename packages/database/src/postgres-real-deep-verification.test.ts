@@ -72,6 +72,15 @@ const postgresCanonicalIdentitySql = readFileSync(
   ),
   'utf8',
 ).replaceAll('--> statement-breakpoint', '');
+const postgresCareerProfileLifecycleSql = readFileSync(
+  fileURLToPath(
+    new URL(
+      '../migrations-postgres/20260901033104_career_profile_lifecycle/migration.sql',
+      import.meta.url,
+    ),
+  ),
+  'utf8',
+).replaceAll('--> statement-breakpoint', '');
 
 d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
   let handle: DatabaseHandle;
@@ -84,6 +93,7 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
       );
       await handle.pgPool.query(postgresBaselineSql);
       await handle.pgPool.query(postgresCanonicalIdentitySql);
+      await handle.pgPool.query(postgresCareerProfileLifecycleSql);
     }
   });
 
@@ -274,6 +284,81 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
       await adminPool.query(`DROP DATABASE ${freshDbName}`);
       await adminPool.end();
     }
+  });
+
+  it('Section 2: upgrades 43 existing Career Profile claims without changing meaning or Evidence', async () => {
+    const pool = handle.pgPool!;
+    await pool.query('DROP TABLE career_profile_reevaluations');
+    await pool.query(`
+      ALTER TABLE candidate_claims
+        DROP COLUMN subject_key,
+        DROP COLUMN lifecycle_state,
+        DROP COLUMN predecessor_claim_id,
+        DROP COLUMN succession_type,
+        DROP COLUMN succession_note,
+        DROP COLUMN ended_at
+    `);
+    await pool.query(
+      `INSERT INTO candidates (id, created_at, updated_at)
+       VALUES ('candidate-pg-existing-43', to_timestamp(1), to_timestamp(2))`,
+    );
+    for (let index = 1; index <= 43; index += 1) {
+      await pool.query(
+        `INSERT INTO candidate_claims
+          (id, candidate_id, kind, value, scope, state, confidence, created_at, updated_at)
+         VALUES ($1, 'candidate-pg-existing-43', 'skill', $2, $3, 'SUPPORTED', 'HIGH', to_timestamp($4), to_timestamp($5))`,
+        [
+          `existing-pg-claim-${index}`,
+          `Approved fact ${index}`,
+          `Approved scope ${index}`,
+          1000 + index,
+          2000 + index,
+        ],
+      );
+      await pool.query(
+        `INSERT INTO evidence
+          (id, evidence_type, source_reference, excerpt, state, created_at)
+         VALUES ($1, 'candidate statement', 'candidate-confirmed/manual', $2, 'candidate-confirmed', to_timestamp($3))`,
+        [
+          `existing-pg-evidence-${index}`,
+          `Approved Evidence ${index}`,
+          1000 + index,
+        ],
+      );
+      await pool.query(
+        `INSERT INTO candidate_claim_evidence (claim_id, evidence_id)
+         VALUES ($1, $2)`,
+        [`existing-pg-claim-${index}`, `existing-pg-evidence-${index}`],
+      );
+    }
+    await pool.query(postgresCareerProfileLifecycleSql);
+    const claims = await pool.query(
+      `SELECT count(*)::int AS count
+       FROM candidate_claims
+       WHERE candidate_id = 'candidate-pg-existing-43'
+         AND lifecycle_state = 'CURRENT'`,
+    );
+    const evidence = await pool.query(
+      `SELECT count(*)::int AS count
+       FROM candidate_claim_evidence cce
+       JOIN candidate_claims cc ON cc.id = cce.claim_id
+       JOIN evidence e ON e.id = cce.evidence_id
+       WHERE cc.candidate_id = 'candidate-pg-existing-43'
+         AND e.state = 'candidate-confirmed'`,
+    );
+    const sample = await pool.query(
+      `SELECT value, scope, state, confidence, subject_key
+       FROM candidate_claims WHERE id = 'existing-pg-claim-17'`,
+    );
+    expect(claims.rows[0]).toEqual({ count: 43 });
+    expect(evidence.rows[0]).toEqual({ count: 43 });
+    expect(sample.rows[0]).toEqual({
+      value: 'Approved fact 17',
+      scope: 'Approved scope 17',
+      state: 'SUPPORTED',
+      confidence: 'HIGH',
+      subject_key: 'legacy:existing-pg-claim-17',
+    });
   });
 
   // ==================================================

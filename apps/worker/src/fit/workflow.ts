@@ -95,6 +95,7 @@ export function createFitHandlers(deps: {
         evaluationId?: string;
         snapshotId?: string;
         candidateId?: string;
+        profileReevaluationId?: string;
       };
       if (
         !payload.evaluationId ||
@@ -174,6 +175,9 @@ export function createFitHandlers(deps: {
             evaluationId,
             snapshotId,
             candidateId,
+            ...(payload.profileReevaluationId
+              ? { profileReevaluationId: payload.profileReevaluationId }
+              : {}),
           },
           idempotencyKey: `quality-${evaluationId}`,
         });
@@ -228,6 +232,9 @@ export function createFitHandlers(deps: {
           evaluationId,
           snapshotId,
           candidateId,
+          ...(payload.profileReevaluationId
+            ? { profileReevaluationId: payload.profileReevaluationId }
+            : {}),
         },
         idempotencyKey: `quality-${evaluationId}`,
       });

@@ -14,6 +14,7 @@ import {
 } from './repositories/career-memory-repository.js';
 import { OpportunityRepository } from './repositories/opportunity-repository.js';
 import { getTables } from './schema-helper.js';
+import { BackgroundTaskLedger } from './task-ledger.js';
 
 describe('Career Memory repository', () => {
   let directory: string;
@@ -264,5 +265,272 @@ describe('Career Memory repository', () => {
     expect(
       tasks.map((task: any) => JSON.parse(task.payload).snapshotId),
     ).not.toContain('snapshot-memory-current-old');
+  });
+
+  it('creates a reviewed batch with one bounded reevaluation sweep', async () => {
+    const candidate = candidateId('candidate-memory-batch');
+    await new CandidateRepository(database).createCandidate(candidate);
+    const opportunities = new OpportunityRepository(database);
+    const opportunity = opportunityId('opportunity-memory-batch');
+    await opportunities.createOpportunity(opportunity);
+    await opportunities.appendSnapshot({
+      id: snapshotId('snapshot-memory-batch'),
+      opportunityId: opportunity,
+      title: 'Platform Engineer',
+      organization: 'Example',
+      content: 'Node.js, PostgreSQL, and Linux.',
+      fingerprint: 'memory-batch',
+    });
+    const canonicalBefore = await opportunities.getSnapshot(
+      snapshotId('snapshot-memory-batch'),
+    );
+
+    const result = await new CareerMemoryRepository(database).createClaimsBatch(
+      {
+        candidateId: candidate,
+        claims: [
+          { kind: 'skill', value: 'Node.js', state: 'UNKNOWN' },
+          { kind: 'skill', value: 'PostgreSQL', state: 'UNKNOWN' },
+          { kind: 'capability', value: 'Linux', state: 'UNKNOWN' },
+        ],
+      },
+    );
+
+    expect(result.claims).toHaveLength(3);
+    expect(result.reevaluation.taskCount).toBe(1);
+    const { backgroundTasks } = getTables(database);
+    expect(
+      await (database.db as any).select().from(backgroundTasks),
+    ).toHaveLength(1);
+    expect(
+      await opportunities.getSnapshot(snapshotId('snapshot-memory-batch')),
+    ).toEqual(canonicalBefore);
+  });
+
+  it('preserves correction and development succession with Evidence on each historical state', async () => {
+    const candidate = candidateId('candidate-memory-succession');
+    await new CandidateRepository(database).createCandidate(candidate);
+    const repository = new CareerMemoryRepository(database);
+    const original = await repository.createClaim({
+      candidateId: candidate,
+      kind: 'skill',
+      value: 'Python',
+      scope: 'Beginner',
+      state: 'SUPPORTED',
+      evidence: {
+        evidenceType: 'candidate statement',
+        excerpt: 'I was a beginner when this was recorded.',
+        state: 'candidate-confirmed',
+      },
+    });
+
+    const developed = await repository.replaceClaim({
+      candidateId: candidate,
+      claimId: claimId(original.id),
+      changeType: 'DEVELOPMENT',
+      value: 'Python',
+      scope: 'Intermediate',
+      state: 'SUPPORTED',
+      evidence: {
+        evidenceType: 'candidate statement',
+        excerpt: 'I have since progressed to intermediate proficiency.',
+        state: 'candidate-confirmed',
+      },
+      note: 'Professional development update.',
+    });
+
+    const profile = await repository.getProfile(candidate);
+    expect(profile?.claims).toHaveLength(1);
+    expect(profile?.claims[0]).toMatchObject({
+      id: developed.claim.id,
+      scope: 'Intermediate',
+      lifecycleState: 'CURRENT',
+      predecessorClaimId: original.id,
+      successionType: 'DEVELOPMENT',
+      evidence: [
+        { excerpt: 'I have since progressed to intermediate proficiency.' },
+      ],
+    });
+    expect(profile?.historicalClaims).toHaveLength(1);
+    expect(profile?.historicalClaims[0]).toMatchObject({
+      id: original.id,
+      scope: 'Beginner',
+      lifecycleState: 'SUPERSEDED',
+      evidence: [{ excerpt: 'I was a beginner when this was recorded.' }],
+    });
+    expect(
+      await new CandidateRepository(database).getClaims(candidate),
+    ).toEqual([expect.objectContaining({ id: developed.claim.id })]);
+  });
+
+  it('retires a current fact without asserting its opposite or deleting history', async () => {
+    const candidate = candidateId('candidate-memory-retire');
+    await new CandidateRepository(database).createCandidate(candidate);
+    const repository = new CareerMemoryRepository(database);
+    const created = await repository.createClaim({
+      candidateId: candidate,
+      kind: 'certification',
+      value: 'Synthetic certification',
+      state: 'SUPPORTED',
+      evidence: {
+        evidenceType: 'candidate statement',
+        excerpt: 'Synthetic acceptance Evidence.',
+        state: 'candidate-confirmed',
+      },
+    });
+    await repository.retireClaim({
+      candidateId: candidate,
+      claimId: claimId(created.id),
+      note: 'No longer current.',
+    });
+    const profile = await repository.getProfile(candidate);
+    expect(profile?.claims).toEqual([]);
+    expect(profile?.historicalClaims[0]).toMatchObject({
+      id: created.id,
+      state: 'SUPPORTED',
+      lifecycleState: 'RETIRED',
+      successionNote: 'No longer current.',
+      evidence: [{ excerpt: 'Synthetic acceptance Evidence.' }],
+    });
+  });
+
+  it('records a correction as a new current state without rewriting the mistaken state', async () => {
+    const candidate = candidateId('candidate-memory-correction');
+    await new CandidateRepository(database).createCandidate(candidate);
+    const repository = new CareerMemoryRepository(database);
+    const mistaken = await repository.createClaim({
+      candidateId: candidate,
+      kind: 'experience',
+      value: 'React experience',
+      scope: '8 years',
+      state: 'SUPPORTED',
+      evidence: {
+        evidenceType: 'candidate statement',
+        excerpt: 'Mistaken entry recorded as eight years.',
+        state: 'candidate-confirmed',
+      },
+    });
+    await repository.replaceClaim({
+      candidateId: candidate,
+      claimId: claimId(mistaken.id),
+      changeType: 'CORRECTION',
+      value: 'React experience',
+      scope: '3 years',
+      state: 'SUPPORTED',
+      evidence: {
+        evidenceType: 'candidate correction',
+        excerpt: 'The correct duration is three years.',
+        state: 'candidate-confirmed',
+      },
+      note: 'Corrected an entry mistake.',
+    });
+    const profile = await repository.getProfile(candidate);
+    expect(profile?.claims[0]).toMatchObject({
+      scope: '3 years',
+      successionType: 'CORRECTION',
+      successionNote: 'Corrected an entry mistake.',
+      evidence: [{ excerpt: 'The correct duration is three years.' }],
+    });
+    expect(profile?.historicalClaims[0]).toMatchObject({
+      scope: '8 years',
+      evidence: [{ excerpt: 'Mistaken entry recorded as eight years.' }],
+    });
+  });
+
+  it('rejects normalized duplicate current identity without fuzzy merging', async () => {
+    const candidate = candidateId('candidate-memory-identity');
+    await new CandidateRepository(database).createCandidate(candidate);
+    const repository = new CareerMemoryRepository(database);
+    await repository.createClaim({
+      candidateId: candidate,
+      kind: 'skill',
+      value: 'Node.js',
+      state: 'UNKNOWN',
+    });
+    await expect(
+      repository.createClaim({
+        candidateId: candidate,
+        kind: 'SKILL',
+        value: 'node js',
+        state: 'UNKNOWN',
+      }),
+    ).rejects.toMatchObject({ code: 'DUPLICATE_CURRENT_CLAIM' });
+  });
+
+  it('serializes concurrent normalized duplicate authoring to one current fact', async () => {
+    const candidate = candidateId('candidate-memory-identity-race');
+    await new CandidateRepository(database).createCandidate(candidate);
+    const repository = new CareerMemoryRepository(database);
+    const results = await Promise.allSettled([
+      repository.createClaim({
+        candidateId: candidate,
+        kind: 'skill',
+        value: 'NodeJS',
+        state: 'UNKNOWN',
+      }),
+      repository.createClaim({
+        candidateId: candidate,
+        kind: 'SKILL',
+        value: 'node.js',
+        state: 'UNKNOWN',
+      }),
+    ]);
+    expect(
+      results.filter((result) => result.status === 'fulfilled'),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === 'rejected'),
+    ).toHaveLength(1);
+    expect((await repository.getProfile(candidate))?.claims).toHaveLength(1);
+  });
+
+  it('keeps a 100-fact current profile query bounded and free of row-by-row Evidence queries', async () => {
+    const candidate = candidateId('candidate-memory-large');
+    await new CandidateRepository(database).createCandidate(candidate);
+    const repository = new CareerMemoryRepository(database);
+    await repository.createClaimsBatch({
+      candidateId: candidate,
+      claims: Array.from({ length: 100 }, (_, index) => ({
+        kind: 'synthetic_skill',
+        value: `Synthetic skill ${index + 1}`,
+        state: 'UNKNOWN' as const,
+      })),
+    });
+    const startedAt = performance.now();
+    const profile = await repository.getProfile(candidate);
+    expect(profile?.claims).toHaveLength(100);
+    expect(performance.now() - startedAt).toBeLessThan(2_000);
+  });
+
+  it('derives failed reevaluation state from durable task failure', async () => {
+    const candidate = candidateId('candidate-memory-reevaluation-failure');
+    await new CandidateRepository(database).createCandidate(candidate);
+    const opportunity = opportunityId(
+      'opportunity-memory-reevaluation-failure',
+    );
+    const opportunities = new OpportunityRepository(database);
+    await opportunities.createOpportunity(opportunity);
+    await opportunities.appendSnapshot({
+      id: snapshotId('snapshot-memory-reevaluation-failure'),
+      opportunityId: opportunity,
+      title: 'Synthetic role',
+      organization: 'Synthetic organization',
+      content: 'Synthetic content.',
+      fingerprint: 'memory-reevaluation-failure',
+    });
+    const repository = new CareerMemoryRepository(database);
+    const mutation = await repository.createClaimsBatch({
+      candidateId: candidate,
+      claims: [{ kind: 'skill', value: 'Synthetic skill', state: 'UNKNOWN' }],
+    });
+    const ledger = new BackgroundTaskLedger(database);
+    const task = await ledger.claimNext({
+      leaseOwner: 'failure-test',
+      leaseDurationMs: 30_000,
+    });
+    await ledger.markFailed(task!.id, 'failure-test', 'Synthetic failure');
+    expect(
+      await repository.getReevaluation(candidate, mutation.reevaluation.id),
+    ).toMatchObject({ state: 'FAILED', failedTaskCount: 1 });
   });
 });

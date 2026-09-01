@@ -637,6 +637,131 @@ describe('API application', () => {
     expect(otherProfile.json()).toMatchObject({ claims: [] });
   });
 
+  it('supports batch authoring, explicit succession, retirement, and non-interference', async () => {
+    const candidate = candidateId('candidate-profile-lifecycle-api');
+    await new CandidateRepository(database).createCandidate(candidate);
+    const before = {
+      applications: database
+        .sqlite!.prepare('select count(*) as count from applications')
+        .get(),
+      events: database
+        .sqlite!.prepare('select count(*) as count from application_events')
+        .get(),
+      opportunities: database
+        .sqlite!.prepare('select count(*) as count from opportunities')
+        .get(),
+      snapshots: database
+        .sqlite!.prepare('select count(*) as count from opportunity_snapshots')
+        .get(),
+    };
+
+    const batch = await app.inject({
+      method: 'POST',
+      url: `/candidates/${candidate}/claims/batch`,
+      payload: {
+        claims: [
+          {
+            kind: 'skill',
+            value: 'Synthetic Python',
+            scope: 'Beginner',
+            state: 'UNKNOWN',
+          },
+          {
+            kind: 'project',
+            value: 'Synthetic project',
+            state: 'SUPPORTED',
+            evidence: {
+              evidenceType: 'candidate statement',
+              excerpt: 'Synthetic evidence only.',
+              state: 'candidate-confirmed',
+            },
+          },
+        ],
+      },
+    });
+    expect(batch.statusCode).toBe(201);
+    expect(batch.json()).toMatchObject({
+      claims: expect.arrayContaining([
+        expect.objectContaining({ value: 'Synthetic Python' }),
+        expect.objectContaining({ value: 'Synthetic project' }),
+      ]),
+      historicalClaims: [],
+      reevaluationRequested: true,
+      reevaluation: { state: 'SUCCEEDED', taskCount: 0 },
+    });
+    const python = batch
+      .json<{ claims: Array<{ id: string; value: string }> }>()
+      .claims.find((claim) => claim.value === 'Synthetic Python')!;
+
+    const replacement = await app.inject({
+      method: 'POST',
+      url: `/candidates/${candidate}/claims/${python.id}/replace`,
+      payload: {
+        changeType: 'DEVELOPMENT',
+        value: 'Synthetic Python',
+        scope: 'Intermediate',
+        state: 'SUPPORTED',
+        evidence: {
+          evidenceType: 'candidate statement',
+          excerpt: 'Synthetic development evidence.',
+          state: 'candidate-confirmed',
+        },
+      },
+    });
+    expect(replacement.statusCode).toBe(201);
+    expect(replacement.json()).toMatchObject({
+      claims: expect.arrayContaining([
+        expect.objectContaining({
+          value: 'Synthetic Python',
+          scope: 'Intermediate',
+          successionType: 'DEVELOPMENT',
+        }),
+        expect.objectContaining({ value: 'Synthetic project' }),
+      ]),
+      historicalClaims: [
+        {
+          id: python.id,
+          scope: 'Beginner',
+          lifecycleState: 'SUPERSEDED',
+        },
+      ],
+    });
+    const project = replacement
+      .json<{ claims: Array<{ id: string; value: string }> }>()
+      .claims.find((claim) => claim.value === 'Synthetic project')!;
+    const retired = await app.inject({
+      method: 'POST',
+      url: `/candidates/${candidate}/claims/${project.id}/retire`,
+      payload: { note: 'Synthetic retirement.' },
+    });
+    expect(retired.statusCode).toBe(200);
+    expect(retired.json()).toMatchObject({
+      claims: [{ value: 'Synthetic Python' }],
+      historicalClaims: expect.arrayContaining([
+        expect.objectContaining({
+          id: project.id,
+          lifecycleState: 'RETIRED',
+          successionNote: 'Synthetic retirement.',
+        }),
+      ]),
+    });
+
+    expect({
+      applications: database
+        .sqlite!.prepare('select count(*) as count from applications')
+        .get(),
+      events: database
+        .sqlite!.prepare('select count(*) as count from application_events')
+        .get(),
+      opportunities: database
+        .sqlite!.prepare('select count(*) as count from opportunities')
+        .get(),
+      snapshots: database
+        .sqlite!.prepare('select count(*) as count from opportunity_snapshots')
+        .get(),
+    }).toEqual(before);
+  });
+
   it('supports unknown claim editing and evidence-backed confirmation', async () => {
     const candidate = candidateId('candidate-profile-edit');
     new CandidateRepository(database).createCandidate(candidate);

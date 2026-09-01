@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { DatabaseHandle } from '../client.js';
 import { getTables } from '../schema-helper.js';
 import { BackgroundTaskLedger } from '../task-ledger.js';
@@ -54,6 +54,8 @@ export class CandidateRepository {
       scope: claim.scope,
       state: claim.state,
       confidence: claim.confidence,
+      subjectKey: `legacy:${claim.id}`,
+      lifecycleState: 'CURRENT',
       createdAt: new Date(timestamp),
       updatedAt: new Date(timestamp),
     });
@@ -78,6 +80,11 @@ export class CandidateRepository {
     return await db
       .select()
       .from(candidateClaims)
-      .where(eq(candidateClaims.candidateId, candidateId));
+      .where(
+        and(
+          eq(candidateClaims.candidateId, candidateId),
+          eq(candidateClaims.lifecycleState, 'CURRENT'),
+        ),
+      );
   }
 }

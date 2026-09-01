@@ -3,8 +3,10 @@ import {
   ApplicationDetailResponseSchema,
   ApplicationListResponseSchema,
   AttachClaimEvidenceInputSchema,
+  BatchCreateCandidateClaimsInputSchema,
   CandidateProfileResponseSchema,
   CareerMemoryMutationResponseSchema,
+  CareerProfileReevaluationSchema,
   CareerSignalsResponseSchema,
   CreateApplicationInputSchema,
   CreateCandidateClaimInputSchema,
@@ -24,6 +26,8 @@ import {
   LoginInputSchema,
   LogoutResponseSchema,
   RegisterInputSchema,
+  ReplaceCandidateClaimInputSchema,
+  RetireCandidateClaimInputSchema,
 } from '@oca/schemas';
 import type { Static, TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
@@ -169,6 +173,23 @@ export class RoleviaApiClient {
     );
   }
 
+  public async createCandidateClaimsBatch(
+    candidateId: string,
+    input: Static<typeof BatchCreateCandidateClaimsInputSchema>,
+    options?: RequestOptions,
+  ): Promise<Static<typeof CareerMemoryMutationResponseSchema>> {
+    if (!Value.Check(BatchCreateCandidateClaimsInputSchema, input)) {
+      throw new ValidationError('Invalid profile batch input.', input);
+    }
+    return this.request(
+      `/candidates/${encodeURIComponent(candidateId)}/claims/batch`,
+      CareerMemoryMutationResponseSchema,
+      'POST',
+      input,
+      options,
+    );
+  }
+
   public async updateCandidateClaim(
     candidateId: string,
     claimId: string,
@@ -201,6 +222,56 @@ export class RoleviaApiClient {
       CareerMemoryMutationResponseSchema,
       'POST',
       input,
+      options,
+    );
+  }
+
+  public async replaceCandidateClaim(
+    candidateId: string,
+    claimId: string,
+    input: Static<typeof ReplaceCandidateClaimInputSchema>,
+    options?: RequestOptions,
+  ): Promise<Static<typeof CareerMemoryMutationResponseSchema>> {
+    if (!Value.Check(ReplaceCandidateClaimInputSchema, input)) {
+      throw new ValidationError('Invalid profile replacement input.', input);
+    }
+    return this.request(
+      `/candidates/${encodeURIComponent(candidateId)}/claims/${encodeURIComponent(claimId)}/replace`,
+      CareerMemoryMutationResponseSchema,
+      'POST',
+      input,
+      options,
+    );
+  }
+
+  public async retireCandidateClaim(
+    candidateId: string,
+    claimId: string,
+    input: Static<typeof RetireCandidateClaimInputSchema>,
+    options?: RequestOptions,
+  ): Promise<Static<typeof CareerMemoryMutationResponseSchema>> {
+    if (!Value.Check(RetireCandidateClaimInputSchema, input)) {
+      throw new ValidationError('Invalid profile retirement input.', input);
+    }
+    return this.request(
+      `/candidates/${encodeURIComponent(candidateId)}/claims/${encodeURIComponent(claimId)}/retire`,
+      CareerMemoryMutationResponseSchema,
+      'POST',
+      input,
+      options,
+    );
+  }
+
+  public async getCareerProfileReevaluation(
+    candidateId: string,
+    reevaluationId: string,
+    options?: RequestOptions,
+  ): Promise<Static<typeof CareerProfileReevaluationSchema>> {
+    return this.request(
+      `/candidates/${encodeURIComponent(candidateId)}/profile/reevaluations/${encodeURIComponent(reevaluationId)}`,
+      CareerProfileReevaluationSchema,
+      'GET',
+      undefined,
       options,
     );
   }

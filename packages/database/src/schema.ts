@@ -171,19 +171,66 @@ export const CLAIM_STATES = [
 
 export const CLAIM_CONFIDENCE_LEVELS = ['HIGH', 'MODERATE', 'LOW'] as const;
 
-export const candidateClaims = sqliteTable('candidate_claims', {
-  id: text('id').primaryKey(),
-  candidateId: text('candidate_id')
-    .notNull()
-    .references(() => candidates.id, { onDelete: 'restrict' }),
-  kind: text('kind').notNull(),
-  value: text('value').notNull(),
-  scope: text('scope'),
-  state: text('state', { enum: CLAIM_STATES }).notNull(),
-  confidence: text('confidence', { enum: CLAIM_CONFIDENCE_LEVELS }),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
-});
+export const CLAIM_LIFECYCLE_STATES = [
+  'CURRENT',
+  'SUPERSEDED',
+  'RETIRED',
+] as const;
+
+export const CLAIM_SUCCESSION_TYPES = ['CORRECTION', 'DEVELOPMENT'] as const;
+
+export const candidateClaims = sqliteTable(
+  'candidate_claims',
+  {
+    id: text('id').primaryKey(),
+    candidateId: text('candidate_id')
+      .notNull()
+      .references(() => candidates.id, { onDelete: 'restrict' }),
+    kind: text('kind').notNull(),
+    value: text('value').notNull(),
+    scope: text('scope'),
+    state: text('state', { enum: CLAIM_STATES }).notNull(),
+    confidence: text('confidence', { enum: CLAIM_CONFIDENCE_LEVELS }),
+    subjectKey: text('subject_key').notNull(),
+    lifecycleState: text('lifecycle_state', { enum: CLAIM_LIFECYCLE_STATES })
+      .notNull()
+      .default('CURRENT'),
+    predecessorClaimId: text('predecessor_claim_id'),
+    successionType: text('succession_type', { enum: CLAIM_SUCCESSION_TYPES }),
+    successionNote: text('succession_note'),
+    endedAt: integer('ended_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    index('candidate_claims_candidate_lifecycle_idx').on(
+      table.candidateId,
+      table.lifecycleState,
+    ),
+    uniqueIndex('candidate_claims_current_subject_unique')
+      .on(table.candidateId, table.subjectKey)
+      .where(sql`${table.lifecycleState} = 'CURRENT'`),
+  ],
+);
+
+export const careerProfileReevaluations = sqliteTable(
+  'career_profile_reevaluations',
+  {
+    id: text('id').primaryKey(),
+    candidateId: text('candidate_id')
+      .notNull()
+      .references(() => candidates.id, { onDelete: 'restrict' }),
+    taskCount: integer('task_count').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    index('career_profile_reevaluations_candidate_idx').on(
+      table.candidateId,
+      table.createdAt,
+    ),
+  ],
+);
 
 export const opportunities = sqliteTable('opportunities', {
   id: text('id').primaryKey(),

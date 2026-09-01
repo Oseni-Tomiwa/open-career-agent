@@ -16,6 +16,7 @@ import {
   EvidenceRepository,
   BackgroundTaskLedger,
   type DatabaseHandle,
+  type CareerProfileReevaluation,
 } from '@oca/database';
 import { Type, type Static } from '@sinclair/typebox';
 import { OpportunityRepository } from '@oca/database';
@@ -41,6 +42,10 @@ import {
   CreateCandidateClaimInputSchema,
   UpdateCandidateClaimInputSchema,
   AttachClaimEvidenceInputSchema,
+  BatchCreateCandidateClaimsInputSchema,
+  ReplaceCandidateClaimInputSchema,
+  RetireCandidateClaimInputSchema,
+  CareerProfileReevaluationSchema,
   CareerMemoryMutationResponseSchema,
   SearchTargetSchema,
   CreateSearchTargetInputSchema,
@@ -228,6 +233,10 @@ export async function createApiApp(
     candidateId: Type.String(),
     claimId: Type.String(),
   });
+  const reevaluationParams = Type.Object({
+    candidateId: Type.String(),
+    reevaluationId: Type.String(),
+  });
 
   app.get(
     '/candidates/:candidateId/profile',
@@ -279,11 +288,15 @@ export async function createApiApp(
       const repository = new CareerMemoryRepository(options.database);
       const cId = candidateId(request.params.candidateId);
       try {
-        await repository.createClaim({ candidateId: cId, ...request.body });
+        const mutation = await repository.createClaimsBatch({
+          candidateId: cId,
+          claims: [request.body],
+        });
         const profile = (await repository.getProfile(cId))!;
         return await reply.status(201).send({
           ...serializeProfile(profile),
           reevaluationRequested: true,
+          reevaluation: serializeReevaluation(mutation.reevaluation),
         });
       } catch (error) {
         if (error instanceof CareerMemoryError) {
@@ -318,7 +331,7 @@ export async function createApiApp(
       const repository = new CareerMemoryRepository(options.database);
       const cId = candidateId(request.params.candidateId);
       try {
-        await repository.updateClaim({
+        const mutation = await repository.updateClaim({
           candidateId: cId,
           claimId: claimId(request.params.claimId),
           ...request.body,
@@ -326,7 +339,10 @@ export async function createApiApp(
         const profile = (await repository.getProfile(cId))!;
         return {
           ...serializeProfile(profile),
-          reevaluationRequested: true,
+          reevaluationRequested: mutation.reevaluation !== null,
+          ...(mutation.reevaluation
+            ? { reevaluation: serializeReevaluation(mutation.reevaluation) }
+            : {}),
         };
       } catch (error) {
         if (error instanceof CareerMemoryError) {
@@ -357,7 +373,88 @@ export async function createApiApp(
       const repository = new CareerMemoryRepository(options.database);
       const cId = candidateId(request.params.candidateId);
       try {
-        await repository.attachEvidence({
+        const mutation = await repository.attachEvidence({
+          candidateId: cId,
+          claimId: claimId(request.params.claimId),
+          ...request.body,
+        });
+        const profile = (await repository.getProfile(cId))!;
+        return await reply.status(201).send({
+          ...serializeProfile(profile),
+          reevaluationRequested: mutation.reevaluation !== null,
+          ...(mutation.reevaluation
+            ? { reevaluation: serializeReevaluation(mutation.reevaluation) }
+            : {}),
+        });
+      } catch (error) {
+        if (error instanceof CareerMemoryError) {
+          await sendRepositoryError(reply, request.id, error);
+          return;
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post(
+    '/candidates/:candidateId/claims/batch',
+    {
+      schema: {
+        tags: ['career-memory'],
+        summary: 'Create a reviewed batch of candidate profile items',
+        params: profileParams,
+        body: BatchCreateCandidateClaimsInputSchema,
+        response: {
+          201: CareerMemoryMutationResponseSchema,
+          404: ApiErrorEnvelopeSchema,
+          409: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const repository = new CareerMemoryRepository(options.database);
+      const cId = candidateId(request.params.candidateId);
+      try {
+        const mutation = await repository.createClaimsBatch({
+          candidateId: cId,
+          claims: request.body.claims,
+        });
+        const profile = (await repository.getProfile(cId))!;
+        return await reply.status(201).send({
+          ...serializeProfile(profile),
+          reevaluationRequested: true,
+          reevaluation: serializeReevaluation(mutation.reevaluation),
+        });
+      } catch (error) {
+        if (error instanceof CareerMemoryError) {
+          await sendRepositoryError(reply, request.id, error);
+          return;
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post(
+    '/candidates/:candidateId/claims/:claimId/replace',
+    {
+      schema: {
+        tags: ['career-memory'],
+        summary: 'Correct or update a current candidate profile item',
+        params: claimParams,
+        body: ReplaceCandidateClaimInputSchema,
+        response: {
+          201: CareerMemoryMutationResponseSchema,
+          404: ApiErrorEnvelopeSchema,
+          409: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const repository = new CareerMemoryRepository(options.database);
+      const cId = candidateId(request.params.candidateId);
+      try {
+        const mutation = await repository.replaceClaim({
           candidateId: cId,
           claimId: claimId(request.params.claimId),
           ...request.body,
@@ -366,7 +463,80 @@ export async function createApiApp(
         return await reply.status(201).send({
           ...serializeProfile(profile),
           reevaluationRequested: true,
+          reevaluation: serializeReevaluation(mutation.reevaluation),
         });
+      } catch (error) {
+        if (error instanceof CareerMemoryError) {
+          await sendRepositoryError(reply, request.id, error);
+          return;
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post(
+    '/candidates/:candidateId/claims/:claimId/retire',
+    {
+      schema: {
+        tags: ['career-memory'],
+        summary: 'Mark a current candidate profile item no longer current',
+        params: claimParams,
+        body: RetireCandidateClaimInputSchema,
+        response: {
+          200: CareerMemoryMutationResponseSchema,
+          404: ApiErrorEnvelopeSchema,
+          409: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const repository = new CareerMemoryRepository(options.database);
+      const cId = candidateId(request.params.candidateId);
+      try {
+        const reevaluation = await repository.retireClaim({
+          candidateId: cId,
+          claimId: claimId(request.params.claimId),
+          ...request.body,
+        });
+        const profile = (await repository.getProfile(cId))!;
+        return {
+          ...serializeProfile(profile),
+          reevaluationRequested: true,
+          reevaluation: serializeReevaluation(reevaluation),
+        };
+      } catch (error) {
+        if (error instanceof CareerMemoryError) {
+          await sendRepositoryError(reply, request.id, error);
+          return;
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.get(
+    '/candidates/:candidateId/profile/reevaluations/:reevaluationId',
+    {
+      schema: {
+        tags: ['career-memory'],
+        summary: 'Read durable Career Profile reevaluation state',
+        params: reevaluationParams,
+        response: {
+          200: CareerProfileReevaluationSchema,
+          404: ApiErrorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const repository = new CareerMemoryRepository(options.database);
+      try {
+        return serializeReevaluation(
+          await repository.getReevaluation(
+            candidateId(request.params.candidateId),
+            request.params.reevaluationId,
+          ),
+        );
       } catch (error) {
         if (error instanceof CareerMemoryError) {
           await sendRepositoryError(reply, request.id, error);
@@ -1461,26 +1631,41 @@ export async function createApiApp(
 }
 
 function serializeProfile(profile: any) {
+  const serializeClaim = (claim: any) => ({
+    id: claim.id,
+    kind: claim.kind,
+    value: claim.value,
+    scope: claim.scope,
+    state: claim.state,
+    confidence: claim.confidence,
+    lifecycleState: claim.lifecycleState,
+    predecessorClaimId: claim.predecessorClaimId,
+    successionType: claim.successionType,
+    successionNote: claim.successionNote,
+    endedAt: claim.endedAt ? new Date(claim.endedAt).toISOString() : null,
+    createdAt: new Date(claim.createdAt).toISOString(),
+    updatedAt: new Date(claim.updatedAt).toISOString(),
+    evidence: claim.evidence.map((item: any) => ({
+      ...item,
+      createdAt: new Date(item.createdAt).toISOString(),
+    })),
+  });
   return {
     candidate: {
       id: profile.candidate.id,
       createdAt: new Date(profile.candidate.createdAt).toISOString(),
       updatedAt: new Date(profile.candidate.updatedAt).toISOString(),
     },
-    claims: profile.claims.map((claim: any) => ({
-      id: claim.id,
-      kind: claim.kind,
-      value: claim.value,
-      scope: claim.scope,
-      state: claim.state,
-      confidence: claim.confidence,
-      createdAt: new Date(claim.createdAt).toISOString(),
-      updatedAt: new Date(claim.updatedAt).toISOString(),
-      evidence: claim.evidence.map((item: any) => ({
-        ...item,
-        createdAt: new Date(item.createdAt).toISOString(),
-      })),
-    })),
+    claims: profile.claims.map(serializeClaim),
+    historicalClaims: profile.historicalClaims.map(serializeClaim),
+  };
+}
+
+function serializeReevaluation(reevaluation: CareerProfileReevaluation) {
+  return {
+    ...reevaluation,
+    requestedAt: reevaluation.requestedAt.toISOString(),
+    updatedAt: reevaluation.updatedAt.toISOString(),
   };
 }
 
@@ -1490,7 +1675,9 @@ async function sendRepositoryError(
   error: CareerMemoryError,
 ) {
   const status =
-    error.code === 'CANDIDATE_NOT_FOUND' || error.code === 'CLAIM_NOT_FOUND'
+    error.code === 'CANDIDATE_NOT_FOUND' ||
+    error.code === 'CLAIM_NOT_FOUND' ||
+    error.code === 'REEVALUATION_NOT_FOUND'
       ? 404
       : 409;
   await sendCareerMemoryError(reply, requestId, status, error.code);

@@ -112,6 +112,7 @@ export function createQualityHandlers(deps: {
       snapshotId?: string;
       candidateId?: string;
       evaluatedAt?: string | number;
+      profileReevaluationId?: string;
     };
 
     if (!payload.evaluationId || !payload.snapshotId) {
@@ -262,6 +263,9 @@ export function createQualityHandlers(deps: {
         evaluationId,
         snapshotId,
         candidateId: payload.candidateId,
+        ...(payload.profileReevaluationId
+          ? { profileReevaluationId: payload.profileReevaluationId }
+          : {}),
       },
       idempotencyKey: `decision-${evaluationId}-${inputFingerprint}`,
     });

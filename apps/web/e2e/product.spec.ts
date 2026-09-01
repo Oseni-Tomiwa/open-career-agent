@@ -182,6 +182,71 @@ test('mobile navigation and dark theme remain usable', async ({
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
 });
 
+test('Career Profile batch, development, history, and retirement workflows remain usable', async ({
+  page,
+}) => {
+  await page.goto('/settings');
+  await expect(
+    page.getByRole('heading', { name: 'What Rolevia knows about you' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Add multiple facts' }).click();
+  await page.getByRole('button', { name: 'Add another fact' }).click();
+  const categories = page.getByLabel('Profile category');
+  const facts = page.getByLabel('Fact', { exact: true });
+  await categories.nth(0).fill('language');
+  await facts.nth(0).fill('Synthetic acceptance language');
+  await categories.nth(1).fill('project');
+  await facts.nth(1).fill('Synthetic acceptance project');
+  await page.getByLabel('What Rolevia knows').nth(1).selectOption('SUPPORTED');
+  await page
+    .getByLabel('Your supporting statement')
+    .fill('Synthetic browser-only supporting Evidence.');
+  await page.getByRole('button', { name: 'Review facts' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Review facts before saving' }),
+  ).toBeVisible();
+  await expect(page.getByText('Synthetic acceptance language')).toBeVisible();
+  await expect(page.getByText('Synthetic acceptance project')).toBeVisible();
+  await page.getByRole('button', { name: 'Save 2 facts' }).click();
+  await expect(page.getByText('Synthetic acceptance language')).toBeVisible();
+
+  const nodeCard = page
+    .getByText('Node.js', { exact: true })
+    .locator('xpath=ancestor::article');
+  await nodeCard.getByRole('button', { name: 'Correct or update' }).click();
+  await nodeCard
+    .getByLabel(/Professional development — the previous information was true/)
+    .check();
+  await nodeCard.getByLabel('Updated scope').fill('Synthetic newer scope');
+  await nodeCard
+    .getByLabel('Supporting statement for the updated fact')
+    .fill('Synthetic browser-only development Evidence.');
+  await nodeCard.getByRole('button', { name: 'Confirm update' }).click();
+  await expect(page.getByText(/Profile history \(1\)/)).toBeVisible();
+
+  const kubernetesCard = page
+    .getByText('Kubernetes', { exact: true })
+    .locator('xpath=ancestor::article');
+  await kubernetesCard
+    .getByRole('button', { name: 'No longer current' })
+    .click();
+  await kubernetesCard
+    .getByRole('button', { name: 'Confirm no longer current' })
+    .click();
+  await expect(
+    page
+      .getByText('Kubernetes', { exact: true })
+      .locator('xpath=ancestor::article'),
+  ).toHaveCount(1);
+
+  const hasHorizontalOverflow = await page.evaluate(
+    () =>
+      document.documentElement.scrollWidth >
+      document.documentElement.clientWidth,
+  );
+  expect(hasHorizontalOverflow).toBe(false);
+});
+
 test('authors, edits, removes, and runs a multi-source Search Preference', async ({
   page,
 }) => {

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import {
   candidateId,
+  claimId,
   evaluationId,
   opportunityId,
   snapshotId,
@@ -18,6 +19,7 @@ import { CandidateRepository } from './repositories/candidate-repository.js';
 import { OpportunityRepository } from './repositories/opportunity-repository.js';
 import { EvaluationRepository } from './repositories/evaluation-repository.js';
 import { CareerSignalsRepository } from './repositories/career-signals-repository.js';
+import { CareerMemoryRepository } from './repositories/career-memory-repository.js';
 
 describe('Production Data Layer V1 Dual-Engine Contract & Parity Suite', () => {
   describe('Schema Parity Invariant', () => {
@@ -233,6 +235,73 @@ describe('Production Data Layer V1 Dual-Engine Contract & Parity Suite', () => {
 
         const currentEval = await evalRepo.getCurrentEvaluation(candId, snapId);
         expect(currentEval?.fitLevel).toBe('strong');
+      });
+
+      it('preserves Career Profile succession and Evidence on PostgreSQL', async () => {
+        const candidate = candidateId(`cand-profile-pg-${Date.now()}`);
+        await new CandidateRepository(handle).createCandidate(candidate);
+        const repository = new CareerMemoryRepository(handle);
+        const batch = await repository.createClaimsBatch({
+          candidateId: candidate,
+          claims: [
+            {
+              kind: 'skill',
+              value: 'Synthetic PostgreSQL skill',
+              scope: 'Beginner',
+              state: 'SUPPORTED',
+              evidence: {
+                evidenceType: 'candidate statement',
+                excerpt: 'Synthetic original Evidence.',
+                state: 'candidate-confirmed',
+              },
+            },
+            { kind: 'language', value: 'Synthetic language', state: 'UNKNOWN' },
+          ],
+        });
+        await repository.replaceClaim({
+          candidateId: candidate,
+          claimId: claimId(
+            batch.claims.find(
+              (item: any) => item.value === 'Synthetic PostgreSQL skill',
+            )!.id,
+          ),
+          changeType: 'DEVELOPMENT',
+          value: 'Synthetic PostgreSQL skill',
+          scope: 'Intermediate',
+          state: 'SUPPORTED',
+          evidence: {
+            evidenceType: 'candidate statement',
+            excerpt: 'Synthetic newer Evidence.',
+            state: 'candidate-confirmed',
+          },
+        });
+        const profile = await repository.getProfile(candidate);
+        expect(profile?.claims).toHaveLength(2);
+        expect(profile?.historicalClaims).toEqual([
+          expect.objectContaining({
+            scope: 'Beginner',
+            lifecycleState: 'SUPERSEDED',
+            evidence: [
+              expect.objectContaining({
+                excerpt: 'Synthetic original Evidence.',
+              }),
+            ],
+          }),
+        ]);
+        expect(profile?.claims).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              scope: 'Intermediate',
+              lifecycleState: 'CURRENT',
+              successionType: 'DEVELOPMENT',
+              evidence: [
+                expect.objectContaining({
+                  excerpt: 'Synthetic newer Evidence.',
+                }),
+              ],
+            }),
+          ]),
+        );
       });
     });
   }

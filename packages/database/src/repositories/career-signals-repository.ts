@@ -177,7 +177,12 @@ export class CareerSignalsRepository {
     const candidateClaimRecords = await db
       .select()
       .from(candidateClaims)
-      .where(eq(candidateClaims.candidateId, cId));
+      .where(
+        and(
+          eq(candidateClaims.candidateId, cId),
+          eq(candidateClaims.lifecycleState, 'CURRENT'),
+        ),
+      );
 
     const establishedClaimTypes = new Set(
       candidateClaimRecords

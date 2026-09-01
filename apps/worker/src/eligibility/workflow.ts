@@ -53,6 +53,7 @@ export function createEligibilityHandlers(deps: {
       const payload = task.payload as {
         snapshotId: string;
         candidateId?: string;
+        profileReevaluationId?: string;
       };
       const snapId = payload.snapshotId;
 
@@ -129,6 +130,9 @@ export function createEligibilityHandlers(deps: {
           evaluationId: evalId,
           snapshotId: snapId,
           candidateId: candId,
+          ...(payload.profileReevaluationId
+            ? { profileReevaluationId: payload.profileReevaluationId }
+            : {}),
         },
         idempotencyKey: `fit-${evalId}`,
       });

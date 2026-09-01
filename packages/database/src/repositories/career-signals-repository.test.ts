@@ -509,7 +509,7 @@ describe('CareerSignalsRepository', () => {
       retainedUnresolved: [],
     });
 
-    const { decisions, evaluations } = getTables(handle);
+    const { decisions, evaluations, candidateClaims } = getTables(handle);
     const db = handle.db as any;
 
     const evClosed = evaluationId('ev-fix-9');
@@ -640,6 +640,20 @@ describe('CareerSignalsRepository', () => {
       }
     }
 
+    await db.insert(candidateClaims).values({
+      id: 'historical-kubernetes-claim',
+      candidateId: cand,
+      kind: 'kubernetes',
+      value: 'Kubernetes',
+      state: 'SUPPORTED',
+      confidence: 'HIGH',
+      subjectKey: 'kubernetes:kubernetes',
+      lifecycleState: 'SUPERSEDED',
+      endedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
     const res = await repo.getCareerSignals(cand);
 
     expect(res.activeOpportunityCount).toBe(8);
@@ -661,6 +675,9 @@ describe('CareerSignalsRepository', () => {
     );
     expect(k8sSignal).toBeDefined();
     expect(k8sSignal?.affectedOpportunityCount).toBe(5);
+    expect(
+      res.evidenceGaps.find((g) => g.dimensionKey === 'tech:kubernetes'),
+    ).toBeDefined();
 
     const tfSignal = res.repeatedGaps.find(
       (g) => g.dimensionKey === 'tech:terraform',

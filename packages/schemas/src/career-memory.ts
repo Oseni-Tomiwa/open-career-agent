@@ -14,6 +14,17 @@ export const CandidateClaimConfidenceSchema = Type.Union([
   Type.Literal('LOW'),
 ]);
 
+export const CandidateClaimLifecycleStateSchema = Type.Union([
+  Type.Literal('CURRENT'),
+  Type.Literal('SUPERSEDED'),
+  Type.Literal('RETIRED'),
+]);
+
+export const CandidateClaimSuccessionTypeSchema = Type.Union([
+  Type.Literal('CORRECTION'),
+  Type.Literal('DEVELOPMENT'),
+]);
+
 export const CareerMemoryEvidenceStateSchema = Type.Union([
   Type.Literal('source-verified'),
   Type.Literal('candidate-confirmed'),
@@ -47,6 +58,13 @@ export const CandidateClaimSchema = Type.Object(
     scope: Type.Union([Type.String(), Type.Null()]),
     state: CandidateClaimStateSchema,
     confidence: Type.Union([CandidateClaimConfidenceSchema, Type.Null()]),
+    lifecycleState: Type.Optional(CandidateClaimLifecycleStateSchema),
+    predecessorClaimId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    successionType: Type.Optional(
+      Type.Union([CandidateClaimSuccessionTypeSchema, Type.Null()]),
+    ),
+    successionNote: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    endedAt: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     createdAt: Type.String(),
     updatedAt: Type.String(),
     evidence: Type.Array(CareerMemoryEvidenceSchema),
@@ -65,6 +83,7 @@ export const CandidateProfileResponseSchema = Type.Object(
       { additionalProperties: false },
     ),
     claims: Type.Array(CandidateClaimSchema),
+    historicalClaims: Type.Optional(Type.Array(CandidateClaimSchema)),
   },
   { additionalProperties: false },
 );
@@ -115,11 +134,64 @@ export const AttachClaimEvidenceInputSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const BatchCreateCandidateClaimsInputSchema = Type.Object(
+  {
+    claims: Type.Array(CreateCandidateClaimInputSchema, {
+      minItems: 1,
+      maxItems: 100,
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export const ReplaceCandidateClaimInputSchema = Type.Object(
+  {
+    changeType: CandidateClaimSuccessionTypeSchema,
+    value: Type.String({ minLength: 1, maxLength: 2000 }),
+    scope: Type.Optional(
+      Type.Union([Type.String({ maxLength: 500 }), Type.Null()]),
+    ),
+    state: Type.Union([Type.Literal('UNKNOWN'), Type.Literal('SUPPORTED')]),
+    confidence: Type.Optional(
+      Type.Union([CandidateClaimConfidenceSchema, Type.Null()]),
+    ),
+    evidence: Type.Optional(ManualEvidenceInputSchema),
+    note: Type.Optional(Type.String({ maxLength: 1000 })),
+  },
+  { additionalProperties: false },
+);
+
+export const RetireCandidateClaimInputSchema = Type.Object(
+  { note: Type.Optional(Type.String({ maxLength: 1000 })) },
+  { additionalProperties: false },
+);
+
+export const CareerProfileReevaluationSchema = Type.Object(
+  {
+    id: Type.String(),
+    state: Type.Union([
+      Type.Literal('PENDING'),
+      Type.Literal('RUNNING'),
+      Type.Literal('SUCCEEDED'),
+      Type.Literal('FAILED'),
+    ]),
+    taskCount: Type.Integer({ minimum: 0 }),
+    completedTaskCount: Type.Integer({ minimum: 0 }),
+    failedTaskCount: Type.Integer({ minimum: 0 }),
+    requestedAt: Type.String(),
+    updatedAt: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
 export const CareerMemoryMutationResponseSchema = Type.Object(
   {
     candidate: CandidateProfileResponseSchema.properties.candidate,
     claims: CandidateProfileResponseSchema.properties.claims,
+    historicalClaims:
+      CandidateProfileResponseSchema.properties.historicalClaims,
     reevaluationRequested: Type.Boolean(),
+    reevaluation: Type.Optional(CareerProfileReevaluationSchema),
   },
   { additionalProperties: false },
 );

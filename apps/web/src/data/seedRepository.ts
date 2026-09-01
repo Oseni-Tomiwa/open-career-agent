@@ -6,6 +6,7 @@ import type {
   CreateCandidateClaimInput,
   Decision,
   ManualEvidenceInput,
+  ReplaceCandidateClaimInput,
   Opportunity,
   ProductRepository,
   ProductSnapshot,
@@ -76,6 +77,11 @@ export class SeedProductRepository implements ProductRepository {
       scope: input.scope ?? null,
       state: input.state,
       confidence: input.confidence ?? null,
+      lifecycleState: 'CURRENT',
+      predecessorClaimId: null,
+      successionType: null,
+      successionNote: null,
+      endedAt: null,
       createdAt: now,
       updatedAt: now,
       evidence: input.evidence
@@ -87,6 +93,13 @@ export class SeedProductRepository implements ProductRepository {
       candidate: { ...this.careerMemory.candidate, updatedAt: now },
       claims: [...this.careerMemory.claims, claim],
     };
+    return Promise.resolve(this.careerMemory);
+  }
+
+  public async createCandidateClaimsBatch(
+    inputs: readonly CreateCandidateClaimInput[],
+  ): Promise<CareerMemoryProfile> {
+    for (const input of inputs) await this.createCandidateClaim(input);
     return Promise.resolve(this.careerMemory);
   }
 
@@ -131,6 +144,77 @@ export class SeedProductRepository implements ProductRepository {
       ),
     };
     return Promise.resolve(this.careerMemory);
+  }
+
+  public async replaceCandidateClaim(
+    claimId: string,
+    input: ReplaceCandidateClaimInput,
+  ): Promise<CareerMemoryProfile> {
+    const current = this.careerMemory.claims.find((claim) => claim.id === claimId);
+    if (!current) throw new Error('Profile item not found.');
+    const now = new Date().toISOString();
+    const replacement: CareerMemoryClaim = {
+      ...current,
+      id: `seed-claim-${++this.mutationSequence}`,
+      value: input.value,
+      scope: input.scope ?? null,
+      state: input.state,
+      confidence: input.confidence ?? null,
+      lifecycleState: 'CURRENT',
+      predecessorClaimId: current.id,
+      successionType: input.changeType,
+      successionNote: input.note ?? null,
+      endedAt: null,
+      createdAt: now,
+      updatedAt: now,
+      evidence: input.evidence
+        ? [seedManualEvidence(current.id, input.evidence, now)]
+        : [],
+    };
+    this.careerMemory = {
+      ...this.careerMemory,
+      candidate: { ...this.careerMemory.candidate, updatedAt: now },
+      claims: this.careerMemory.claims.map((claim) =>
+        claim.id === claimId ? replacement : claim,
+      ),
+      historicalClaims: [
+        ...(this.careerMemory.historicalClaims ?? []),
+        { ...current, lifecycleState: 'SUPERSEDED', endedAt: now, updatedAt: now },
+      ],
+    };
+    return Promise.resolve(this.careerMemory);
+  }
+
+  public async retireCandidateClaim(
+    claimId: string,
+    note?: string,
+  ): Promise<CareerMemoryProfile> {
+    const current = this.careerMemory.claims.find((claim) => claim.id === claimId);
+    if (!current) throw new Error('Profile item not found.');
+    const now = new Date().toISOString();
+    this.careerMemory = {
+      ...this.careerMemory,
+      candidate: { ...this.careerMemory.candidate, updatedAt: now },
+      claims: this.careerMemory.claims.filter((claim) => claim.id !== claimId),
+      historicalClaims: [
+        ...(this.careerMemory.historicalClaims ?? []),
+        { ...current, lifecycleState: 'RETIRED', successionNote: note ?? null, endedAt: now, updatedAt: now },
+      ],
+    };
+    return Promise.resolve(this.careerMemory);
+  }
+
+  public async getCareerProfileReevaluation(reevaluationId: string) {
+    const now = new Date().toISOString();
+    return Promise.resolve({
+      id: reevaluationId,
+      state: 'SUCCEEDED' as const,
+      taskCount: 0,
+      completedTaskCount: 0,
+      failedTaskCount: 0,
+      requestedAt: now,
+      updatedAt: now,
+    });
   }
 
   private searchTargets: SearchTarget[] = [
@@ -733,6 +817,11 @@ function seedCareerMemory(): CareerMemoryProfile {
         : skill.level === 'Developing'
           ? 'MODERATE'
           : null,
+    lifecycleState: 'CURRENT',
+    predecessorClaimId: null,
+    successionType: null,
+    successionNote: null,
+    endedAt: null,
     createdAt: now,
     updatedAt: now,
     evidence: skill.evidenceIds.flatMap((id) => {
@@ -754,6 +843,7 @@ function seedCareerMemory(): CareerMemoryProfile {
   return {
     candidate: { id: 'fictional-seed-candidate', createdAt: now, updatedAt: now },
     claims,
+    historicalClaims: [],
   };
 }
 

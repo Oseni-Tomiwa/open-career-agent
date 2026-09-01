@@ -18,6 +18,8 @@ import type {
   CreateCandidateClaimInput,
   Decision,
   ManualEvidenceInput,
+  ReplaceCandidateClaimInput,
+  CareerProfileReevaluation,
   Opportunity,
   ProductRepository,
   ProductSnapshot,
@@ -55,6 +57,9 @@ interface ProductDataContextValue {
   readonly createCandidateClaim: (
     input: CreateCandidateClaimInput,
   ) => Promise<CareerMemoryProfile>;
+  readonly createCandidateClaimsBatch: (
+    inputs: readonly CreateCandidateClaimInput[],
+  ) => Promise<CareerMemoryProfile>;
   readonly updateCandidateClaim: (
     claimId: string,
     input: UpdateCandidateClaimInput,
@@ -64,6 +69,17 @@ interface ProductDataContextValue {
     evidence: ManualEvidenceInput,
     transitionTo?: CandidateClaimState,
   ) => Promise<CareerMemoryProfile>;
+  readonly replaceCandidateClaim: (
+    claimId: string,
+    input: ReplaceCandidateClaimInput,
+  ) => Promise<CareerMemoryProfile>;
+  readonly retireCandidateClaim: (
+    claimId: string,
+    note?: string,
+  ) => Promise<CareerMemoryProfile>;
+  readonly getCareerProfileReevaluation: (
+    reevaluationId: string,
+  ) => Promise<CareerProfileReevaluation>;
   readonly getSearchTargets: () => Promise<readonly SearchTarget[]>;
   readonly createSearchTarget: (
     input: CreateSearchTargetInput,
@@ -202,6 +218,12 @@ export function ProductDataProvider({
     [repository],
   );
 
+  const createCandidateClaimsBatch = useCallback(
+    (inputs: readonly CreateCandidateClaimInput[]) =>
+      repository.createCandidateClaimsBatch(inputs),
+    [repository],
+  );
+
   const updateCandidateClaim = useCallback(
     (claimId: string, input: UpdateCandidateClaimInput) =>
       repository.updateCandidateClaim(claimId, input),
@@ -214,6 +236,24 @@ export function ProductDataProvider({
       evidence: ManualEvidenceInput,
       transitionTo?: CandidateClaimState,
     ) => repository.attachClaimEvidence(claimId, evidence, transitionTo),
+    [repository],
+  );
+
+  const replaceCandidateClaim = useCallback(
+    (claimId: string, input: ReplaceCandidateClaimInput) =>
+      repository.replaceCandidateClaim(claimId, input),
+    [repository],
+  );
+
+  const retireCandidateClaim = useCallback(
+    (claimId: string, note?: string) =>
+      repository.retireCandidateClaim(claimId, note),
+    [repository],
+  );
+
+  const getCareerProfileReevaluation = useCallback(
+    (reevaluationId: string) =>
+      repository.getCareerProfileReevaluation(reevaluationId),
     [repository],
   );
 
@@ -299,8 +339,12 @@ export function ProductDataProvider({
             saveSearchPreferences,
             getCareerMemory,
             createCandidateClaim,
+            createCandidateClaimsBatch,
             updateCandidateClaim,
             attachClaimEvidence,
+            replaceCandidateClaim,
+            retireCandidateClaim,
+            getCareerProfileReevaluation,
             getSearchTargets,
             createSearchTarget,
             updateSearchTarget,
@@ -320,11 +364,15 @@ export function ProductDataProvider({
       loadOpportunity,
       attachClaimEvidence,
       createCandidateClaim,
+      createCandidateClaimsBatch,
       getCareerMemory,
       repository,
       snapshot,
       updateDecision,
       updateCandidateClaim,
+      replaceCandidateClaim,
+      retireCandidateClaim,
+      getCareerProfileReevaluation,
       saveSearchPreferences,
       getSearchTargets,
       createSearchTarget,

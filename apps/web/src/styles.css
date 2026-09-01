@@ -1948,6 +1948,29 @@ svg {
   gap: 1.25rem;
 }
 
+.profile-current-summary {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin: 1rem 0 1.25rem;
+  padding: 1rem;
+}
+
+.profile-current-summary ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0.75rem 0;
+  padding: 0;
+}
+
+.profile-current-summary li {
+  background: var(--surface-subtle);
+  border-radius: 999px;
+  padding: 0.4rem 0.7rem;
+}
+
 .career-claim-grid {
   display: grid;
   gap: 1rem;
@@ -2062,6 +2085,96 @@ svg {
 .profile-editor select,
 .profile-editor textarea {
   width: 100%;
+}
+
+.claim-actions button,
+.profile-editor button,
+.profile-history summary {
+  min-height: 2.75rem;
+}
+
+.batch-rows,
+.batch-review,
+.profile-history {
+  display: grid;
+  gap: 1rem;
+}
+
+.batch-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  min-width: 0;
+  padding: 1rem;
+}
+
+.batch-row legend {
+  font-weight: 750;
+  padding: 0 0.35rem;
+}
+
+.batch-row .batch-evidence-field,
+.batch-row > button {
+  grid-column: 1 / -1;
+}
+
+.batch-review article {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 0.25rem;
+  overflow-wrap: anywhere;
+  padding: 0.85rem;
+}
+
+.profile-editor fieldset:not(.batch-row) {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 0.7rem;
+  margin: 0;
+  padding: 0.85rem;
+}
+
+.profile-editor fieldset:not(.batch-row) label {
+  align-items: start;
+  display: grid;
+  font-weight: 500;
+  gap: 0.6rem;
+  grid-template-columns: auto 1fr;
+}
+
+.profile-editor fieldset input[type='radio'] {
+  height: 1.25rem;
+  margin: 0.15rem 0 0;
+  width: 1.25rem;
+}
+
+.profile-history {
+  border-top: 1px solid var(--border);
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+}
+
+.profile-history summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-weight: 750;
+}
+
+.historical-claim-card {
+  background: var(--surface-subtle);
+}
+
+.career-claim-card,
+.claim-evidence-item,
+.profile-editor {
+  overflow-wrap: anywhere;
 }
 
 .profile-notice,
@@ -2553,6 +2666,20 @@ svg {
 }
 
 @media (max-width: 48rem) {
+  .batch-row {
+    grid-template-columns: 1fr;
+  }
+  .batch-row > * {
+    grid-column: 1;
+  }
+  .claim-actions,
+  .profile-editor > div {
+    align-items: stretch;
+  }
+  .claim-actions button,
+  .profile-editor > div button {
+    flex: 1 1 100%;
+  }
   .environment-strip {
     align-items: flex-start;
     flex-direction: column;

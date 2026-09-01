@@ -183,25 +183,68 @@ export const sessionsPg = pgTable(
   ],
 );
 
-export const candidateClaimsPg = pgTable('candidate_claims', {
-  id: text('id').primaryKey(),
-  candidateId: text('candidate_id')
-    .notNull()
-    .references(() => candidatesPg.id, { onDelete: 'restrict' }),
-  kind: text('kind').notNull(),
-  value: text('value').notNull(),
-  scope: text('scope'),
-  state: text('state').notNull(),
-  confidence: text('confidence'),
-  createdAt: timestamp('created_at', {
-    withTimezone: true,
-    mode: 'date',
-  }).notNull(),
-  updatedAt: timestamp('updated_at', {
-    withTimezone: true,
-    mode: 'date',
-  }).notNull(),
-});
+export const candidateClaimsPg = pgTable(
+  'candidate_claims',
+  {
+    id: text('id').primaryKey(),
+    candidateId: text('candidate_id')
+      .notNull()
+      .references(() => candidatesPg.id, { onDelete: 'restrict' }),
+    kind: text('kind').notNull(),
+    value: text('value').notNull(),
+    scope: text('scope'),
+    state: text('state').notNull(),
+    confidence: text('confidence'),
+    subjectKey: text('subject_key').notNull(),
+    lifecycleState: text('lifecycle_state').notNull().default('CURRENT'),
+    predecessorClaimId: text('predecessor_claim_id'),
+    successionType: text('succession_type'),
+    successionNote: text('succession_note'),
+    endedAt: timestamp('ended_at', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('created_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+    updatedAt: timestamp('updated_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+  },
+  (table) => [
+    index('pg_candidate_claims_candidate_lifecycle_idx').on(
+      table.candidateId,
+      table.lifecycleState,
+    ),
+    uniqueIndex('pg_candidate_claims_current_subject_unique')
+      .on(table.candidateId, table.subjectKey)
+      .where(sql`${table.lifecycleState} = 'CURRENT'`),
+  ],
+);
+
+export const careerProfileReevaluationsPg = pgTable(
+  'career_profile_reevaluations',
+  {
+    id: text('id').primaryKey(),
+    candidateId: text('candidate_id')
+      .notNull()
+      .references(() => candidatesPg.id, { onDelete: 'restrict' }),
+    taskCount: integer('task_count').notNull(),
+    createdAt: timestamp('created_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+    updatedAt: timestamp('updated_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+  },
+  (table) => [
+    index('pg_career_profile_reevaluations_candidate_idx').on(
+      table.candidateId,
+      table.createdAt,
+    ),
+  ],
+);
 
 export const opportunitiesPg = pgTable('opportunities', {
   id: text('id').primaryKey(),

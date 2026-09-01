@@ -31,6 +31,8 @@ export {
   CareerMemoryRepository,
   CareerMemoryError,
   type ManualEvidenceInput,
+  type CreateClaimInput,
+  type CareerProfileReevaluation,
 } from './repositories/career-memory-repository.js';
 export { OpportunityRepository } from './repositories/opportunity-repository.js';
 export { EvaluationRepository } from './repositories/evaluation-repository.js';

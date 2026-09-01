@@ -199,6 +199,11 @@ export interface CareerMemoryClaim {
   readonly scope: string | null;
   readonly state: CandidateClaimState;
   readonly confidence: CandidateClaimConfidence | null;
+  readonly lifecycleState?: 'CURRENT' | 'SUPERSEDED' | 'RETIRED';
+  readonly predecessorClaimId?: string | null;
+  readonly successionType?: 'CORRECTION' | 'DEVELOPMENT' | null;
+  readonly successionNote?: string | null;
+  readonly endedAt?: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly evidence: readonly CareerMemoryEvidence[];
@@ -211,6 +216,18 @@ export interface CareerMemoryProfile {
     readonly updatedAt: string;
   };
   readonly claims: readonly CareerMemoryClaim[];
+  readonly historicalClaims?: readonly CareerMemoryClaim[];
+  readonly reevaluation?: CareerProfileReevaluation;
+}
+
+export interface CareerProfileReevaluation {
+  readonly id: string;
+  readonly state: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+  readonly taskCount: number;
+  readonly completedTaskCount: number;
+  readonly failedTaskCount: number;
+  readonly requestedAt: string;
+  readonly updatedAt: string;
 }
 
 export interface ManualEvidenceInput {
@@ -234,6 +251,16 @@ export interface UpdateCandidateClaimInput {
   readonly scope?: string | null;
   readonly state?: CandidateClaimState;
   readonly confidence?: CandidateClaimConfidence | null;
+}
+
+export interface ReplaceCandidateClaimInput {
+  readonly changeType: 'CORRECTION' | 'DEVELOPMENT';
+  readonly value: string;
+  readonly scope?: string | null;
+  readonly state: 'UNKNOWN' | 'SUPPORTED';
+  readonly confidence?: CandidateClaimConfidence | null;
+  readonly evidence?: ManualEvidenceInput;
+  readonly note?: string;
 }
 
 export interface SearchTargetSource {
@@ -396,6 +423,9 @@ export interface ProductRepository {
   createCandidateClaim(
     input: CreateCandidateClaimInput,
   ): Promise<CareerMemoryProfile>;
+  createCandidateClaimsBatch(
+    inputs: readonly CreateCandidateClaimInput[],
+  ): Promise<CareerMemoryProfile>;
   updateCandidateClaim(
     claimId: string,
     input: UpdateCandidateClaimInput,
@@ -405,6 +435,17 @@ export interface ProductRepository {
     evidence: ManualEvidenceInput,
     transitionTo?: CandidateClaimState,
   ): Promise<CareerMemoryProfile>;
+  replaceCandidateClaim(
+    claimId: string,
+    input: ReplaceCandidateClaimInput,
+  ): Promise<CareerMemoryProfile>;
+  retireCandidateClaim(
+    claimId: string,
+    note?: string,
+  ): Promise<CareerMemoryProfile>;
+  getCareerProfileReevaluation(
+    reevaluationId: string,
+  ): Promise<CareerProfileReevaluation>;
   getSearchTargets(): Promise<readonly SearchTarget[]>;
   createSearchTarget(input: CreateSearchTargetInput): Promise<SearchTarget>;
   updateSearchTarget(

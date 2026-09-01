@@ -34,6 +34,7 @@ export function createDecisionHandlers(
       evaluationId: string;
       snapshotId: string;
       candidateId?: string;
+      profileReevaluationId?: string;
     };
 
     const evalId = evaluationId(payload.evaluationId);
