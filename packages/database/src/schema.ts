@@ -100,6 +100,7 @@ export const users = sqliteTable(
     email: text('email').notNull(),
     normalizedEmail: text('normalized_email').notNull(),
     passwordHash: text('password_hash').notNull(),
+    emailVerifiedAt: integer('email_verified_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
@@ -158,6 +159,81 @@ export const sessions = sqliteTable(
     uniqueIndex('sessions_token_hash_unique').on(table.tokenHash),
     index('sessions_user_idx').on(table.userId),
     index('sessions_expiration_idx').on(table.expiresAt),
+  ],
+);
+
+export const AUTH_PROVIDERS = ['google', 'apple'] as const;
+export const AUTH_TOKEN_PURPOSES = [
+  'EMAIL_VERIFICATION',
+  'PASSWORD_RESET',
+] as const;
+
+export const userIdentities = sqliteTable(
+  'user_identities',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    provider: text('provider', { enum: AUTH_PROVIDERS }).notNull(),
+    providerSubject: text('provider_subject').notNull(),
+    providerEmail: text('provider_email'),
+    providerEmailVerified: integer('provider_email_verified', {
+      mode: 'boolean',
+    })
+      .notNull()
+      .default(false),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('user_identities_provider_subject_unique').on(
+      table.provider,
+      table.providerSubject,
+    ),
+    index('user_identities_user_idx').on(table.userId),
+  ],
+);
+
+export const authActionTokens = sqliteTable(
+  'auth_action_tokens',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    purpose: text('purpose', { enum: AUTH_TOKEN_PURPOSES }).notNull(),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    usedAt: integer('used_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('auth_action_tokens_hash_unique').on(table.tokenHash),
+    index('auth_action_tokens_user_purpose_idx').on(
+      table.userId,
+      table.purpose,
+      table.createdAt,
+    ),
+    index('auth_action_tokens_expiry_idx').on(table.expiresAt),
+  ],
+);
+
+export const oauthAttempts = sqliteTable(
+  'oauth_attempts',
+  {
+    id: text('id').primaryKey(),
+    provider: text('provider', { enum: AUTH_PROVIDERS }).notNull(),
+    stateHash: text('state_hash').notNull(),
+    nonceHash: text('nonce_hash').notNull(),
+    redirectPath: text('redirect_path').notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    usedAt: integer('used_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('oauth_attempts_state_hash_unique').on(table.stateHash),
+    index('oauth_attempts_expiry_idx').on(table.expiresAt),
   ],
 );
 

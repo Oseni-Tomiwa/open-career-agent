@@ -4,15 +4,62 @@ import {
   useEffect,
   useMemo,
   useState,
-  type FormEvent,
   type ReactNode,
 } from 'react';
 
 import { browserConfig } from '../config.js';
 import { AppLoading } from './AppLoading.js';
 import { AuthContext, type AuthSession } from './authContext.js';
+import { PublicApplication } from './PublicApplication.js';
 
 const cookieCredentials = () => ({ credentials: 'include' as const });
+const publicAccountPaths = new Set([
+  '/',
+  '/how-it-works',
+  '/features',
+  '/pricing',
+  '/about',
+  '/privacy',
+  '/terms',
+  '/sign-in',
+  '/create-account',
+  '/verify-email',
+  '/forgot-password',
+  '/reset-password',
+  '/auth/callback',
+]);
+
+const authRedirectPaths = new Set(['/', '/sign-in', '/create-account']);
+
+function enterAuthenticatedApplication() {
+  if (authRedirectPaths.has(window.location.pathname)) {
+    window.history.replaceState({}, '', '/overview');
+  }
+  window.dispatchEvent(new Event('popstate'));
+}
+
+const SESSION_STORAGE_KEY = 'rolevia_session';
+
+function getPersistedSession(): AuthSession | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as AuthSession) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setPersistedSession(session: AuthSession | null) {
+  try {
+    if (session) {
+      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+    } else {
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage errors in restricted contexts
+  }
+}
 
 export function AuthProvider({ children }: { readonly children: ReactNode }) {
   const cloud =
@@ -26,10 +73,32 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       }),
     [],
   );
-  const [session, setSession] = useState<AuthSession | null>(null);
+  const [session, setSessionState] = useState<AuthSession | null>(() =>
+    getPersistedSession(),
+  );
+
+  const setSession = useCallback((next: AuthSession | null) => {
+    setPersistedSession(next);
+    setSessionState(next);
+  }, []);
+
   const [status, setStatus] = useState<
     'loading' | 'anonymous' | 'authenticated' | 'unavailable'
-  >(cloud ? 'loading' : 'authenticated');
+  >(() => {
+    if (cloud) return 'loading';
+    if (session) return 'authenticated';
+    if (publicAccountPaths.has(window.location.pathname)) return 'anonymous';
+    return 'authenticated';
+  });
+
+  useEffect(() => {
+    if (
+      status === 'authenticated' &&
+      authRedirectPaths.has(window.location.pathname)
+    ) {
+      enterAuthenticatedApplication();
+    }
+  }, [status]);
 
   useEffect(() => {
     if (!cloud) return;
@@ -38,6 +107,7 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       .getSession()
       .then((current) => {
         if (active) {
+          enterAuthenticatedApplication();
           setSession(current);
           setStatus('authenticated');
         }
@@ -52,35 +122,26 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [client, cloud]);
+  }, [client, cloud, setSession]);
 
   const signOut = useCallback(async () => {
-    if (cloud) await client.logout();
+    if (cloud) await client.logout().catch(() => {});
     setSession(null);
-    setStatus(cloud ? 'anonymous' : 'authenticated');
-  }, [client, cloud]);
+    setStatus('anonymous');
+    window.history.replaceState({}, '', '/sign-in');
+  }, [client, cloud, setSession]);
 
   if (status === 'loading') return <AppLoading />;
-  if (status === 'unavailable') {
+  if (status === 'anonymous' || status === 'unavailable') {
     return (
-      <main className="auth-page">
-        <section className="auth-card" role="alert">
-          <h1>Rolevia Cloud is unavailable</h1>
-          <p>
-            The authenticated session could not be checked. Try again shortly.
-          </p>
-        </section>
-      </main>
-    );
-  }
-  if (status === 'anonymous') {
-    return (
-      <SignIn
+      <PublicApplication
         onAuthenticated={(current) => {
+          enterAuthenticatedApplication();
           setSession(current);
           setStatus('authenticated');
         }}
         client={client}
+        unavailable={status === 'unavailable'}
       />
     );
   }
@@ -100,95 +161,5 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     >
       {children}
     </AuthContext>
-  );
-}
-
-function SignIn({
-  client,
-  onAuthenticated,
-}: {
-  readonly client: RoleviaApiClient;
-  readonly onAuthenticated: (session: AuthSession) => void;
-}) {
-  const [registering, setRegistering] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    const form = new FormData(event.currentTarget);
-    const emailValue = form.get('email');
-    const passwordValue = form.get('password');
-    const email = typeof emailValue === 'string' ? emailValue : '';
-    const password = typeof passwordValue === 'string' ? passwordValue : '';
-    try {
-      const result = registering
-        ? await client.register({ email, password, transport: 'cookie' })
-        : await client.login({ email, password, transport: 'cookie' });
-      onAuthenticated(result.session);
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : 'Authentication could not be completed.',
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <main className="auth-page">
-      <section className="auth-card" aria-labelledby="auth-title">
-        <div className="product-identity">
-          <span className="product-mark" aria-hidden="true">
-            <span />
-            <span />
-          </span>
-          <span>
-            <strong>Rolevia</strong>
-            <small>Career intelligence</small>
-          </span>
-        </div>
-        <h1 id="auth-title">{registering ? 'Create account' : 'Sign in'}</h1>
-        <p>Your career data stays isolated to your profile.</p>
-        <form onSubmit={(event) => void submit(event)}>
-          <label>
-            Email
-            <input autoComplete="email" name="email" required type="email" />
-          </label>
-          <label>
-            Password
-            <input
-              autoComplete={registering ? 'new-password' : 'current-password'}
-              minLength={registering ? 12 : 1}
-              name="password"
-              required
-              type="password"
-            />
-          </label>
-          {error && <p className="auth-error">{error}</p>}
-          <button disabled={submitting} type="submit">
-            {submitting
-              ? 'Working…'
-              : registering
-                ? 'Create account'
-                : 'Sign in'}
-          </button>
-        </form>
-        <button
-          className="auth-switch"
-          onClick={() => {
-            setError(null);
-            setRegistering((value) => !value);
-          }}
-          type="button"
-        >
-          {registering ? 'Use an existing account' : 'Create a new account'}
-        </button>
-      </section>
-    </main>
   );
 }

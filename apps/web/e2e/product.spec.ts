@@ -275,3 +275,185 @@ test('authors, edits, removes, and runs a multi-source Search Preference', async
   await page.getByRole('button', { name: 'Run Discovery Now' }).click();
   await expect(page.getByText(/Discovery completed/i)).toBeVisible();
 });
+
+test('anonymous browser context starts from root / and can discover, navigate to Sign In, Create Account, authenticate, and sign out', async ({
+  page,
+  context,
+}) => {
+  await context.clearCookies();
+  await page.goto('/');
+  await expect(
+    page.getByRole('heading', {
+      name: 'See your career with greater clarity.',
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Create account' }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Sign in' }).first(),
+  ).toBeVisible();
+
+  // Navigate to Sign In via link
+  await page.getByRole('link', { name: 'Sign in' }).first().click();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(
+    page.getByRole('heading', { name: 'Welcome back' }),
+  ).toBeVisible();
+
+  // Navigate to Create Account via link
+  await page.getByRole('link', { name: 'Create account' }).first().click();
+  await expect(page).toHaveURL(/\/create-account$/);
+  await expect(
+    page.getByRole('heading', { name: 'Create your Rolevia account' }),
+  ).toBeVisible();
+
+  // Navigate to Forgot Password
+  await page.goto('/forgot-password');
+  await expect(
+    page.getByRole('heading', { name: 'Reset your password' }),
+  ).toBeVisible();
+
+  // Navigate to Verify Email
+  await page.goto('/verify-email');
+  await expect(
+    page.getByRole('heading', { name: 'Verify your email' }),
+  ).toBeVisible();
+
+  // Authenticate into Overview
+  await page.goto('/sign-in');
+  await page
+    .getByRole('button', { name: 'Continue with development profile' })
+    .click();
+  await expect(page).toHaveURL(/\/overview$/);
+  await expect(
+    page.getByRole('heading', { name: /Good afternoon|Overview/i }),
+  ).toBeVisible();
+
+  // Authenticated user navigating to public entry routes redirects to Overview
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/overview$/);
+  await page.goto('/sign-in');
+  await expect(page).toHaveURL(/\/overview$/);
+  await page.goto('/create-account');
+  await expect(page).toHaveURL(/\/overview$/);
+
+  // Authenticated user signs out and returns to anonymous Sign In
+  const openNav = page.getByRole('button', { name: 'Open navigation' });
+  if (await openNav.isVisible()) {
+    await openNav.click();
+  }
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(
+    page.getByRole('heading', { name: 'Welcome back' }),
+  ).toBeVisible();
+});
+
+test('public landing page showcases all core sections, interface tabs, and informational routes without horizontal overflow', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  // Verify Hero
+  await expect(
+    page.getByRole('heading', {
+      name: 'See your career with greater clarity.',
+    }),
+  ).toBeVisible();
+
+  // Verify visual opportunity preview card
+  await expect(
+    page.getByRole('heading', {
+      name: 'Staff Distributed Systems Engineer',
+    }),
+  ).toBeVisible();
+  await expect(page.getByText('High-priority recommendation')).toBeVisible();
+
+  // Verify and switch preview tabs
+  await expect(
+    page.getByRole('heading', {
+      name: 'Inspect real evidence, not decorative summaries.',
+    }),
+  ).toBeVisible();
+  const overviewTab = page.getByRole('tab', {
+    name: 'Daily Overview & Decisions',
+  });
+  await overviewTab.click();
+  await expect(
+    page.getByRole('heading', { name: 'Daily Overview & Decisions Ledger' }),
+  ).toBeVisible();
+
+  // Verify 6-stage workflow
+  await expect(
+    page.getByRole('heading', { name: 'How Rolevia Works' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Build your Career Profile' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Track Your Pipeline' }),
+  ).toBeVisible();
+
+  // Verify Principles
+  await expect(
+    page.getByRole('heading', {
+      name: 'Principles of Evidence-Led Intelligence',
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'No Mystery Percentages' }),
+  ).toBeVisible();
+
+  // Verify dedicated routes
+  const informationalRoutes = [
+    {
+      url: '/how-it-works',
+      expected: 'How Rolevia Evaluates Opportunities',
+    },
+    { url: '/features', expected: 'Rolevia Features' },
+    { url: '/pricing', expected: 'Rolevia Developer Preview' },
+    { url: '/about', expected: 'About Rolevia' },
+    { url: '/privacy', expected: 'Privacy Notice' },
+    { url: '/terms', expected: 'Terms of Service' },
+  ];
+
+  for (const { url, expected } of informationalRoutes) {
+    await page.goto(url);
+    await expect(page.getByRole('heading', { name: expected })).toBeVisible();
+  }
+
+  // Verify zero horizontal overflow on public root
+  await page.goto('/');
+  const hasOverflow = await page.evaluate(
+    () =>
+      document.documentElement.scrollWidth >
+      document.documentElement.clientWidth,
+  );
+  expect(hasOverflow).toBe(false);
+});
+
+test('auth split-panel provides password visibility toggle and dynamic requirements indicator', async ({
+  page,
+}) => {
+  await page.goto('/create-account');
+
+  const passwordInput = page.locator('#auth-password');
+  await expect(passwordInput).toHaveAttribute('type', 'password');
+
+  // Toggle to show password
+  await page.getByRole('button', { name: 'Show password' }).click();
+  await expect(passwordInput).toHaveAttribute('type', 'text');
+  await page.getByRole('button', { name: 'Hide password' }).click();
+  await expect(passwordInput).toHaveAttribute('type', 'password');
+
+  // Requirements checklist updates as user types
+  const reqIndicator = page.locator('.requirement-indicator');
+  await expect(reqIndicator).toHaveClass(/unmet/);
+
+  await passwordInput.fill('short');
+  await expect(reqIndicator).toHaveClass(/unmet/);
+
+  await passwordInput.fill('sufficiently-long-secure-password');
+  await expect(reqIndicator).toHaveClass(/met/);
+});

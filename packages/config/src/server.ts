@@ -41,6 +41,11 @@ const ServerEnvironmentSchema = Type.Object(
     API_PORT: Type.Optional(Type.String({ pattern: '^[0-9]+$' })),
     SQLITE_DATABASE_PATH: Type.Optional(Type.String({ minLength: 1 })),
     WEB_ORIGIN: Type.Optional(Type.String({ minLength: 1 })),
+    OAUTH_CALLBACK_BASE_URL: Type.Optional(Type.String({ minLength: 1 })),
+    GOOGLE_OAUTH_CLIENT_ID: Type.Optional(Type.String({ minLength: 1 })),
+    GOOGLE_OAUTH_CLIENT_SECRET: Type.Optional(Type.String({ minLength: 1 })),
+    APPLE_OAUTH_CLIENT_ID: Type.Optional(Type.String({ minLength: 1 })),
+    APPLE_OAUTH_CLIENT_SECRET: Type.Optional(Type.String({ minLength: 1 })),
     WORKER_POLL_INTERVAL_MS: Type.Optional(
       Type.String({ pattern: '^[0-9]+$' }),
     ),
@@ -72,6 +77,14 @@ export interface ApiConfig extends SharedServerConfig {
   readonly identityMode: IdentityMode;
   readonly trustedCandidateId?: string;
   readonly sessionTtlHours: number;
+  readonly oauthCallbackBaseUrl?: string;
+  readonly googleOAuth?: OAuthProviderConfig;
+  readonly appleOAuth?: OAuthProviderConfig;
+}
+
+export interface OAuthProviderConfig {
+  readonly clientId: string;
+  readonly clientSecret: string;
 }
 
 export interface WorkerConfig extends SharedServerConfig {
@@ -93,6 +106,11 @@ function selectEnvironment(input: NodeJS.ProcessEnv) {
     API_PORT: input.API_PORT,
     SQLITE_DATABASE_PATH: input.SQLITE_DATABASE_PATH,
     WEB_ORIGIN: input.WEB_ORIGIN,
+    OAUTH_CALLBACK_BASE_URL: input.OAUTH_CALLBACK_BASE_URL,
+    GOOGLE_OAUTH_CLIENT_ID: input.GOOGLE_OAUTH_CLIENT_ID,
+    GOOGLE_OAUTH_CLIENT_SECRET: input.GOOGLE_OAUTH_CLIENT_SECRET,
+    APPLE_OAUTH_CLIENT_ID: input.APPLE_OAUTH_CLIENT_ID,
+    APPLE_OAUTH_CLIENT_SECRET: input.APPLE_OAUTH_CLIENT_SECRET,
     WORKER_POLL_INTERVAL_MS: input.WORKER_POLL_INTERVAL_MS,
     WORKER_LEASE_DURATION_MS: input.WORKER_LEASE_DURATION_MS,
     GREENHOUSE_BOARDS: input.GREENHOUSE_BOARDS,
@@ -172,6 +190,25 @@ export function parseApiConfig(input: NodeJS.ProcessEnv): ApiConfig {
     environment.DATABASE_ENGINE,
     environment.DATABASE_URL,
   );
+  const googleOAuth = providerConfig(
+    'Google',
+    environment.GOOGLE_OAUTH_CLIENT_ID,
+    environment.GOOGLE_OAUTH_CLIENT_SECRET,
+  );
+  const appleOAuth = providerConfig(
+    'Apple',
+    environment.APPLE_OAUTH_CLIENT_ID,
+    environment.APPLE_OAUTH_CLIENT_SECRET,
+  );
+  if (
+    applicationEnvironment === 'production' &&
+    (googleOAuth || appleOAuth) &&
+    !environment.OAUTH_CALLBACK_BASE_URL
+  ) {
+    throw new Error(
+      'Invalid server configuration: OAUTH_CALLBACK_BASE_URL is required when OAuth is enabled in production',
+    );
+  }
 
   return {
     environment: applicationEnvironment,
@@ -197,8 +234,29 @@ export function parseApiConfig(input: NodeJS.ProcessEnv): ApiConfig {
       'SESSION_TTL_HOURS',
       environment.SESSION_TTL_HOURS ?? '168',
     ),
+    oauthCallbackBaseUrl: parseUrl(
+      'OAUTH_CALLBACK_BASE_URL',
+      environment.OAUTH_CALLBACK_BASE_URL ??
+        `http://${environment.API_HOST ?? '127.0.0.1'}:${environment.API_PORT ?? '3000'}`,
+    ),
+    ...(googleOAuth ? { googleOAuth } : {}),
+    ...(appleOAuth ? { appleOAuth } : {}),
     ...(trustedCandidateId ? { trustedCandidateId } : {}),
   };
+}
+
+function providerConfig(
+  label: string,
+  clientId?: string,
+  clientSecret?: string,
+): OAuthProviderConfig | undefined {
+  if (!clientId && !clientSecret) return undefined;
+  if (!clientId || !clientSecret) {
+    throw new Error(
+      `Invalid server configuration: ${label} OAuth client ID and secret must be configured together`,
+    );
+  }
+  return { clientId, clientSecret };
 }
 
 export function parseWorkerConfig(input: NodeJS.ProcessEnv): WorkerConfig {

@@ -26,6 +26,7 @@ import { ApplicationRepository } from './repositories/application-repository.js'
 import { AuthRepository } from './repositories/auth-repository.js';
 import { TodayRepository } from './repositories/today-repository.js';
 import { CareerSignalsRepository } from './repositories/career-signals-repository.js';
+import { CareerMemoryRepository } from './repositories/career-memory-repository.js';
 import { SearchTargetRepository } from './repositories/search-target-repository.js';
 import { SourceListingRepository } from './repositories/source-listing-repository.js';
 import {
@@ -81,6 +82,15 @@ const postgresCareerProfileLifecycleSql = readFileSync(
   ),
   'utf8',
 ).replaceAll('--> statement-breakpoint', '');
+const postgresPublicIdentityRecoverySql = readFileSync(
+  fileURLToPath(
+    new URL(
+      '../migrations-postgres/20260901125834_public_identity_recovery/migration.sql',
+      import.meta.url,
+    ),
+  ),
+  'utf8',
+).replaceAll('--> statement-breakpoint', '');
 
 d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
   let handle: DatabaseHandle;
@@ -94,6 +104,7 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
       await handle.pgPool.query(postgresBaselineSql);
       await handle.pgPool.query(postgresCanonicalIdentitySql);
       await handle.pgPool.query(postgresCareerProfileLifecycleSql);
+      await handle.pgPool.query(postgresPublicIdentityRecoverySql);
     }
   });
 
@@ -249,6 +260,9 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
         'candidates',
         'user_candidates',
         'sessions',
+        'user_identities',
+        'auth_action_tokens',
+        'oauth_attempts',
         'search_targets',
         'discovery_runs',
         'source_listings',
@@ -279,6 +293,12 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
         'pg_background_tasks_idempotency_key_unique',
       );
       expect(indexNames).toContain('pg_decisions_semantic_input_unique');
+      expect(indexNames).toContain(
+        'pg_user_identities_provider_subject_unique',
+      );
+      expect(indexNames).toContain('pg_auth_action_tokens_hash_unique');
+      expect(indexNames).toContain('pg_auth_action_tokens_expiry_idx');
+      expect(indexNames).toContain('pg_oauth_attempts_state_hash_unique');
     } finally {
       await freshHandle.close();
       await adminPool.query(`DROP DATABASE ${freshDbName}`);
@@ -933,6 +953,300 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
 
     await reopenedHandle.close();
     rmSync(directory, { recursive: true, force: true });
+  });
+
+  // ==================================================
+  // 17. PUBLIC IDENTITY, ACCOUNT RECOVERY & TWO-USER ISOLATION ON POSTGRESQL
+  // ==================================================
+  it('Section 17: upgrades PostgreSQL schema to public identity recovery preserving existing users as verified and retaining sessions', async () => {
+    const pool = handle.pgPool!;
+    await pool.query(
+      'DROP SCHEMA public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public;',
+    );
+    await pool.query(postgresBaselineSql);
+    await pool.query(postgresCanonicalIdentitySql);
+    await pool.query(postgresCareerProfileLifecycleSql);
+
+    const userId = 'usr_pre_upgrade';
+    const candId = 'candidate_pre_upgrade';
+    const createdAt = new Date(Date.now() - 3600 * 1000);
+    await pool.query(
+      `INSERT INTO users (id, email, normalized_email, password_hash, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        userId,
+        'pre-upgrade@example.com',
+        'pre-upgrade@example.com',
+        'scrypt_hash_prev',
+        createdAt,
+        createdAt,
+      ],
+    );
+    await pool.query(
+      `INSERT INTO candidates (id, created_at, updated_at) VALUES ($1, $2, $3)`,
+      [candId, createdAt, createdAt],
+    );
+    await pool.query(
+      `INSERT INTO user_candidates (id, user_id, candidate_id, relationship, is_primary, created_at)
+       VALUES ($1, $2, $3, 'OWNER', true, $4)`,
+      ['uc_pre_upgrade', userId, candId, createdAt],
+    );
+    const sessionTokenHash = 'session_pre_upgrade_hash';
+    const expiresAt = new Date(Date.now() + 24 * 3600 * 1000);
+    await pool.query(
+      `INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at, last_seen_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        'ses_pre_upgrade',
+        userId,
+        sessionTokenHash,
+        expiresAt,
+        createdAt,
+        createdAt,
+      ],
+    );
+
+    await pool.query(postgresPublicIdentityRecoverySql);
+
+    const userRes = await pool.query(
+      'SELECT id, email_verified_at, created_at FROM users WHERE id = $1',
+      [userId],
+    );
+    expect(userRes.rows[0]?.id).toBe(userId);
+    expect(userRes.rows[0]?.email_verified_at).not.toBeNull();
+    expect(new Date(userRes.rows[0]?.email_verified_at).getTime()).toBe(
+      createdAt.getTime(),
+    );
+
+    const authRepo = new AuthRepository(handle);
+    const active = await authRepo.findActiveSession(sessionTokenHash);
+    expect(active).not.toBeNull();
+    expect(active?.userId).toBe(userId);
+    expect(active?.primaryCandidateId).toBe(candId);
+    expect(active?.emailVerified).toBe(true);
+  });
+
+  it('Section 17: verifies user identity schema, provider identity uniqueness, and account linking on PostgreSQL', async () => {
+    const authRepo = new AuthRepository(handle);
+    const email = `link-test-${Date.now()}@example.com`;
+    const account = await authRepo.createAccount({
+      email,
+      passwordHash: 'hash-password',
+    });
+    expect(account.userId).toBeDefined();
+
+    const oAuthResult = await authRepo.authenticateOAuthIdentity({
+      provider: 'google',
+      providerSubject: 'google-sub-unique-1',
+      providerEmail: email.toUpperCase(),
+      providerEmailVerified: true,
+      passwordHash: 'social-only$v=1',
+      session: {
+        tokenHash: 'oauth_session_token_hash_1',
+        expiresAt: new Date(Date.now() + 3600 * 1000),
+      },
+    });
+
+    expect(oAuthResult.userId).toBe(account.userId);
+    expect(oAuthResult.candidateId).toBe(account.candidateId);
+
+    const pool = handle.pgPool!;
+    const identRes = await pool.query(
+      'SELECT * FROM user_identities WHERE provider = $1 AND provider_subject = $2',
+      ['google', 'google-sub-unique-1'],
+    );
+    expect(identRes.rows).toHaveLength(1);
+    expect(identRes.rows[0]?.user_id).toBe(account.userId);
+
+    const otherUser = await authRepo.createAccount({
+      email: `other-user-${Date.now()}@example.com`,
+      passwordHash: 'hash-password',
+    });
+
+    await expect(
+      pool.query(
+        `INSERT INTO user_identities (id, user_id, provider, provider_subject, provider_email, provider_email_verified, created_at, updated_at)
+         VALUES ('uid_dup', $1, 'google', 'google-sub-unique-1', 'other@example.com', true, now(), now())`,
+        [otherUser.userId],
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('Section 17: verifies verification token persistence, consumption, and expiry behavior on PostgreSQL', async () => {
+    const authRepo = new AuthRepository(handle);
+    const email = `verify-pg-${Date.now()}@example.com`;
+    const account = await authRepo.createAccount({
+      email,
+      passwordHash: 'hash-pwd',
+    });
+
+    const tokenHash = `token_hash_verify_${Date.now()}`;
+    await authRepo.issueActionToken({
+      userId: account.userId,
+      purpose: 'EMAIL_VERIFICATION',
+      tokenHash,
+      expiresAt: new Date(Date.now() + 1800 * 1000),
+    });
+
+    const userBefore = await authRepo.findUserById(account.userId);
+    expect(userBefore.emailVerifiedAt).toBeNull();
+
+    const consumed = await authRepo.consumeEmailVerification(tokenHash);
+    expect(consumed).toEqual({ userId: account.userId, email });
+
+    const userAfter = await authRepo.findUserById(account.userId);
+    expect(userAfter.emailVerifiedAt).not.toBeNull();
+
+    const replayed = await authRepo.consumeEmailVerification(tokenHash);
+    expect(replayed).toBeNull();
+
+    const expiredHash = `expired_token_${Date.now()}`;
+    await authRepo.issueActionToken({
+      userId: account.userId,
+      purpose: 'EMAIL_VERIFICATION',
+      tokenHash: expiredHash,
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    const expiredConsumed =
+      await authRepo.consumeEmailVerification(expiredHash);
+    expect(expiredConsumed).toBeNull();
+  });
+
+  it('Section 17: verifies password reset persistence, session revocation, and password update on PostgreSQL', async () => {
+    const authRepo = new AuthRepository(handle);
+    const email = `reset-pg-${Date.now()}@example.com`;
+    const account = await authRepo.createAccount({
+      email,
+      passwordHash: 'old-hash',
+    });
+
+    const sessionTokenHash = `active_session_hash_${Date.now()}`;
+    await authRepo.createSession({
+      userId: account.userId,
+      tokenHash: sessionTokenHash,
+      expiresAt: new Date(Date.now() + 3600 * 1000),
+    });
+    const sessionBefore = await authRepo.findActiveSession(sessionTokenHash);
+    expect(sessionBefore).not.toBeNull();
+
+    const resetTokenHash = `reset_token_hash_${Date.now()}`;
+    await authRepo.issueActionToken({
+      userId: account.userId,
+      purpose: 'PASSWORD_RESET',
+      tokenHash: resetTokenHash,
+      expiresAt: new Date(Date.now() + 1800 * 1000),
+    });
+
+    const resetSuccess = await authRepo.consumePasswordReset({
+      tokenHash: resetTokenHash,
+      passwordHash: 'new-password-hash',
+    });
+    expect(resetSuccess).toBe(true);
+
+    const user = await authRepo.findUserById(account.userId);
+    expect(user.passwordHash).toBe('new-password-hash');
+
+    const sessionAfter = await authRepo.findActiveSession(sessionTokenHash);
+    expect(sessionAfter).toBeNull();
+
+    const reused = await authRepo.consumePasswordReset({
+      tokenHash: resetTokenHash,
+      passwordHash: 'yet-another-hash',
+    });
+    expect(reused).toBe(false);
+  });
+
+  it('Section 17: converges concurrent OAuth first-login requests atomically on PostgreSQL', async () => {
+    const authRepo = new AuthRepository(handle);
+    const providerSubject = `apple-concurrent-${Date.now()}`;
+    const providerEmail = `relay-${Date.now()}@privaterelay.appleid.com`;
+
+    const [first, second] = await Promise.all([
+      authRepo.authenticateOAuthIdentity({
+        provider: 'apple',
+        providerSubject,
+        providerEmail,
+        providerEmailVerified: true,
+        passwordHash: 'social-only$v=1',
+        session: {
+          tokenHash: `ses_hash_1_${Date.now()}`,
+          expiresAt: new Date(Date.now() + 3600 * 1000),
+        },
+      }),
+      authRepo.authenticateOAuthIdentity({
+        provider: 'apple',
+        providerSubject,
+        providerEmail,
+        providerEmailVerified: true,
+        passwordHash: 'social-only$v=1',
+        session: {
+          tokenHash: `ses_hash_2_${Date.now()}`,
+          expiresAt: new Date(Date.now() + 3600 * 1000),
+        },
+      }),
+    ]);
+
+    expect(first.userId).toBe(second.userId);
+    expect(first.candidateId).toBe(second.candidateId);
+    expect(first.sessionId).not.toBe(second.sessionId);
+
+    const pool = handle.pgPool!;
+    const identCount = await pool.query(
+      'SELECT count(*)::int AS count FROM user_identities WHERE provider = $1 AND provider_subject = $2',
+      ['apple', providerSubject],
+    );
+    expect(identCount.rows[0]?.count).toBe(1);
+  });
+
+  it('Section 17: enforces Candidate ownership and strict two-user isolation on PostgreSQL', async () => {
+    const authRepo = new AuthRepository(handle);
+    const userA = await authRepo.createAccount({
+      email: `user-a-${Date.now()}@example.com`,
+      passwordHash: 'hash-a',
+    });
+    const userB = await authRepo.createAccount({
+      email: `user-b-${Date.now()}@example.com`,
+      passwordHash: 'hash-b',
+    });
+
+    expect(
+      await authRepo.userCanAccessCandidate(userA.userId, userA.candidateId),
+    ).toBe(true);
+    expect(
+      await authRepo.userCanAccessCandidate(userB.userId, userB.candidateId),
+    ).toBe(true);
+
+    expect(
+      await authRepo.userCanAccessCandidate(userA.userId, userB.candidateId),
+    ).toBe(false);
+    expect(
+      await authRepo.userCanAccessCandidate(userB.userId, userA.candidateId),
+    ).toBe(false);
+
+    const claimsRepo = new CareerMemoryRepository(handle);
+    await claimsRepo.createClaimsBatch({
+      candidateId: candidateId(userA.candidateId),
+      claims: [
+        {
+          kind: 'skill',
+          value: 'Postgres Security User A',
+          state: 'SUPPORTED',
+          evidence: {
+            evidenceType: 'candidate statement',
+            excerpt: 'User A statement for Postgres.',
+            state: 'candidate-confirmed',
+          },
+        },
+      ],
+    });
+    const profileA = await claimsRepo.getProfile(
+      candidateId(userA.candidateId),
+    );
+    const profileB = await claimsRepo.getProfile(
+      candidateId(userB.candidateId),
+    );
+    expect(profileA?.claims).toHaveLength(1);
+    expect(profileB?.claims).toHaveLength(0);
   });
 
   // ==================================================

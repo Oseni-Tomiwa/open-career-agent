@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('Cloud web authentication boundary', () => {
   beforeEach(() => {
+    window.history.replaceState({}, '', '/sign-in');
     vi.resetModules();
     vi.stubEnv('VITE_PRODUCT_DATA_SOURCE', 'api');
     vi.stubEnv('VITE_DEPLOYMENT_MODE', 'cloud');
@@ -31,6 +32,15 @@ describe('Cloud web authentication boundary', () => {
             error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
           }),
           { status: 401, headers: { 'content-type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            providers: { google: false, apple: false },
+            developmentEmailDelivery: false,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
         ),
       )
       .mockResolvedValueOnce(
@@ -68,7 +78,7 @@ describe('Cloud web authentication boundary', () => {
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Sign in' }),
+      await screen.findByRole('heading', { name: 'Welcome back' }),
     ).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Email'), {
       target: { value: 'person@example.com' },
@@ -81,12 +91,19 @@ describe('Cloud web authentication boundary', () => {
     expect(await screen.findByText('Candidate candidate_test')).toBeVisible();
     expect(fetcher).toHaveBeenNthCalledWith(
       2,
+      'https://api.rolevia.test/auth/capabilities',
+      expect.objectContaining({ credentials: 'include', method: 'GET' }),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      3,
       'https://api.rolevia.test/auth/login',
       expect.objectContaining({ credentials: 'include', method: 'POST' }),
     );
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: 'Sign in' })).toBeVisible(),
+      expect(
+        screen.getByRole('heading', { name: 'Welcome back' }),
+      ).toBeVisible(),
     );
   });
 
@@ -138,6 +155,15 @@ describe('Cloud web authentication boundary', () => {
           ),
         )
         .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              providers: { google: false, apple: false },
+              developmentEmailDelivery: false,
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        )
+        .mockResolvedValueOnce(
           new Response(JSON.stringify({ session: sessionA }), {
             status: 200,
             headers: { 'content-type': 'application/json' },
@@ -148,6 +174,15 @@ describe('Cloud web authentication boundary', () => {
             status: 200,
             headers: { 'content-type': 'application/json' },
           }),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              providers: { google: false, apple: false },
+              developmentEmailDelivery: false,
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
         )
         .mockResolvedValueOnce(
           new Response(JSON.stringify({ session: sessionB }), {
@@ -187,7 +222,7 @@ describe('Cloud web authentication boundary', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Set private state' }));
     expect(screen.getByText('Private value: A-only')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-    await screen.findByRole('heading', { name: 'Sign in' });
+    await screen.findByRole('heading', { name: 'Welcome back' });
 
     await signIn('b@example.com');
     expect(await screen.findByText('b@example.com')).toBeVisible();

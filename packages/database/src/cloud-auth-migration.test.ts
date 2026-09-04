@@ -11,6 +11,7 @@ import { applyMigrations } from './migrate.js';
 const cloudMigrations = new Set([
   '20260831050958_fancy_gorilla_man',
   '20260831053451_elite_scarlet_witch',
+  '20260901125834_wild_stranger',
 ]);
 const migrationsFolder = fileURLToPath(
   new URL('../migrations', import.meta.url),
@@ -125,9 +126,56 @@ describe('Cloud identity migration', () => {
     expect(
       database
         .sqlite!.prepare(
-          "select name from sqlite_master where type = 'table' and name in ('users', 'sessions', 'user_candidates') order by name",
+          "select name from sqlite_master where type = 'table' and name in ('users', 'sessions', 'user_candidates', 'user_identities', 'auth_action_tokens', 'oauth_attempts') order by name",
         )
         .all(),
-    ).toHaveLength(3);
+    ).toHaveLength(6);
+  });
+
+  it('treats existing password accounts as verified without revoking sessions', async () => {
+    directory = mkdtempSync(join(tmpdir(), 'oca-public-auth-upgrade-'));
+    const previous = join(directory, 'previous');
+    mkdirSync(previous);
+    for (const entry of readdirSync(migrationsFolder, {
+      withFileTypes: true,
+    })) {
+      if (!entry.isDirectory() || entry.name === '20260901125834_wild_stranger')
+        continue;
+      cpSync(join(migrationsFolder, entry.name), join(previous, entry.name), {
+        recursive: true,
+      });
+    }
+    database = openDatabase(join(directory, 'upgrade.sqlite'));
+    await applyMigrations(database, previous);
+    database.sqlite!.exec(`
+      insert into users
+        (id, email, normalized_email, password_hash, created_at, updated_at)
+      values
+        ('usr-existing', 'existing@example.com', 'existing@example.com',
+         'scrypt$v=1$existing', 1000, 1000);
+      insert into candidates (id, created_at, updated_at)
+      values ('candidate-existing', 1000, 1000);
+      insert into user_candidates
+        (id, user_id, candidate_id, relationship, is_primary, created_at)
+      values
+        ('uc-existing', 'usr-existing', 'candidate-existing', 'OWNER', 1, 1000);
+      insert into sessions
+        (id, user_id, token_hash, expires_at, created_at, last_seen_at)
+      values
+        ('ses-existing', 'usr-existing', 'existing-hash', 9999999999999, 1000, 1000);
+    `);
+
+    await applyMigrations(database, migrationsFolder);
+
+    expect(
+      database
+        .sqlite!.prepare('select email_verified_at from users where id = ?')
+        .get('usr-existing'),
+    ).toEqual({ email_verified_at: 1000 });
+    expect(
+      database
+        .sqlite!.prepare('select revoked_at from sessions where id = ?')
+        .get('ses-existing'),
+    ).toEqual({ revoked_at: null });
   });
 });

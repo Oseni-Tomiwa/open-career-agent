@@ -106,6 +106,10 @@ export const usersPg = pgTable(
     email: text('email').notNull(),
     normalizedEmail: text('normalized_email').notNull(),
     passwordHash: text('password_hash').notNull(),
+    emailVerifiedAt: timestamp('email_verified_at', {
+      withTimezone: true,
+      mode: 'date',
+    }),
     createdAt: timestamp('created_at', {
       withTimezone: true,
       mode: 'date',
@@ -180,6 +184,91 @@ export const sessionsPg = pgTable(
     uniqueIndex('pg_sessions_token_hash_unique').on(table.tokenHash),
     index('pg_sessions_user_idx').on(table.userId),
     index('pg_sessions_expiration_idx').on(table.expiresAt),
+  ],
+);
+
+export const userIdentitiesPg = pgTable(
+  'user_identities',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => usersPg.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    providerSubject: text('provider_subject').notNull(),
+    providerEmail: text('provider_email'),
+    providerEmailVerified: boolean('provider_email_verified')
+      .notNull()
+      .default(false),
+    createdAt: timestamp('created_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+    updatedAt: timestamp('updated_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('pg_user_identities_provider_subject_unique').on(
+      table.provider,
+      table.providerSubject,
+    ),
+    index('pg_user_identities_user_idx').on(table.userId),
+  ],
+);
+
+export const authActionTokensPg = pgTable(
+  'auth_action_tokens',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => usersPg.id, { onDelete: 'cascade' }),
+    purpose: text('purpose').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('created_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('pg_auth_action_tokens_hash_unique').on(table.tokenHash),
+    index('pg_auth_action_tokens_user_purpose_idx').on(
+      table.userId,
+      table.purpose,
+      table.createdAt,
+    ),
+    index('pg_auth_action_tokens_expiry_idx').on(table.expiresAt),
+  ],
+);
+
+export const oauthAttemptsPg = pgTable(
+  'oauth_attempts',
+  {
+    id: text('id').primaryKey(),
+    provider: text('provider').notNull(),
+    stateHash: text('state_hash').notNull(),
+    nonceHash: text('nonce_hash').notNull(),
+    redirectPath: text('redirect_path').notNull(),
+    expiresAt: timestamp('expires_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('created_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('pg_oauth_attempts_state_hash_unique').on(table.stateHash),
+    index('pg_oauth_attempts_expiry_idx').on(table.expiresAt),
   ],
 );
 

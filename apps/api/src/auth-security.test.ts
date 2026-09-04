@@ -27,6 +27,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { API_LOG_REDACTION_PATHS, createApiApp } from './app.js';
+import type { EmailService } from './email-service.js';
 
 interface RegisteredAccount {
   readonly token: string;
@@ -40,11 +41,20 @@ describe('Cloud authentication adversarial security', () => {
   let directory: string;
   let database: DatabaseHandle;
   let app: Awaited<ReturnType<typeof createApiApp>>;
+  let verificationUrls: Map<string, string>;
 
   beforeEach(async () => {
     directory = mkdtempSync(join(tmpdir(), 'oca-auth-security-'));
     database = openDatabase(join(directory, 'cloud.sqlite'));
     await applyMigrations(database);
+    verificationUrls = new Map();
+    const emailService: EmailService = {
+      sendVerificationEmail: ({ email, actionUrl }) => {
+        verificationUrls.set(email.trim().toLowerCase(), actionUrl);
+        return Promise.resolve();
+      },
+      sendPasswordResetEmail: () => Promise.resolve(),
+    };
     app = await createApiApp({
       config: {
         environment: 'production',
@@ -59,6 +69,7 @@ describe('Cloud authentication adversarial security', () => {
       },
       database,
       logger: false,
+      authServices: { emailService },
     });
   });
 
@@ -88,8 +99,32 @@ describe('Cloud authentication adversarial security', () => {
 
   async function registerBearer(email: string): Promise<RegisteredAccount> {
     const response = await register(email);
-    expect(response.statusCode).toBe(201);
-    return response.json<RegisteredAccount>();
+    expect(response.statusCode).toBe(202);
+    return verifyRegistration(email, 'bearer');
+  }
+
+  async function verifyRegistration(
+    email: string,
+    transport: 'bearer' | 'cookie',
+  ): Promise<RegisteredAccount & { readonly cookie?: string }> {
+    const actionUrl = verificationUrls.get(email.trim().toLowerCase());
+    expect(actionUrl).toBeDefined();
+    const token = new URL(actionUrl!).searchParams.get('token');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/verification/complete',
+      ...(transport === 'cookie'
+        ? { headers: { origin: 'https://app.rolevia.test' } }
+        : {}),
+      payload: { token, transport },
+    });
+    expect(response.statusCode).toBe(200);
+    return {
+      ...response.json<RegisteredAccount>(),
+      ...(response.headers['set-cookie']
+        ? { cookie: response.headers['set-cookie'] as string }
+        : {}),
+    };
   }
 
   function tableCount(table: string): number {
@@ -103,7 +138,7 @@ describe('Cloud authentication adversarial security', () => {
     for (const [table, label] of [
       ['candidates', 'candidate'],
       ['user_candidates', 'grant'],
-      ['sessions', 'session'],
+      ['auth_action_tokens', 'action_token'],
     ] as const) {
       database.sqlite!.exec(`
         create trigger force_${label}_failure
@@ -119,6 +154,7 @@ describe('Cloud authentication adversarial security', () => {
         'candidates',
         'user_candidates',
         'sessions',
+        'auth_action_tokens',
       ]) {
         expect(tableCount(identityTable), identityTable).toBe(0);
       }
@@ -138,7 +174,7 @@ describe('Cloud authentication adversarial security', () => {
       ].map((email) => register(email)),
     );
     expect(
-      attempts.filter((response) => response.statusCode === 201),
+      attempts.filter((response) => response.statusCode === 202),
     ).toHaveLength(1);
     expect(
       attempts.filter((response) => response.statusCode === 409),
@@ -146,7 +182,7 @@ describe('Cloud authentication adversarial security', () => {
     expect(tableCount('users')).toBe(1);
     expect(tableCount('candidates')).toBe(1);
     expect(tableCount('user_candidates')).toBe(1);
-    expect(tableCount('sessions')).toBe(1);
+    expect(tableCount('sessions')).toBe(0);
     const stored = database
       .sqlite!.prepare(
         'select email, normalized_email, password_hash from users',
@@ -206,8 +242,12 @@ describe('Cloud authentication adversarial security', () => {
       'cookie-transport@example.com',
       'cookie',
     );
-    expect(cookieRegistration.statusCode).toBe(201);
-    const cookieHeader = cookieRegistration.headers['set-cookie'];
+    expect(cookieRegistration.statusCode).toBe(202);
+    const cookieAccount = await verifyRegistration(
+      'cookie-transport@example.com',
+      'cookie',
+    );
+    const cookieHeader = cookieAccount.cookie;
     expect(cookieHeader).toBeDefined();
 
     const bearerWithCookieHeader = await app.inject({
@@ -231,7 +271,7 @@ describe('Cloud authentication adversarial security', () => {
       method: 'GET',
       url: '/auth/session',
       headers: {
-        authorization: `Bearer ${cookieRegistration.json<RegisteredAccount>().token}`,
+        authorization: `Bearer ${cookieAccount.token ?? ''}`,
       },
     });
     expect(stolenCookieViaBearer.statusCode).toBe(401);
@@ -249,7 +289,9 @@ describe('Cloud authentication adversarial security', () => {
 
   it('rejects state-changing cookie requests without expected origin', async () => {
     const registration = await register('csrf@example.com', 'cookie');
-    const cookie = registration.headers['set-cookie'] as string;
+    expect(registration.statusCode).toBe(202);
+    const cookie = (await verifyRegistration('csrf@example.com', 'cookie'))
+      .cookie!;
 
     for (const badOrigin of [
       undefined,
@@ -271,7 +313,10 @@ describe('Cloud authentication adversarial security', () => {
   it('revokes sessions across transports and handles expired leases deterministically', async () => {
     const bearerAccount = await registerBearer('revoke-bearer@example.com');
     const cookieReg = await register('revoke-cookie@example.com', 'cookie');
-    const cookie = cookieReg.headers['set-cookie'] as string;
+    expect(cookieReg.statusCode).toBe(202);
+    const cookie = (
+      await verifyRegistration('revoke-cookie@example.com', 'cookie')
+    ).cookie!;
 
     const bearerLogout = await app.inject({
       method: 'POST',

@@ -113,15 +113,13 @@ export function AppShell() {
               <small>{auth.session?.user.email ?? 'Development profile'}</small>
             </span>
           </div>
-          {auth.cloud && (
-            <button
-              className="auth-switch"
-              onClick={() => void auth.signOut()}
-              type="button"
-            >
-              Sign out
-            </button>
-          )}
+          <button
+            className="auth-switch"
+            onClick={() => void auth.signOut()}
+            type="button"
+          >
+            Sign out
+          </button>
         </div>
       </aside>
 

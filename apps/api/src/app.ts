@@ -64,7 +64,7 @@ import {
 } from '@oca/schemas';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 
-import { registerAuthBoundary } from './auth.js';
+import { registerAuthBoundary, type AuthBoundaryServices } from './auth.js';
 
 const SERVICE = { name: 'api', version: '0.0.0' } as const;
 
@@ -72,6 +72,10 @@ export const API_LOG_REDACTION_PATHS = [
   'req.headers.authorization',
   'req.headers.cookie',
   'req.body.password',
+  'req.body.token',
+  'req.body.code',
+  'req.query.code',
+  'req.query.state',
   'res.headers["set-cookie"]',
   '*.passwordHash',
   '*.tokenHash',
@@ -97,6 +101,7 @@ export interface CreateApiAppOptions {
   readonly database: DatabaseHandle;
   readonly closeDatabaseOnClose?: boolean;
   readonly logger?: boolean;
+  readonly authServices?: AuthBoundaryServices;
 }
 
 export async function createApiApp(
@@ -138,8 +143,8 @@ export async function createApiApp(
   await app.register(swagger, {
     openapi: {
       info: {
-        title: 'Open Career Agent API',
-        description: 'REST API for Open Career Agent monorepo',
+        title: 'Rolevia API',
+        description: 'REST API for the Rolevia career-intelligence platform',
         version: '0.0.0',
       },
     },
@@ -226,7 +231,12 @@ export async function createApiApp(
   });
 
   app.addSchema(ApiErrorEnvelopeSchema);
-  registerAuthBoundary(app, options.config, options.database);
+  registerAuthBoundary(
+    app,
+    options.config,
+    options.database,
+    options.authServices,
+  );
 
   const profileParams = Type.Object({ candidateId: Type.String() });
   const claimParams = Type.Object({

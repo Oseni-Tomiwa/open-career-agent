@@ -22,10 +22,16 @@ import {
   UpdateCandidateClaimInputSchema,
   UpdateSearchTargetInputSchema,
   AuthResponseSchema,
+  AuthCapabilitiesSchema,
   AuthSessionSchema,
   LoginInputSchema,
   LogoutResponseSchema,
   RegisterInputSchema,
+  PublicAuthAcceptedSchema,
+  ResendVerificationInputSchema,
+  VerificationCompleteInputSchema,
+  PasswordResetRequestInputSchema,
+  PasswordResetCompleteInputSchema,
   ReplaceCandidateClaimInputSchema,
   RetireCandidateClaimInputSchema,
 } from '@oca/schemas';
@@ -88,18 +94,110 @@ export class RoleviaApiClient {
   public async register(
     input: Static<typeof RegisterInputSchema>,
     options?: RequestOptions,
-  ): Promise<Static<typeof AuthResponseSchema>> {
+  ): Promise<Static<typeof PublicAuthAcceptedSchema>> {
     if (!Value.Check(RegisterInputSchema, input)) {
       throw new ValidationError('Invalid registration input.', input);
     }
     return this.request(
       '/auth/register',
+      PublicAuthAcceptedSchema,
+      'POST',
+      input,
+      options,
+      true,
+    );
+  }
+
+  public async getAuthCapabilities(
+    options?: RequestOptions,
+  ): Promise<Static<typeof AuthCapabilitiesSchema>> {
+    return this.request(
+      '/auth/capabilities',
+      AuthCapabilitiesSchema,
+      'GET',
+      undefined,
+      options,
+      true,
+    );
+  }
+
+  public async resendVerification(
+    input: Static<typeof ResendVerificationInputSchema>,
+    options?: RequestOptions,
+  ): Promise<Static<typeof PublicAuthAcceptedSchema>> {
+    if (!Value.Check(ResendVerificationInputSchema, input)) {
+      throw new ValidationError('Invalid verification request.', input);
+    }
+    return this.request(
+      '/auth/verification/resend',
+      PublicAuthAcceptedSchema,
+      'POST',
+      input,
+      options,
+      true,
+    );
+  }
+
+  public async completeVerification(
+    input: Static<typeof VerificationCompleteInputSchema>,
+    options?: RequestOptions,
+  ): Promise<Static<typeof AuthResponseSchema>> {
+    if (!Value.Check(VerificationCompleteInputSchema, input)) {
+      throw new ValidationError('Invalid verification token.', input);
+    }
+    return this.request(
+      '/auth/verification/complete',
       AuthResponseSchema,
       'POST',
       input,
       options,
       true,
     );
+  }
+
+  public async requestPasswordReset(
+    input: Static<typeof PasswordResetRequestInputSchema>,
+    options?: RequestOptions,
+  ): Promise<Static<typeof PublicAuthAcceptedSchema>> {
+    if (!Value.Check(PasswordResetRequestInputSchema, input)) {
+      throw new ValidationError('Invalid password reset request.', input);
+    }
+    return this.request(
+      '/auth/password/forgot',
+      PublicAuthAcceptedSchema,
+      'POST',
+      input,
+      options,
+      true,
+    );
+  }
+
+  public async completePasswordReset(
+    input: Static<typeof PasswordResetCompleteInputSchema>,
+    options?: RequestOptions,
+  ): Promise<Static<typeof PublicAuthAcceptedSchema>> {
+    if (!Value.Check(PasswordResetCompleteInputSchema, input)) {
+      throw new ValidationError('Invalid password reset input.', input);
+    }
+    return this.request(
+      '/auth/password/reset',
+      PublicAuthAcceptedSchema,
+      'POST',
+      input,
+      options,
+      true,
+    );
+  }
+
+  public oauthStartUrl(
+    provider: 'google' | 'apple',
+    redirect = '/overview',
+  ): string {
+    const safeRedirect =
+      redirect.startsWith('/') && !redirect.startsWith('//')
+        ? redirect
+        : '/overview';
+    return `${this.baseUrl}/auth/oauth/${provider}/start?redirect=${encodeURIComponent(safeRedirect)}`;
   }
 
   public async login(

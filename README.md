@@ -1,14 +1,14 @@
-# Open Career Agent
+# Rolevia
 
-> **Early implementation:** the approved TypeScript modular-monolith foundation is now scaffolded. “Open Career Agent” is a temporary codename, not a permanent product brand.
+> **Developer preview:** Rolevia is an evidence-led career-intelligence platform. “Open Career Agent” remains the repository/package lineage, not the product name.
 
-Open Career Agent is exploring an open-source career intelligence platform that helps a candidate answer:
+Rolevia helps a candidate answer:
 
 > Of all the opportunities available to me, which ones are actually worth my time, why, and what should I do next?
 
 The product thesis is that useful career guidance must evaluate whether an opportunity is realistically attainable before assessing fit, explain its reasoning and uncertainty, and ground candidate claims in verified evidence. Jobs are the first planned opportunity type, but the domain direction is broader than jobs alone.
 
-The repository now includes the Web/API and worker process foundations, canonical SQLite persistence, and a durable background-task ledger. The visible web page is a development bootstrap only; the production product interface has not been implemented yet.
+The repository includes a TypeScript modular monolith with a React public and authenticated product interface, API and worker processes, SQLite local/self-hosted persistence, PostgreSQL cloud support, and a durable background-task ledger. It remains a developer preview; external production services such as email delivery and OAuth credentials require deployment-specific configuration.
 
 ## Development
 

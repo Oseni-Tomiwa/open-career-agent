@@ -1274,8 +1274,17 @@ describe('Cloud identity and candidate isolation', () => {
         transport: 'bearer',
       },
     });
-    expect(response.statusCode).toBe(201);
-    return response.json<{
+    expect(response.statusCode).toBe(202);
+    const actionUrl = response.json<{ developmentActionUrl: string }>()
+      .developmentActionUrl;
+    const token = new URL(actionUrl).searchParams.get('token');
+    const verified = await cloudApp.inject({
+      method: 'POST',
+      url: '/auth/verification/complete',
+      payload: { token, transport: 'bearer' },
+    });
+    expect(verified.statusCode).toBe(200);
+    return verified.json<{
       token: string;
       session: { primaryCandidateId: string; user: { id: string } };
     }>();
@@ -1452,8 +1461,18 @@ describe('Cloud identity and candidate isolation', () => {
         transport: 'cookie',
       },
     });
-    expect(registered.statusCode).toBe(201);
-    const cookie = registered.headers['set-cookie'];
+    expect(registered.statusCode).toBe(202);
+    const actionUrl = registered.json<{ developmentActionUrl: string }>()
+      .developmentActionUrl;
+    const token = new URL(actionUrl).searchParams.get('token');
+    const verified = await cloudApp.inject({
+      method: 'POST',
+      url: '/auth/verification/complete',
+      headers: { origin: 'https://app.rolevia.test' },
+      payload: { token, transport: 'cookie' },
+    });
+    expect(verified.statusCode).toBe(200);
+    const cookie = verified.headers['set-cookie'];
     expect(cookie).toContain('HttpOnly');
     expect(cookie).toContain('SameSite=Lax');
 
