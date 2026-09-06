@@ -12,6 +12,14 @@ const normalized: NormalizedOpportunity = {
   organization: 'Acme',
   location: 'Remote',
   content: 'Build systems',
+  document: {
+    version: 'listing-document-v2.2',
+    sourceSystem: 'greenhouse',
+    sourceExternalId: 'provider-local-id',
+    fragments: [],
+    truncated: false,
+    discardedFragmentCount: 0,
+  },
 };
 
 function source(raw: Record<string, unknown>): SourceOpportunity {

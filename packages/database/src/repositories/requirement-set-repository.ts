@@ -42,6 +42,8 @@ function signature(input: CompleteRequirementSet): string {
         provenance: item.provenance
           .map((provenance) => ({
             observation: provenance.sourceObservationId,
+            sourceFieldPath: provenance.sourceFieldPath ?? null,
+            normalizedFragmentId: provenance.normalizedFragmentId ?? null,
             excerptHash: provenance.excerptHash,
             locatorVersion: provenance.locatorVersion,
           }))
@@ -259,7 +261,32 @@ export class RequirementSetRepository {
       };
       requirements.push({
         requirement,
-        provenance: provenanceRows as RequirementProvenance[],
+        provenance: provenanceRows.map((provenance: any) => ({
+          id: provenance.id,
+          requirementId: provenance.requirementId,
+          sourceObservationId: provenance.sourceObservationId,
+          snapshotId: provenance.snapshotId,
+          ...(provenance.sourceFieldPath
+            ? { sourceFieldPath: provenance.sourceFieldPath }
+            : {}),
+          ...(provenance.normalizedSection
+            ? { normalizedSection: provenance.normalizedSection }
+            : {}),
+          ...(provenance.normalizedFragmentId
+            ? { normalizedFragmentId: provenance.normalizedFragmentId }
+            : {}),
+          ...(provenance.startOffset !== null
+            ? { startOffset: provenance.startOffset }
+            : {}),
+          ...(provenance.endOffset !== null
+            ? { endOffset: provenance.endOffset }
+            : {}),
+          excerpt: provenance.excerpt,
+          excerptHash: provenance.excerptHash,
+          locatorVersion: provenance.locatorVersion,
+          extractorId: provenance.extractorId,
+          extractorVersion: provenance.extractorVersion,
+        })) as RequirementProvenance[],
       });
     }
 

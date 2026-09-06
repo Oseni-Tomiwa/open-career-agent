@@ -253,13 +253,13 @@ export function createDiscoveryHandlers(deps: {
               retainedUnresolved: matchResult.retainedUnresolved,
             });
 
-            // Persist candidate-independent V1-compatible requirements before
-            // continuing through the unchanged V1 evaluation engines.
+            // Persist candidate-independent V2.2 requirements before continuing
+            // through the unchanged V1 evaluation engines.
             if (snapId) {
               await taskLedger.enqueue({
                 taskType: 'requirements.extract',
                 payload: { snapshotId: snapId, candidateId: cId },
-                idempotencyKey: `requirements-${cId}-${snapId}-${obsId}-requirements-v2.1-v1-compat`,
+                idempotencyKey: `requirements-${cId}-${snapId}-${obsId}-requirements-v2.2-rich-document`,
               });
             }
           }

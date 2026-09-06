@@ -513,6 +513,7 @@ export const requirementProvenance = sqliteTable(
       .references(() => opportunitySnapshots.id, { onDelete: 'restrict' }),
     sourceFieldPath: text('source_field_path'),
     normalizedSection: text('normalized_section'),
+    normalizedFragmentId: text('normalized_fragment_id'),
     startOffset: integer('start_offset'),
     endOffset: integer('end_offset'),
     excerpt: text('excerpt').notNull(),

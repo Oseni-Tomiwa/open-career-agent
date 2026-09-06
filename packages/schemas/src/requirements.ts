@@ -127,6 +127,7 @@ const RequirementProvenanceBase = {
   snapshotId: NonEmptyString,
   sourceFieldPath: Type.Optional(NonEmptyString),
   normalizedSection: Type.Optional(NonEmptyString),
+  normalizedFragmentId: Type.Optional(NonEmptyString),
   excerpt: NonEmptyString,
   excerptHash: NonEmptyString,
   locatorVersion: NonEmptyString,

@@ -4,6 +4,12 @@ import type {
   OpportunityNormalizer,
   SourceOpportunity,
 } from '../core/index.js';
+import {
+  buildListingDocument,
+  fragmentsFromHtml,
+  fragmentsFromPlainText,
+  type ListingFragmentInput,
+} from '../core/listing-document.js';
 
 export class AshbyNormalizer implements OpportunityNormalizer {
   public normalize(record: SourceOpportunity): NormalizedOpportunity {
@@ -16,12 +22,17 @@ export class AshbyNormalizer implements OpportunityNormalizer {
     const payload = JSON.parse(record.rawPayload) as {
       title?: string;
       department?: string;
+      team?: string;
       locationName?: string;
+      secondaryLocations?: Array<
+        string | { locationName?: string; name?: string }
+      >;
       employmentType?: string;
       workplaceType?: string;
       isRemote?: boolean;
       descriptionPlain?: string;
       descriptionHtml?: string;
+      compensation?: string | { compensationTierSummary?: string };
       _boardId?: string;
     };
 
@@ -39,6 +50,26 @@ export class AshbyNormalizer implements OpportunityNormalizer {
       payload.descriptionHtml ??
       ''
     ).trim();
+
+    const fragments: ListingFragmentInput[] = payload.descriptionHtml
+      ? fragmentsFromHtml({
+          html: payload.descriptionHtml,
+          sourceFieldPath: '$.descriptionHtml',
+          defaultKind: 'SUMMARY',
+        })
+      : fragmentsFromPlainText({
+          text: payload.descriptionPlain ?? '',
+          sourceFieldPath: '$.descriptionPlain',
+          defaultKind: 'SUMMARY',
+        });
+    fragments.unshift({
+      kind: 'OTHER',
+      heading: 'Job title',
+      text: title,
+      sourceFieldPath: '$.title',
+      structure: 'STRUCTURED_VALUE',
+      structuredValue: { type: 'STRING', value: title },
+    });
 
     const location = payload.locationName?.trim();
 
@@ -61,10 +92,116 @@ export class AshbyNormalizer implements OpportunityNormalizer {
       else if (emp.includes('intern')) employmentType = 'internship';
     }
 
+    const secondaryLocations = (
+      Array.isArray(payload.secondaryLocations)
+        ? payload.secondaryLocations
+        : []
+    ).flatMap((item, index) => {
+      if (typeof item === 'string' && item.trim()) {
+        return [
+          {
+            text: item.trim(),
+            path: `$.secondaryLocations[${index}]`,
+          },
+        ];
+      }
+      if (!item || typeof item !== 'object') return [];
+      if (item.locationName?.trim()) {
+        return [
+          {
+            text: item.locationName.trim(),
+            path: `$.secondaryLocations[${index}].locationName`,
+          },
+        ];
+      }
+      return item.name?.trim()
+        ? [
+            {
+              text: item.name.trim(),
+              path: `$.secondaryLocations[${index}].name`,
+            },
+          ]
+        : [];
+    });
+    if (location) {
+      fragments.push({
+        kind: 'LOCATION',
+        heading: 'Location',
+        text: location,
+        sourceFieldPath: '$.locationName',
+        structure: 'STRUCTURED_VALUE',
+        structuredValue: { type: 'STRING', value: location },
+      });
+    }
+    for (const secondaryLocation of secondaryLocations) {
+      fragments.push({
+        kind: 'LOCATION',
+        heading: 'Secondary location',
+        text: secondaryLocation.text,
+        sourceFieldPath: secondaryLocation.path,
+        structure: 'STRUCTURED_VALUE',
+        structuredValue: { type: 'STRING', value: secondaryLocation.text },
+      });
+    }
+    for (const [heading, value, path] of [
+      ['Department', payload.department, '$.department'],
+      ['Team', payload.team, '$.team'],
+    ] as const) {
+      if (!value?.trim()) continue;
+      fragments.push({
+        kind: 'OTHER',
+        heading,
+        text: value.trim(),
+        sourceFieldPath: path,
+        structure: 'STRUCTURED_VALUE',
+        structuredValue: { type: 'STRING', value: value.trim() },
+      });
+    }
+    if (payload.workplaceType) {
+      fragments.push({
+        kind: 'LOCATION',
+        heading: 'Workplace type',
+        text: payload.workplaceType,
+        sourceFieldPath: '$.workplaceType',
+        structure: 'STRUCTURED_VALUE',
+        structuredValue: { type: 'STRING', value: payload.workplaceType },
+      });
+    }
+    if (payload.employmentType) {
+      fragments.push({
+        kind: 'EMPLOYMENT',
+        heading: 'Employment type',
+        text: payload.employmentType,
+        sourceFieldPath: '$.employmentType',
+        structure: 'STRUCTURED_VALUE',
+        structuredValue: { type: 'STRING', value: payload.employmentType },
+      });
+    }
+    const compensation =
+      typeof payload.compensation === 'string'
+        ? payload.compensation.trim()
+        : payload.compensation?.compensationTierSummary?.trim();
+    if (compensation) {
+      fragments.push({
+        kind: 'COMPENSATION',
+        heading: 'Compensation',
+        text: compensation,
+        sourceFieldPath: '$.compensation',
+        structure: 'STRUCTURED_VALUE',
+        structuredValue: { type: 'STRING', value: compensation },
+      });
+    }
+
     const result: NormalizedOpportunity = {
       title,
       organization,
       content,
+      document: buildListingDocument({
+        sourceSystem: record.sourceSystem,
+        sourceExternalId: record.sourceExternalId,
+        ...(record.sourceUrl ? { sourceUrl: record.sourceUrl } : {}),
+        fragments,
+      }),
     };
 
     if (location) result.location = location;

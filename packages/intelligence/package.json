@@ -20,7 +20,8 @@
   "dependencies": {
     "@oca/domain": "workspace:*",
     "@oca/schemas": "workspace:*",
-    "@oca/database": "workspace:*"
+    "@oca/database": "workspace:*",
+    "@oca/sources": "workspace:*"
   },
   "devDependencies": {
     "@oca/config": "workspace:*",

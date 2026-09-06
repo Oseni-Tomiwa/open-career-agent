@@ -32,6 +32,38 @@ snapshot, a normalized `title`, `location`, or `content` section, and the strong
 honest excerpt available from the flattened V1 snapshot. Raw provider field paths
 and exact offsets remain absent when V1 cannot establish them reliably.
 
+### V2.2 rich listing documents
+
+V2.2 retains the legacy `NormalizedOpportunity` projection and hash for snapshot
+compatibility, while adding a versioned `NormalizedListingDocument` beside it.
+The document contains bounded, ordered prose, list-item, and structured-value
+fragments. Each fragment records its provider-neutral semantic section when known,
+original heading, exact raw provider field path, stable fragment identity, source
+order, and deterministic truncation state.
+
+Provider mapping remains confined to `packages/sources`:
+
+| Provider | Preserved V2.2 inputs |
+| --- | --- |
+| Ashby | structured title/team/department, HTML/plain description, primary and secondary locations, workplace type, employment type, and public compensation summary |
+| Lever | opening/body/additional variants, labelled structured lists, team/department, location/all-location/country fields, workplace type, commitment, and salary range; legacy description is retained only as a fallback when richer body fields are absent |
+| Greenhouse | structured title/location/department/office/metadata plus headings, prose, and list items from the public content body |
+
+The `requirements-v2.2-rich-document` pipeline uses
+`requirements-deterministic-v2.2`. It extracts only from these provider-neutral
+fragments, merges semantically identical requirements while preserving independent
+provenance, treats structural preferred/required headings as modality evidence,
+keeps alternatives disjunctive, and rejects positive extraction from common
+negations. Explicit consequential constraints pass category-specific deterministic
+checks; broad remote labels and contradictory or equivalent-experience wording
+remain contextual/review-only. Years of experience remains a Fit signal.
+
+V2.2 does not interpret arbitrary skills outside its bounded vocabulary, resolve
+complex nested boolean language, infer jurisdictions from vague geography, or
+create Requirement Candidates. It records `PARTIAL` when deterministic document,
+requirement, or provenance bounds truncate output. Exact raw offsets remain absent
+when markup normalization makes them unreliable.
+
 ## 1. Problem statement
 
 Discovery V1 reliably retrieves, normalizes, deduplicates, persists, and evaluates public Ashby, Lever, and Greenhouse listings. Its limiting factor is not retrieval breadth. Requirement extraction is performed independently inside the Eligibility and Fit engines, is intentionally narrow, and is not persisted as a candidate-independent domain artifact.

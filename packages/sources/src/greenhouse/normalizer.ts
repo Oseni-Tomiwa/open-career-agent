@@ -4,46 +4,12 @@ import type {
   NormalizedOpportunity,
   OpportunityNormalizer,
 } from '../core/index.js';
-
-function decodeHtmlEntities(value: string): string {
-  const namedEntities: Record<string, string> = {
-    amp: '&',
-    apos: "'",
-    gt: '>',
-    lt: '<',
-    nbsp: ' ',
-    quot: '"',
-  };
-
-  return value.replace(
-    /&(#(?:x[0-9a-f]+|\d+)|[a-z]+);/gi,
-    (match, entity: string) => {
-      if (entity.startsWith('#x') || entity.startsWith('#X')) {
-        return String.fromCodePoint(Number.parseInt(entity.slice(2), 16));
-      }
-      if (entity.startsWith('#')) {
-        return String.fromCodePoint(Number.parseInt(entity.slice(1), 10));
-      }
-      return namedEntities[entity.toLowerCase()] ?? match;
-    },
-  );
-}
-
-function htmlToPlainText(value: string): string {
-  const decoded = decodeHtmlEntities(value);
-
-  return decodeHtmlEntities(
-    decoded
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/(?:div|h[1-6]|li|ol|p|section|ul)>/gi, '\n\n')
-      .replace(/<[^>]+>/g, ' '),
-  )
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n[ \t]+/g, '\n')
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
+import {
+  buildListingDocument,
+  fragmentsFromHtml,
+  htmlToPlainText,
+  type ListingFragmentInput,
+} from '../core/listing-document.js';
 
 export class GreenhouseNormalizer implements OpportunityNormalizer {
   public normalize(record: SourceOpportunity): NormalizedOpportunity {
@@ -58,6 +24,9 @@ export class GreenhouseNormalizer implements OpportunityNormalizer {
       company_name?: string;
       content?: string;
       location?: { name?: string };
+      departments?: Array<{ name?: string }>;
+      offices?: Array<{ name?: string; location?: string }>;
+      metadata?: Array<{ name?: string; value?: unknown }>;
     };
 
     // Deterministic extraction
@@ -65,11 +34,97 @@ export class GreenhouseNormalizer implements OpportunityNormalizer {
     const organization = payload.company_name?.trim() ?? 'Unknown Organization';
     const content = htmlToPlainText(payload.content?.trim() ?? '');
     const location = payload.location?.name?.trim();
+    const fragments: ListingFragmentInput[] = fragmentsFromHtml({
+      html: payload.content ?? '',
+      sourceFieldPath: '$.content',
+      defaultKind: 'SUMMARY',
+    });
+    fragments.unshift({
+      kind: 'OTHER',
+      heading: 'Job title',
+      text: title,
+      sourceFieldPath: '$.title',
+      structure: 'STRUCTURED_VALUE',
+      structuredValue: { type: 'STRING', value: title },
+    });
+    if (location) {
+      fragments.push({
+        kind: 'LOCATION',
+        heading: 'Location',
+        text: location,
+        sourceFieldPath: '$.location.name',
+        structure: 'STRUCTURED_VALUE',
+        structuredValue: { type: 'STRING', value: location },
+      });
+    }
+    const departments = Array.isArray(payload.departments)
+      ? payload.departments
+      : [];
+    for (const [index, department] of departments.entries()) {
+      if (!department || typeof department !== 'object') continue;
+      const name = department.name?.trim();
+      if (!name) continue;
+      fragments.push({
+        kind: 'OTHER',
+        heading: 'Department',
+        text: name,
+        sourceFieldPath: `$.departments[${index}].name`,
+        structure: 'STRUCTURED_VALUE',
+        structuredValue: { type: 'STRING', value: name },
+      });
+    }
+    const offices = Array.isArray(payload.offices) ? payload.offices : [];
+    for (const [index, office] of offices.entries()) {
+      if (!office || typeof office !== 'object') continue;
+      const name = office.name?.trim();
+      if (name) {
+        fragments.push({
+          kind: 'OTHER',
+          heading: 'Office',
+          text: name,
+          sourceFieldPath: `$.offices[${index}].name`,
+          structure: 'STRUCTURED_VALUE',
+          structuredValue: { type: 'STRING', value: name },
+        });
+      }
+      const officeLocation = office.location?.trim();
+      if (officeLocation) {
+        fragments.push({
+          kind: 'LOCATION',
+          heading: 'Office location',
+          text: officeLocation,
+          sourceFieldPath: `$.offices[${index}].location`,
+          structure: 'STRUCTURED_VALUE',
+          structuredValue: { type: 'STRING', value: officeLocation },
+        });
+      }
+    }
+    const metadataEntries = Array.isArray(payload.metadata)
+      ? payload.metadata
+      : [];
+    for (const [index, metadata] of metadataEntries.entries()) {
+      if (typeof metadata.value !== 'string' || !metadata.value.trim())
+        continue;
+      fragments.push({
+        kind: 'OTHER',
+        ...(metadata.name ? { heading: metadata.name } : {}),
+        text: metadata.value,
+        sourceFieldPath: `$.metadata[${index}].value`,
+        structure: 'STRUCTURED_VALUE',
+        structuredValue: { type: 'STRING', value: metadata.value },
+      });
+    }
 
     const result: NormalizedOpportunity = {
       title,
       organization,
       content,
+      document: buildListingDocument({
+        sourceSystem: record.sourceSystem,
+        sourceExternalId: record.sourceExternalId,
+        ...(record.sourceUrl ? { sourceUrl: record.sourceUrl } : {}),
+        fragments,
+      }),
     };
     if (location) {
       result.location = location;

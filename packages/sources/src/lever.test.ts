@@ -93,4 +93,121 @@ describe('Lever Adapter and Normalizer', () => {
       }
     }).rejects.toThrow('Malformed Lever response: missing postings array');
   });
+
+  it('preserves structured lists and richer fields without duplicating legacy body text', () => {
+    const record = {
+      sourceSystem: 'lever',
+      sourceExternalId: 'lever-rich',
+      sourceUrl: 'https://jobs.lever.co/example/lever-rich',
+      observedAt: new Date('2026-09-06T00:00:00.000Z'),
+      rawPayload: JSON.stringify({
+        text: 'Backend Engineer',
+        _siteId: 'example',
+        descriptionPlain: 'Legacy duplicate body containing TypeScript.',
+        openingPlain: 'Build reliable data products.',
+        descriptionBodyPlain: 'Work with a thoughtful engineering team.',
+        lists: [
+          {
+            text: 'Requirements',
+            content: '<ul><li>3+ years of TypeScript experience</li></ul>',
+          },
+          {
+            text: 'Nice to have',
+            content: '<ul><li>React experience is a plus</li></ul>',
+          },
+        ],
+        additionalPlain: 'USD 120000–150000 per year',
+        country: 'Germany',
+        categories: {
+          location: 'Berlin',
+          allLocations: ['Berlin', 'Amsterdam'],
+          commitment: 'Full-time',
+          department: 'Engineering',
+          team: 'Data',
+        },
+        workplaceType: 'Remote',
+        salaryRange: {
+          min: 120000,
+          max: 150000,
+          currency: 'USD',
+          interval: 'year',
+        },
+      }),
+    };
+
+    const normalized = new LeverNormalizer().normalize(record);
+    expect(normalized.content).toBe(
+      'Legacy duplicate body containing TypeScript.',
+    );
+    expect(normalized.document.fragments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'REQUIREMENTS',
+          heading: 'Requirements',
+          structure: 'LIST_ITEM',
+          sourceFieldPath: '$.lists[0].content',
+          text: '3+ years of TypeScript experience',
+        }),
+        expect.objectContaining({
+          kind: 'PREFERRED_QUALIFICATIONS',
+          sourceFieldPath: '$.lists[1].content',
+        }),
+        expect.objectContaining({
+          kind: 'LOCATION',
+          sourceFieldPath: '$.categories.allLocations',
+        }),
+        expect.objectContaining({
+          kind: 'COMPENSATION',
+          sourceFieldPath: '$.salaryRange',
+        }),
+        expect.objectContaining({
+          heading: 'Department',
+          sourceFieldPath: '$.categories.department',
+        }),
+        expect.objectContaining({
+          heading: 'Team',
+          sourceFieldPath: '$.categories.team',
+        }),
+      ]),
+    );
+    expect(
+      normalized.document.fragments.some(
+        (fragment) => fragment.sourceFieldPath === '$.descriptionPlain',
+      ),
+    ).toBe(false);
+
+    const legacyOnly = new LeverNormalizer().normalize({
+      ...record,
+      rawPayload: JSON.stringify({
+        text: 'Backend Engineer',
+        _siteId: 'example',
+        descriptionPlain: 'Legacy duplicate body containing TypeScript.',
+        categories: {
+          location: 'Berlin',
+          commitment: 'Full-time',
+        },
+        workplaceType: 'Remote',
+      }),
+    });
+    expect(new LeverNormalizer().hash(normalized)).toBe(
+      new LeverNormalizer().hash(legacyOnly),
+    );
+  });
+
+  it('tolerates malformed optional collection fields', () => {
+    const normalized = new LeverNormalizer().normalize({
+      sourceSystem: 'lever',
+      sourceExternalId: 'lever-sparse',
+      observedAt: new Date('2026-09-06T00:00:00.000Z'),
+      rawPayload: JSON.stringify({
+        text: 'Sparse role',
+        _siteId: 'example',
+        descriptionPlain: 'A sparse listing.',
+        lists: { invalid: true },
+        categories: { allLocations: { invalid: true } },
+      }),
+    });
+    expect(normalized.document.fragments).toHaveLength(2);
+    expect(normalized.document.truncated).toBe(false);
+  });
 });

@@ -1,3 +1,5 @@
+import type { NormalizedListingDocument } from './listing-document.js';
+
 export interface SourceOpportunity {
   sourceSystem: string;
   sourceExternalId: string;
@@ -20,12 +22,15 @@ export interface NormalizedOpportunity {
   workModel?: string;
   employmentType?: string;
   compensation?: string;
+  document: NormalizedListingDocument;
 }
 
 export interface OpportunityNormalizer {
   normalize(record: SourceOpportunity): NormalizedOpportunity;
   hash(normalized: NormalizedOpportunity): string;
 }
+
+export * from './listing-document.js';
 
 export function isSafeHttpUrl(url: string | null | undefined): boolean {
   if (!url) return false;

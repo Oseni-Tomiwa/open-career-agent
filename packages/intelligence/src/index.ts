@@ -5,3 +5,4 @@ export * from './fit/extractor.js';
 export * from './quality/engine.js';
 export * from './decision/engine.js';
 export * from './requirements/compatibility.js';
+export * from './requirements/v2.js';

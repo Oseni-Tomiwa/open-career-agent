@@ -138,6 +138,7 @@ export interface RequirementProvenance {
   readonly snapshotId: SnapshotId;
   readonly sourceFieldPath?: string;
   readonly normalizedSection?: string;
+  readonly normalizedFragmentId?: string;
   readonly startOffset?: number;
   readonly endOffset?: number;
   readonly excerpt: string;

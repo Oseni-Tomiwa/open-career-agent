@@ -204,6 +204,9 @@ importers:
       '@oca/schemas':
         specifier: workspace:*
         version: link:../schemas
+      '@oca/sources':
+        specifier: workspace:*
+        version: link:../sources
     devDependencies:
       '@oca/config':
         specifier: workspace:*

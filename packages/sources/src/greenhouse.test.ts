@@ -17,8 +17,65 @@ describe('Greenhouse normalizer', () => {
       }),
     };
 
-    expect(new GreenhouseNormalizer().normalize(record).content).toBe(
+    const normalized = new GreenhouseNormalizer().normalize(record);
+    expect(normalized.content).toBe(
       'About the job\n\nBuild reliable APIs & tools.\n\nWrite Go\n\nOperate AWS',
+    );
+    expect(normalized.document.fragments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          heading: 'About the job',
+          kind: 'SUMMARY',
+          sourceFieldPath: '$.content',
+        }),
+        expect.objectContaining({
+          structure: 'LIST_ITEM',
+          text: 'Write Go',
+        }),
+      ]),
+    );
+  });
+
+  it('preserves qualification headings and structured location provenance', () => {
+    const normalized = new GreenhouseNormalizer().normalize({
+      sourceSystem: 'greenhouse',
+      sourceExternalId: 'greenhouse-rich',
+      observedAt: new Date('2026-09-06T00:00:00.000Z'),
+      rawPayload: JSON.stringify({
+        title: 'Platform Engineer',
+        company_name: 'Example',
+        content:
+          '<h3>Minimum qualifications</h3><ul><li>3+ years of TypeScript experience</li></ul><h3>Preferred qualifications</h3><ul><li>React experience</li></ul>',
+        location: { name: 'Remote, Germany' },
+        departments: [{ name: 'Engineering' }],
+        offices: [{ name: 'Berlin hub', location: 'Berlin, Germany' }],
+        metadata: [{ name: 'Employment type', value: 'Full-time' }],
+      }),
+    });
+    expect(normalized.document.fragments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'REQUIREMENTS' }),
+        expect.objectContaining({ kind: 'PREFERRED_QUALIFICATIONS' }),
+        expect.objectContaining({
+          kind: 'LOCATION',
+          sourceFieldPath: '$.location.name',
+        }),
+        expect.objectContaining({
+          heading: 'Department',
+          sourceFieldPath: '$.departments[0].name',
+        }),
+        expect.objectContaining({
+          heading: 'Office',
+          sourceFieldPath: '$.offices[0].name',
+        }),
+        expect.objectContaining({
+          kind: 'LOCATION',
+          sourceFieldPath: '$.offices[0].location',
+        }),
+        expect.objectContaining({
+          sourceFieldPath: '$.metadata[0].value',
+        }),
+      ]),
     );
   });
 });

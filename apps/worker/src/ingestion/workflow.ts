@@ -142,7 +142,7 @@ export function createTaskHandlers(deps: {
                   snapshotId: snapId,
                   candidateId: payload.candidateId,
                 },
-                idempotencyKey: `requirements-${payload.candidateId}-${snapId}-${obsId}-requirements-v2.1-v1-compat`,
+                idempotencyKey: `requirements-${payload.candidateId}-${snapId}-${obsId}-requirements-v2.2-rich-document`,
               });
             }
           }

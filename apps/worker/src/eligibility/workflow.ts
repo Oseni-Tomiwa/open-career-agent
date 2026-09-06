@@ -17,8 +17,8 @@ import type {
 import { requirementSetId } from '@oca/domain';
 import {
   EligibilityEngine,
-  V1_COMPAT_DETERMINISTIC_EXTRACTOR_VERSION,
-  V1_COMPAT_PIPELINE_VERSION,
+  V2_2_DETERMINISTIC_EXTRACTOR_VERSION,
+  V2_2_PIPELINE_VERSION,
 } from '@oca/intelligence';
 import { createHash, randomUUID } from 'node:crypto';
 
@@ -88,9 +88,8 @@ export function createEligibilityHandlers(deps: {
           )
         : await requirementSets.getLatestCompatible({
             snapshotId: snapId as SnapshotId,
-            extractorPipelineVersion: V1_COMPAT_PIPELINE_VERSION,
-            deterministicExtractorVersion:
-              V1_COMPAT_DETERMINISTIC_EXTRACTOR_VERSION,
+            extractorPipelineVersion: V2_2_PIPELINE_VERSION,
+            deterministicExtractorVersion: V2_2_DETERMINISTIC_EXTRACTOR_VERSION,
           });
       if (
         payload.requirementSetId &&

@@ -14,12 +14,17 @@ describe('Ashby Adapter and Normalizer', () => {
           id: 'ashby-202',
           title: 'Full Stack Staff Engineer',
           department: 'Core Product',
+          team: 'Foundations',
           locationName: 'San Francisco, CA',
           employmentType: 'FullTime',
           workplaceType: 'Remote',
           isRemote: true,
           jobUrl: 'https://jobs.ashbyhq.com/linear/ashby-202',
           descriptionPlain: 'React and Node.js codebase.',
+          descriptionHtml:
+            '<h3>Requirements</h3><ul><li>TypeScript experience</li></ul>',
+          secondaryLocations: [{ locationName: 'New York, NY' }],
+          compensation: { compensationTierSummary: 'USD 150000–180000' },
         },
       ],
     };
@@ -52,6 +57,39 @@ describe('Ashby Adapter and Normalizer', () => {
     expect(normalized.workModel).toBe('remote');
     expect(normalized.employmentType).toBe('full-time');
     expect(normalized.content).toBe('React and Node.js codebase.');
+    expect(normalized.document.fragments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'REQUIREMENTS',
+          structure: 'LIST_ITEM',
+          text: 'TypeScript experience',
+          sourceFieldPath: '$.descriptionHtml',
+        }),
+        expect.objectContaining({
+          kind: 'LOCATION',
+          text: 'San Francisco, CA',
+          sourceFieldPath: '$.locationName',
+        }),
+        expect.objectContaining({
+          kind: 'LOCATION',
+          text: 'New York, NY',
+          sourceFieldPath: '$.secondaryLocations[0].locationName',
+        }),
+        expect.objectContaining({
+          kind: 'COMPENSATION',
+          text: 'USD 150000–180000',
+          sourceFieldPath: '$.compensation',
+        }),
+        expect.objectContaining({
+          heading: 'Department',
+          sourceFieldPath: '$.department',
+        }),
+        expect.objectContaining({
+          heading: 'Team',
+          sourceFieldPath: '$.team',
+        }),
+      ]),
+    );
 
     const hash = normalizer.hash(normalized);
     expect(typeof hash).toBe('string');

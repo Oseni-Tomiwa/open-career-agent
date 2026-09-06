@@ -105,7 +105,9 @@ describe('RequirementSetRepository', () => {
               requirementId: reqId,
               sourceObservationId: sourceObservationId(observation),
               snapshotId: snapshot,
+              sourceFieldPath: '$.lists[0].content',
               normalizedSection: 'content',
+              normalizedFragmentId: 'fragment-synthetic-requirement',
               excerpt: 'TypeScript is required.',
               excerptHash: 'excerpt-hash',
               locatorVersion: 'normalized-snapshot-v1',
@@ -128,6 +130,8 @@ describe('RequirementSetRepository', () => {
       sourceObservationId: observation,
       snapshotId: snapshot,
       excerpt: 'TypeScript is required.',
+      sourceFieldPath: '$.lists[0].content',
+      normalizedFragmentId: 'fragment-synthetic-requirement',
     });
     expect(await repository.getById(result.artifact.set.id)).toEqual(
       result.artifact,
@@ -147,6 +151,31 @@ describe('RequirementSetRepository', () => {
         .sqlite!.prepare('select count(*) count from requirement_sets')
         .get(),
     ).toEqual({ count: 1 });
+  });
+
+  it('keeps historical V2.1 provenance without fragment locators readable', async () => {
+    const repository = new RequirementSetRepository(database);
+    const base = artifact();
+    const original = base.requirements[0]!;
+    const historicalProvenance = { ...original.provenance[0]! };
+    delete (historicalProvenance as { normalizedFragmentId?: string })
+      .normalizedFragmentId;
+    const historical: CompleteRequirementSet = {
+      ...base,
+      requirements: [
+        {
+          requirement: original.requirement,
+          provenance: [historicalProvenance],
+        },
+      ],
+    };
+
+    const result = await repository.createAtomic(historical);
+
+    expect(result.artifact).toEqual(historical);
+    expect(result.artifact.requirements[0]?.provenance[0]).not.toHaveProperty(
+      'normalizedFragmentId',
+    );
   });
 
   it('preserves the old set when an extractor pipeline version changes', async () => {

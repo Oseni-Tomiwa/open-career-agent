@@ -7,10 +7,11 @@ import {
 } from '@oca/database';
 import { snapshotId } from '@oca/domain';
 import {
-  buildV1CompatibilityRequirementSet,
-  V1_COMPAT_DETERMINISTIC_EXTRACTOR_VERSION,
-  V1_COMPAT_PIPELINE_VERSION,
+  buildV2RequirementSet,
+  V2_2_DETERMINISTIC_EXTRACTOR_VERSION,
+  V2_2_PIPELINE_VERSION,
 } from '@oca/intelligence';
+import { getSourceNormalizer, type SourceOpportunity } from '@oca/sources';
 
 import type { BackgroundTaskHandler } from '../worker.js';
 
@@ -22,10 +23,9 @@ export function createRequirementHandlers(deps: {
   const opportunities = new OpportunityRepository(deps.db);
   const requirements = new RequirementSetRepository(deps.db);
   const ledger = new BackgroundTaskLedger(deps.db);
-  const pipelineVersion = deps.pipelineVersion ?? V1_COMPAT_PIPELINE_VERSION;
+  const pipelineVersion = deps.pipelineVersion ?? V2_2_PIPELINE_VERSION;
   const deterministicExtractorVersion =
-    deps.deterministicExtractorVersion ??
-    V1_COMPAT_DETERMINISTIC_EXTRACTOR_VERSION;
+    deps.deterministicExtractorVersion ?? V2_2_DETERMINISTIC_EXTRACTOR_VERSION;
 
   return {
     'requirements.extract': async (task: BackgroundTask) => {
@@ -50,11 +50,31 @@ export function createRequirementHandlers(deps: {
         );
       }
 
-      const artifact = buildV1CompatibilityRequirementSet(
-        snapshot,
-        observations,
-        { pipelineVersion, deterministicExtractorVersion },
-      );
+      const normalizedObservations = observations.map((observation) => {
+        const sourceRecord: SourceOpportunity = {
+          sourceSystem: observation.sourceSystem,
+          sourceExternalId: observation.sourceExternalId,
+          ...(observation.sourceUrl
+            ? { sourceUrl: observation.sourceUrl }
+            : {}),
+          rawPayload: observation.rawPayload,
+          observedAt: new Date(observation.observedAt),
+          ...(observation.sourceUpdatedAt
+            ? { updatedAt: new Date(observation.sourceUpdatedAt) }
+            : {}),
+        };
+        return {
+          id: observation.id,
+          fingerprint: observation.fingerprint,
+          document: getSourceNormalizer(observation.sourceSystem).normalize(
+            sourceRecord,
+          ).document,
+        };
+      });
+      const artifact = buildV2RequirementSet(snapshot, normalizedObservations, {
+        pipelineVersion,
+        deterministicExtractorVersion,
+      });
       const persisted = await requirements.createAtomic(artifact);
 
       if (payload.candidateId) {

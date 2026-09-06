@@ -41,7 +41,7 @@ function task(snapshot: string, candidate: string): BackgroundTask {
   };
 }
 
-describe('requirements.extract V2.1 workflow', () => {
+describe('requirements.extract V2.2 workflow', () => {
   let directory: string;
   let database: DatabaseHandle;
   let ledger: BackgroundTaskLedger;
@@ -57,7 +57,7 @@ describe('requirements.extract V2.1 workflow', () => {
 
     const sources = new SourceListingRepository(database);
     await sources.persistListing('listing-requirements-workflow', {
-      sourceSystem: 'synthetic',
+      sourceSystem: 'lever',
       sourceExternalId: 'synthetic-requirements-workflow',
       sourceUrl: 'https://example.test/jobs/requirements-workflow',
     });
@@ -65,7 +65,17 @@ describe('requirements.extract V2.1 workflow', () => {
       'observation-requirements-workflow',
       'listing-requirements-workflow',
       {
-        rawPayload: '{"description":"TypeScript is required."}',
+        rawPayload: JSON.stringify({
+          text: 'Synthetic Engineer',
+          _siteId: 'synthetic-organization',
+          descriptionPlain: 'A legacy summary without requirement cues.',
+          lists: [
+            {
+              text: 'Requirements',
+              content: '<ul><li>TypeScript</li></ul>',
+            },
+          ],
+        }),
         fingerprint: 'observation-requirements-workflow',
       },
     );
@@ -122,6 +132,22 @@ describe('requirements.extract V2.1 workflow', () => {
     expect(
       database
         .sqlite!.prepare(
+          `select r.normalized_key normalizedKey,
+                  p.source_field_path sourceFieldPath,
+                  p.normalized_fragment_id normalizedFragmentId
+             from canonical_requirements r
+             join requirement_provenance p on p.requirement_id = r.id
+            where r.normalized_key = 'technical:typescript'`,
+        )
+        .get(),
+    ).toMatchObject({
+      normalizedKey: 'technical:typescript',
+      sourceFieldPath: '$.lists[0].content',
+      normalizedFragmentId: expect.stringMatching(/^fragment_/),
+    });
+    expect(
+      database
+        .sqlite!.prepare(
           "select count(*) count from background_tasks where task_type = 'eligibility.evaluate'",
         )
         .get(),
@@ -152,8 +178,8 @@ describe('requirements.extract V2.1 workflow', () => {
 
     await createRequirementHandlers({
       db: database,
-      pipelineVersion: 'requirements-v2.1-v1-compat-next',
-      deterministicExtractorVersion: 'eligibility-v1+fit-v1.3-next',
+      pipelineVersion: 'requirements-v2.2-rich-document-next',
+      deterministicExtractorVersion: 'requirements-deterministic-v2.2-next',
     })['requirements.extract']!(task(snapshot, candidate));
     await runEvaluationChain();
 
