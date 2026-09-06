@@ -289,6 +289,53 @@ describe('RequirementSetRepository', () => {
     ).toThrow();
   });
 
+  it('enforces the model-proposal actionability ceiling in storage', async () => {
+    const persisted = await new RequirementSetRepository(database).createAtomic(
+      artifact(),
+    );
+
+    expect(() =>
+      database
+        .sqlite!.prepare(
+          `insert into requirement_candidates (
+            id, requirement_set_id, snapshot_id, category, normalized_key,
+            value_json, statement, strength, polarity, assertion_basis,
+            evaluation_use, actionability_ceiling, model_confidence, rationale,
+            proposer_id, model_capability_version, instruction_version,
+            proposal_schema_version, grounding_validator_version,
+            validation_status, grounding_status, rejection_reasons_json,
+            proposal_hash, created_at
+          ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          'rqc-hard-forbidden',
+          persisted.artifact.set.id,
+          snapshot,
+          'WORK_AUTHORIZATION',
+          'work-authorization:germany',
+          JSON.stringify({ type: 'SCOPE', value: 'Germany' }),
+          'Authorization is required.',
+          'REQUIRED',
+          'REQUIRES',
+          'INTERPRETED',
+          'ELIGIBILITY',
+          'HARD_CONSTRAINT_SAFE',
+          'HIGH',
+          'Synthetic rejected proposal.',
+          'synthetic-provider',
+          'synthetic-v1',
+          'instructions-v1',
+          'schema-v1',
+          'grounding-v1',
+          'REJECTED',
+          'REJECTED',
+          '[]',
+          'proposal-hard-forbidden',
+          Date.now(),
+        ),
+    ).toThrow();
+  });
+
   it('rejects conflicting content for the same compatibility identity', async () => {
     const repository = new RequirementSetRepository(database);
     await repository.createAtomic(artifact());

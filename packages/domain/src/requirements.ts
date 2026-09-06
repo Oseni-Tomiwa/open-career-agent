@@ -1,5 +1,8 @@
 import type {
   RequirementId,
+  RequirementAssistanceRunId,
+  RequirementCandidateId,
+  RequirementCandidateSourceId,
   RequirementProvenanceId,
   RequirementSetId,
   SnapshotId,
@@ -85,6 +88,32 @@ export type RequirementDeterministicStatus =
 export type RequirementAssistedStatus =
   (typeof REQUIREMENT_ASSISTED_STATUSES)[number];
 
+export const REQUIREMENT_CANDIDATE_VALIDATION_STATUSES = [
+  'ACCEPTED_FOR_REVIEW',
+  'DUPLICATE',
+  'REJECTED',
+] as const;
+export const REQUIREMENT_GROUNDING_STATUSES = ['GROUNDED', 'REJECTED'] as const;
+export const REQUIREMENT_ASSISTANCE_RUN_STATUSES = [
+  'SUCCEEDED',
+  'UNAVAILABLE',
+  'REJECTED',
+  'FAILED',
+] as const;
+export const MODEL_PROPOSAL_ACTIONABILITY_CEILINGS = [
+  'FIT_SIGNAL_SAFE',
+  'REVIEW_ONLY',
+] as const;
+
+export type RequirementCandidateValidationStatus =
+  (typeof REQUIREMENT_CANDIDATE_VALIDATION_STATUSES)[number];
+export type RequirementGroundingStatus =
+  (typeof REQUIREMENT_GROUNDING_STATUSES)[number];
+export type RequirementAssistanceRunStatus =
+  (typeof REQUIREMENT_ASSISTANCE_RUN_STATUSES)[number];
+export type ModelProposalActionabilityCeiling =
+  (typeof MODEL_PROPOSAL_ACTIONABILITY_CEILINGS)[number];
+
 export type RequirementValue =
   | {
       readonly type: 'TERM';
@@ -153,7 +182,74 @@ export interface RequirementWithProvenance {
   readonly provenance: readonly RequirementProvenance[];
 }
 
+export interface RequirementCandidateSource {
+  readonly id: RequirementCandidateSourceId;
+  readonly requirementCandidateId: RequirementCandidateId;
+  readonly sourceObservationId: SourceObservationId;
+  readonly snapshotId: SnapshotId;
+  readonly normalizedFragmentId: string;
+  readonly sourceFieldPath?: string;
+  readonly excerpt: string;
+  readonly excerptHash: string;
+}
+
+export interface RequirementCandidate {
+  readonly id: RequirementCandidateId;
+  readonly requirementSetId: RequirementSetId;
+  readonly snapshotId: SnapshotId;
+  readonly category: RequirementCategory;
+  readonly normalizedKey: string;
+  readonly value: RequirementValue;
+  readonly statement: string;
+  readonly strength: RequirementStrength;
+  readonly polarity: RequirementPolarity;
+  readonly assertionBasis: RequirementAssertionBasis;
+  readonly evaluationUse: RequirementEvaluationUse;
+  readonly actionabilityCeiling: ModelProposalActionabilityCeiling;
+  readonly modelConfidence: RequirementConfidence;
+  readonly rationale: string;
+  readonly proposerId: string;
+  readonly modelCapabilityVersion: string;
+  readonly instructionVersion: string;
+  readonly proposalSchemaVersion: string;
+  readonly groundingValidatorVersion: string;
+  readonly validationStatus: RequirementCandidateValidationStatus;
+  readonly groundingStatus: RequirementGroundingStatus;
+  readonly rejectionReasons: readonly string[];
+  readonly proposalHash: string;
+  readonly createdAt: Date;
+  readonly sources: readonly RequirementCandidateSource[];
+}
+
+export interface RequirementAssistanceRun {
+  readonly id: RequirementAssistanceRunId;
+  readonly requirementSetId: RequirementSetId;
+  readonly requestFingerprint: string;
+  readonly assistedPipelineVersion: string;
+  readonly selectionVersion: string;
+  readonly proposalSchemaVersion: string;
+  readonly instructionVersion: string;
+  readonly groundingValidatorVersion: string;
+  readonly providerId: string;
+  readonly providerCapabilityVersion: string;
+  readonly status: RequirementAssistanceRunStatus;
+  readonly attempted: boolean;
+  readonly selectedFragmentCount: number;
+  readonly selectedCharacterCount: number;
+  readonly proposalCount: number;
+  readonly groundedCount: number;
+  readonly rejectedCount: number;
+  readonly duplicateCount: number;
+  readonly consequentialCount: number;
+  readonly unsafePromotionAttempts: number;
+  readonly rejectionReasonCounts: Readonly<Record<string, number>>;
+  readonly safeReason?: string;
+  readonly createdAt: Date;
+}
+
 export interface CompleteRequirementSet {
   readonly set: RequirementSet;
   readonly requirements: readonly RequirementWithProvenance[];
+  readonly candidates?: readonly RequirementCandidate[];
+  readonly assistanceRun?: RequirementAssistanceRun;
 }

@@ -188,9 +188,202 @@ export const RequirementSetArtifactSchema = Type.Object(
         { additionalProperties: false },
       ),
     ),
+    candidates: Type.Optional(
+      Type.Array(
+        Type.Object(
+          {
+            id: NonEmptyString,
+            requirementSetId: NonEmptyString,
+            snapshotId: NonEmptyString,
+            category: RequirementCategorySchema,
+            normalizedKey: NonEmptyString,
+            value: RequirementValueSchema,
+            statement: NonEmptyString,
+            strength: Type.Union([
+              Type.Literal('REQUIRED'),
+              Type.Literal('PREFERRED'),
+              Type.Literal('CONTEXTUAL'),
+            ]),
+            polarity: Type.Union([
+              Type.Literal('REQUIRES'),
+              Type.Literal('PERMITS'),
+              Type.Literal('EXCLUDES'),
+              Type.Literal('UNAVAILABLE'),
+            ]),
+            assertionBasis: Type.Union([
+              Type.Literal('EXPLICIT_STRUCTURED'),
+              Type.Literal('EXPLICIT_TEXT'),
+              Type.Literal('INTERPRETED'),
+            ]),
+            evaluationUse: Type.Union([
+              Type.Literal('ELIGIBILITY'),
+              Type.Literal('FIT'),
+              Type.Literal('CONTEXT_ONLY'),
+            ]),
+            actionabilityCeiling: Type.Union([
+              Type.Literal('FIT_SIGNAL_SAFE'),
+              Type.Literal('REVIEW_ONLY'),
+            ]),
+            modelConfidence: Type.Union([
+              Type.Literal('HIGH'),
+              Type.Literal('MODERATE'),
+              Type.Literal('LOW'),
+            ]),
+            rationale: Type.String({ minLength: 1, maxLength: 500 }),
+            proposerId: NonEmptyString,
+            modelCapabilityVersion: NonEmptyString,
+            instructionVersion: NonEmptyString,
+            proposalSchemaVersion: NonEmptyString,
+            groundingValidatorVersion: NonEmptyString,
+            validationStatus: Type.Union([
+              Type.Literal('ACCEPTED_FOR_REVIEW'),
+              Type.Literal('DUPLICATE'),
+              Type.Literal('REJECTED'),
+            ]),
+            groundingStatus: Type.Union([
+              Type.Literal('GROUNDED'),
+              Type.Literal('REJECTED'),
+            ]),
+            rejectionReasons: Type.Array(NonEmptyString, { maxItems: 16 }),
+            proposalHash: NonEmptyString,
+            createdAt: NonEmptyString,
+            sources: Type.Array(
+              Type.Object(
+                {
+                  id: NonEmptyString,
+                  requirementCandidateId: NonEmptyString,
+                  sourceObservationId: NonEmptyString,
+                  snapshotId: NonEmptyString,
+                  normalizedFragmentId: NonEmptyString,
+                  sourceFieldPath: Type.Optional(NonEmptyString),
+                  excerpt: Type.String({ minLength: 1, maxLength: 1200 }),
+                  excerptHash: NonEmptyString,
+                },
+                { additionalProperties: false },
+              ),
+              { maxItems: 8 },
+            ),
+          },
+          { additionalProperties: false },
+        ),
+        { maxItems: 32 },
+      ),
+    ),
+    assistanceRun: Type.Optional(
+      Type.Object(
+        {
+          id: NonEmptyString,
+          requirementSetId: NonEmptyString,
+          requestFingerprint: NonEmptyString,
+          assistedPipelineVersion: NonEmptyString,
+          selectionVersion: NonEmptyString,
+          proposalSchemaVersion: NonEmptyString,
+          instructionVersion: NonEmptyString,
+          groundingValidatorVersion: NonEmptyString,
+          providerId: NonEmptyString,
+          providerCapabilityVersion: NonEmptyString,
+          status: Type.Union([
+            Type.Literal('SUCCEEDED'),
+            Type.Literal('UNAVAILABLE'),
+            Type.Literal('REJECTED'),
+            Type.Literal('FAILED'),
+          ]),
+          attempted: Type.Boolean(),
+          selectedFragmentCount: Type.Integer({ minimum: 0, maximum: 12 }),
+          selectedCharacterCount: Type.Integer({ minimum: 0, maximum: 8000 }),
+          proposalCount: Type.Integer({ minimum: 0, maximum: 32 }),
+          groundedCount: Type.Integer({ minimum: 0, maximum: 32 }),
+          rejectedCount: Type.Integer({ minimum: 0, maximum: 32 }),
+          duplicateCount: Type.Integer({ minimum: 0, maximum: 32 }),
+          consequentialCount: Type.Integer({ minimum: 0, maximum: 32 }),
+          unsafePromotionAttempts: Type.Integer({ minimum: 0, maximum: 32 }),
+          rejectionReasonCounts: Type.Record(
+            NonEmptyString,
+            Type.Integer({ minimum: 0 }),
+          ),
+          safeReason: Type.Optional(
+            Type.String({ minLength: 1, maxLength: 200 }),
+          ),
+          createdAt: NonEmptyString,
+        },
+        { additionalProperties: false },
+      ),
+    ),
   },
   { additionalProperties: false },
 );
+
+export const RequirementProposalSchema = Type.Object(
+  {
+    category: RequirementCategorySchema,
+    value: RequirementValueSchema,
+    statement: Type.String({ minLength: 1, maxLength: 1200 }),
+    strength: Type.Union([
+      Type.Literal('REQUIRED'),
+      Type.Literal('PREFERRED'),
+      Type.Literal('CONTEXTUAL'),
+    ]),
+    polarity: Type.Union([
+      Type.Literal('REQUIRES'),
+      Type.Literal('PERMITS'),
+      Type.Literal('EXCLUDES'),
+      Type.Literal('UNAVAILABLE'),
+    ]),
+    evaluationUse: Type.Union([
+      Type.Literal('ELIGIBILITY'),
+      Type.Literal('FIT'),
+      Type.Literal('CONTEXT_ONLY'),
+    ]),
+    assertionBasis: Type.Union([
+      Type.Literal('EXPLICIT_STRUCTURED'),
+      Type.Literal('EXPLICIT_TEXT'),
+      Type.Literal('INTERPRETED'),
+    ]),
+    actionabilityCeiling: Type.Union([
+      Type.Literal('FIT_SIGNAL_SAFE'),
+      Type.Literal('REVIEW_ONLY'),
+    ]),
+    confidence: Type.Union([
+      Type.Literal('HIGH'),
+      Type.Literal('MODERATE'),
+      Type.Literal('LOW'),
+    ]),
+    fragmentIds: Type.Array(NonEmptyString, { minItems: 1, maxItems: 8 }),
+    excerpts: Type.Array(
+      Type.Object(
+        {
+          fragmentId: NonEmptyString,
+          excerpt: Type.String({ minLength: 1, maxLength: 1200 }),
+        },
+        { additionalProperties: false },
+      ),
+      { minItems: 1, maxItems: 8 },
+    ),
+    rationale: Type.String({ minLength: 1, maxLength: 500 }),
+  },
+  { additionalProperties: false },
+);
+
+export const RequirementProposalResponseSchema = Type.Object(
+  {
+    schemaVersion: Type.Literal('requirement-proposal-schema-v1'),
+    proposals: Type.Array(RequirementProposalSchema, { maxItems: 32 }),
+  },
+  { additionalProperties: false },
+);
+
+export type RequirementProposalContract = Static<
+  typeof RequirementProposalSchema
+>;
+export type RequirementProposalResponseContract = Static<
+  typeof RequirementProposalResponseSchema
+>;
+
+export function isRequirementProposalResponse(
+  value: unknown,
+): value is RequirementProposalResponseContract {
+  return Value.Check(RequirementProposalResponseSchema, value);
+}
 
 export type RequirementSetArtifactContract = Static<
   typeof RequirementSetArtifactSchema

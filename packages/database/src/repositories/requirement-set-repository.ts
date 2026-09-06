@@ -3,6 +3,9 @@ import type {
   CanonicalRequirement,
   CompleteRequirementSet,
   RequirementId,
+  RequirementAssistanceRun,
+  RequirementCandidate,
+  RequirementCandidateId,
   RequirementProvenance,
   RequirementSet,
   RequirementSetId,
@@ -31,12 +34,28 @@ function contractValue(input: CompleteRequirementSet) {
       },
       provenance: item.provenance,
     })),
+    ...(input.candidates
+      ? {
+          candidates: input.candidates.map((candidate) => ({
+            ...candidate,
+            createdAt: candidate.createdAt.toISOString(),
+          })),
+        }
+      : {}),
+    ...(input.assistanceRun
+      ? {
+          assistanceRun: {
+            ...input.assistanceRun,
+            createdAt: input.assistanceRun.createdAt.toISOString(),
+          },
+        }
+      : {}),
   };
 }
 
 function signature(input: CompleteRequirementSet): string {
-  return JSON.stringify(
-    input.requirements
+  return JSON.stringify({
+    requirements: input.requirements
       .map((item) => ({
         hash: item.requirement.canonicalHash,
         provenance: item.provenance
@@ -52,7 +71,38 @@ function signature(input: CompleteRequirementSet): string {
           ),
       }))
       .sort((left, right) => left.hash.localeCompare(right.hash)),
-  );
+    candidates: (input.candidates ?? [])
+      .map((candidate) => ({
+        hash: candidate.proposalHash,
+        validationStatus: candidate.validationStatus,
+        groundingStatus: candidate.groundingStatus,
+        actionabilityCeiling: candidate.actionabilityCeiling,
+        rejectionReasons: candidate.rejectionReasons,
+        sources: candidate.sources
+          .map((source) => ({
+            observation: source.sourceObservationId,
+            fragment: source.normalizedFragmentId,
+            excerptHash: source.excerptHash,
+          }))
+          .sort((left, right) =>
+            JSON.stringify(left).localeCompare(JSON.stringify(right)),
+          ),
+      }))
+      .sort((left, right) => left.hash.localeCompare(right.hash)),
+    assistanceRun: input.assistanceRun
+      ? {
+          requestFingerprint: input.assistanceRun.requestFingerprint,
+          status: input.assistanceRun.status,
+          counts: [
+            input.assistanceRun.proposalCount,
+            input.assistanceRun.groundedCount,
+            input.assistanceRun.rejectedCount,
+            input.assistanceRun.duplicateCount,
+            input.assistanceRun.unsafePromotionAttempts,
+          ],
+        }
+      : null,
+  });
 }
 
 export class RequirementSetRepository {
@@ -71,6 +121,9 @@ export class RequirementSetRepository {
       requirementSets,
       canonicalRequirements,
       requirementProvenance,
+      requirementAssistanceRuns,
+      requirementCandidates,
+      requirementCandidateSources,
       opportunitySnapshotSources,
     } = getTables(this.handle);
     const database = this.handle.db as any;
@@ -100,6 +153,30 @@ export class RequirementSetRepository {
           }
         }
       }
+      for (const candidate of artifact.candidates ?? []) {
+        for (const source of candidate.sources) {
+          const links = await transaction
+            .select()
+            .from(opportunitySnapshotSources)
+            .where(
+              and(
+                eq(
+                  opportunitySnapshotSources.snapshotId,
+                  artifact.set.snapshotId,
+                ),
+                eq(
+                  opportunitySnapshotSources.sourceObservationId,
+                  source.sourceObservationId,
+                ),
+              ),
+            );
+          if (links.length === 0) {
+            throw new TypeError(
+              'Requirement Candidate source is not linked to its snapshot',
+            );
+          }
+        }
+      }
 
       const inserted = await transaction
         .insert(requirementSets)
@@ -120,6 +197,27 @@ export class RequirementSetRepository {
         });
         for (const provenance of item.provenance) {
           await transaction.insert(requirementProvenance).values(provenance);
+        }
+      }
+      if (artifact.assistanceRun) {
+        const { rejectionReasonCounts, ...storedRun } = artifact.assistanceRun;
+        await transaction.insert(requirementAssistanceRuns).values({
+          ...storedRun,
+          rejectionReasonCountsJson: JSON.stringify(rejectionReasonCounts),
+          createdAt: artifact.assistanceRun.createdAt,
+        });
+      }
+      for (const candidate of artifact.candidates ?? []) {
+        const { sources, rejectionReasons, value, ...storedCandidate } =
+          candidate;
+        await transaction.insert(requirementCandidates).values({
+          ...storedCandidate,
+          valueJson: JSON.stringify(value),
+          rejectionReasonsJson: JSON.stringify(rejectionReasons),
+          createdAt: candidate.createdAt,
+        });
+        for (const source of sources) {
+          await transaction.insert(requirementCandidateSources).values(source);
         }
       }
       return true;
@@ -233,12 +331,79 @@ export class RequirementSetRepository {
         }
       }
     }
+    if (
+      artifact.assistanceRun &&
+      artifact.assistanceRun.requirementSetId !== artifact.set.id
+    ) {
+      throw new TypeError(
+        'Assistance run belongs to a different Requirement Set',
+      );
+    }
+    const consequentialCategories = new Set([
+      'EDUCATION',
+      'LOCATION',
+      'RESIDENCY',
+      'TIMEZONE',
+      'WORK_AUTHORIZATION',
+      'SPONSORSHIP',
+      'LANGUAGE',
+      'CERTIFICATION',
+    ]);
+    for (const candidate of artifact.candidates ?? []) {
+      if (
+        candidate.requirementSetId !== artifact.set.id ||
+        candidate.snapshotId !== artifact.set.snapshotId
+      ) {
+        throw new TypeError(
+          'Requirement Candidate belongs to a different Requirement Set',
+        );
+      }
+      if (
+        candidate.actionabilityCeiling === ('HARD_CONSTRAINT_SAFE' as string)
+      ) {
+        throw new TypeError('Model proposal exceeds its actionability ceiling');
+      }
+      if (
+        consequentialCategories.has(candidate.category) &&
+        candidate.actionabilityCeiling !== 'REVIEW_ONLY'
+      ) {
+        throw new TypeError(
+          'Consequential model proposal exceeds its review-only ceiling',
+        );
+      }
+      const rejected = candidate.validationStatus === 'REJECTED';
+      if (
+        (rejected && candidate.rejectionReasons.length === 0) ||
+        (!rejected &&
+          (candidate.groundingStatus !== 'GROUNDED' ||
+            candidate.rejectionReasons.length > 0 ||
+            candidate.sources.length === 0))
+      ) {
+        throw new TypeError(
+          'Requirement Candidate validation and grounding state is inconsistent',
+        );
+      }
+      for (const source of candidate.sources) {
+        if (
+          source.requirementCandidateId !== candidate.id ||
+          source.snapshotId !== artifact.set.snapshotId
+        ) {
+          throw new TypeError(
+            'Requirement Candidate source lineage does not match',
+          );
+        }
+      }
+    }
   }
 
   private async load(setRow: any): Promise<CompleteRequirementSet> {
-    const { canonicalRequirements, requirementProvenance } = getTables(
-      this.handle,
-    );
+    const {
+      canonicalRequirements,
+      requirementProvenance,
+      requirementAssistanceRuns,
+      requirementCandidates,
+      requirementCandidateSources,
+    } = getTables(this.handle);
     const database = this.handle.db as any;
     const requirementRows = await database
       .select()
@@ -296,6 +461,47 @@ export class RequirementSetRepository {
       snapshotId: setRow.snapshotId as SnapshotId,
       createdAt: new Date(setRow.createdAt),
     };
-    return { set, requirements };
+    const candidateRows = await database
+      .select()
+      .from(requirementCandidates)
+      .where(eq(requirementCandidates.requirementSetId, setRow.id));
+    const candidates: RequirementCandidate[] = [];
+    for (const row of candidateRows) {
+      const sourceRows = await database
+        .select()
+        .from(requirementCandidateSources)
+        .where(eq(requirementCandidateSources.requirementCandidateId, row.id));
+      const { valueJson, rejectionReasonsJson, ...storedCandidate } = row;
+      candidates.push({
+        ...storedCandidate,
+        id: row.id as RequirementCandidateId,
+        requirementSetId: row.requirementSetId as RequirementSetId,
+        snapshotId: row.snapshotId as SnapshotId,
+        value: JSON.parse(valueJson),
+        rejectionReasons: JSON.parse(rejectionReasonsJson),
+        createdAt: new Date(row.createdAt),
+        sources: sourceRows,
+      });
+    }
+    const assistanceRows = await database
+      .select()
+      .from(requirementAssistanceRuns)
+      .where(eq(requirementAssistanceRuns.requirementSetId, setRow.id));
+    let assistanceRun: RequirementAssistanceRun | undefined;
+    if (assistanceRows[0]) {
+      const { rejectionReasonCountsJson, ...storedRun } = assistanceRows[0];
+      assistanceRun = {
+        ...storedRun,
+        requirementSetId: storedRun.requirementSetId as RequirementSetId,
+        rejectionReasonCounts: JSON.parse(rejectionReasonCountsJson),
+        createdAt: new Date(storedRun.createdAt),
+      };
+    }
+    return {
+      set,
+      requirements,
+      ...(candidates.length > 0 || assistanceRun ? { candidates } : {}),
+      ...(assistanceRun ? { assistanceRun } : {}),
+    };
   }
 }

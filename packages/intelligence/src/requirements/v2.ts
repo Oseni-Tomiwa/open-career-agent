@@ -1111,6 +1111,7 @@ export function fingerprintV2RequirementInput(input: {
   readonly observations: readonly V2RequirementObservation[];
   readonly pipelineVersion?: string;
   readonly deterministicExtractorVersion?: string;
+  readonly identityContext?: unknown;
 }): string {
   return hash({
     snapshotFingerprint: input.snapshotFingerprint,
@@ -1120,6 +1121,9 @@ export function fingerprintV2RequirementInput(input: {
       input.deterministicExtractorVersion ??
       V2_3_1_DETERMINISTIC_EXTRACTOR_VERSION,
     locatorVersion: V2_2_LOCATOR_VERSION,
+    ...(input.identityContext === undefined
+      ? {}
+      : { identityContext: input.identityContext }),
     observations: input.observations
       .map((observation) => ({
         fingerprint: observation.fingerprint,
@@ -1136,6 +1140,7 @@ export function buildV2RequirementSet(
     readonly pipelineVersion?: string;
     readonly deterministicExtractorVersion?: string;
     readonly createdAt?: Date;
+    readonly identityContext?: unknown;
   } = {},
 ): CompleteRequirementSet {
   if (observations.length === 0) {
@@ -1153,6 +1158,7 @@ export function buildV2RequirementSet(
     observations,
     pipelineVersion,
     deterministicExtractorVersion,
+    identityContext: options.identityContext,
   });
   const setId = requirementSetId(
     shortId('rqs', [snapshot.id, pipelineVersion, inputFingerprint]),

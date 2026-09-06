@@ -15,6 +15,7 @@
     "clean": "rm -rf dist",
     "lint": "eslint src/",
     "requirements:evaluate": "node --import tsx src/requirements/evaluation/cli.ts",
+    "requirements:evaluate:assisted": "node --conditions=development --import tsx src/requirements/evaluation/assisted-cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

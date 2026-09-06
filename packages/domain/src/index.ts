@@ -16,6 +16,9 @@ export type {
   RequirementSetId,
   RequirementId,
   RequirementProvenanceId,
+  RequirementCandidateId,
+  RequirementCandidateSourceId,
+  RequirementAssistanceRunId,
   SourceObservationId,
 } from './identifiers.js';
 export {
@@ -36,6 +39,9 @@ export {
   requirementSetId,
   requirementId,
   requirementProvenanceId,
+  requirementCandidateId,
+  requirementCandidateSourceId,
+  requirementAssistanceRunId,
   sourceObservationId,
 } from './identifiers.js';
 export type { OpportunityType } from './opportunity.js';

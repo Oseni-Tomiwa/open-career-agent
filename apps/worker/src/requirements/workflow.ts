@@ -7,7 +7,12 @@ import {
 } from '@oca/database';
 import { snapshotId } from '@oca/domain';
 import {
+  ASSISTED_REQUIREMENT_PIPELINE_VERSION,
   buildV2RequirementSet,
+  fingerprintAssistedRequirementRequest,
+  runAssistedRequirementProposal,
+  selectAssistedRequirementFragments,
+  type RequirementProposalProvider,
   V2_2_PIPELINE_VERSION,
   V2_3_1_DETERMINISTIC_EXTRACTOR_VERSION,
 } from '@oca/intelligence';
@@ -19,11 +24,17 @@ export function createRequirementHandlers(deps: {
   readonly db: DatabaseHandle;
   readonly pipelineVersion?: string;
   readonly deterministicExtractorVersion?: string;
+  readonly proposalProvider?: RequirementProposalProvider;
+  readonly proposalTimeoutMs?: number;
 }): Record<string, BackgroundTaskHandler> {
   const opportunities = new OpportunityRepository(deps.db);
   const requirements = new RequirementSetRepository(deps.db);
   const ledger = new BackgroundTaskLedger(deps.db);
-  const pipelineVersion = deps.pipelineVersion ?? V2_2_PIPELINE_VERSION;
+  const pipelineVersion =
+    deps.pipelineVersion ??
+    (deps.proposalProvider
+      ? ASSISTED_REQUIREMENT_PIPELINE_VERSION
+      : V2_2_PIPELINE_VERSION);
   const deterministicExtractorVersion =
     deps.deterministicExtractorVersion ??
     V2_3_1_DETERMINISTIC_EXTRACTOR_VERSION;
@@ -72,10 +83,35 @@ export function createRequirementHandlers(deps: {
           ).document,
         };
       });
-      const artifact = buildV2RequirementSet(snapshot, normalizedObservations, {
+      let artifact = buildV2RequirementSet(snapshot, normalizedObservations, {
         pipelineVersion,
         deterministicExtractorVersion,
       });
+      if (deps.proposalProvider) {
+        const fragments = selectAssistedRequirementFragments({
+          observations: normalizedObservations,
+          deterministic: artifact,
+        });
+        const assistanceFingerprint = fingerprintAssistedRequirementRequest({
+          snapshotFingerprint: snapshot.fingerprint,
+          provider: deps.proposalProvider,
+          fragments,
+        });
+        artifact = buildV2RequirementSet(snapshot, normalizedObservations, {
+          pipelineVersion,
+          deterministicExtractorVersion,
+          identityContext: assistanceFingerprint,
+        });
+        artifact = await runAssistedRequirementProposal({
+          artifact,
+          snapshotFingerprint: snapshot.fingerprint,
+          fragments,
+          provider: deps.proposalProvider,
+          ...(deps.proposalTimeoutMs
+            ? { timeoutMs: deps.proposalTimeoutMs }
+            : {}),
+        });
+      }
       const persisted = await requirements.createAtomic(artifact);
 
       if (payload.candidateId) {

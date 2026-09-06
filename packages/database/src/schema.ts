@@ -541,6 +541,126 @@ export const requirementProvenance = sqliteTable(
   ],
 );
 
+export const requirementAssistanceRuns = sqliteTable(
+  'requirement_assistance_runs',
+  {
+    id: text('id').primaryKey(),
+    requirementSetId: text('requirement_set_id')
+      .notNull()
+      .references(() => requirementSets.id, { onDelete: 'restrict' }),
+    requestFingerprint: text('request_fingerprint').notNull(),
+    assistedPipelineVersion: text('assisted_pipeline_version').notNull(),
+    selectionVersion: text('selection_version').notNull(),
+    proposalSchemaVersion: text('proposal_schema_version').notNull(),
+    instructionVersion: text('instruction_version').notNull(),
+    groundingValidatorVersion: text('grounding_validator_version').notNull(),
+    providerId: text('provider_id').notNull(),
+    providerCapabilityVersion: text('provider_capability_version').notNull(),
+    status: text('status').notNull(),
+    attempted: integer('attempted', { mode: 'boolean' }).notNull(),
+    selectedFragmentCount: integer('selected_fragment_count').notNull(),
+    selectedCharacterCount: integer('selected_character_count').notNull(),
+    proposalCount: integer('proposal_count').notNull(),
+    groundedCount: integer('grounded_count').notNull(),
+    rejectedCount: integer('rejected_count').notNull(),
+    duplicateCount: integer('duplicate_count').notNull(),
+    consequentialCount: integer('consequential_count').notNull(),
+    unsafePromotionAttempts: integer('unsafe_promotion_attempts').notNull(),
+    rejectionReasonCountsJson: text('rejection_reason_counts_json').notNull(),
+    safeReason: text('safe_reason'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('requirement_assistance_runs_set_unique').on(
+      table.requirementSetId,
+    ),
+    check(
+      'requirement_assistance_runs_status_check',
+      sql`${table.status} in ('SUCCEEDED', 'UNAVAILABLE', 'REJECTED', 'FAILED')`,
+    ),
+  ],
+);
+
+export const requirementCandidates = sqliteTable(
+  'requirement_candidates',
+  {
+    id: text('id').primaryKey(),
+    requirementSetId: text('requirement_set_id')
+      .notNull()
+      .references(() => requirementSets.id, { onDelete: 'restrict' }),
+    snapshotId: text('snapshot_id')
+      .notNull()
+      .references(() => opportunitySnapshots.id, { onDelete: 'restrict' }),
+    category: text('category').notNull(),
+    normalizedKey: text('normalized_key').notNull(),
+    valueJson: text('value_json').notNull(),
+    statement: text('statement').notNull(),
+    strength: text('strength').notNull(),
+    polarity: text('polarity').notNull(),
+    assertionBasis: text('assertion_basis').notNull(),
+    evaluationUse: text('evaluation_use').notNull(),
+    actionabilityCeiling: text('actionability_ceiling').notNull(),
+    modelConfidence: text('model_confidence').notNull(),
+    rationale: text('rationale').notNull(),
+    proposerId: text('proposer_id').notNull(),
+    modelCapabilityVersion: text('model_capability_version').notNull(),
+    instructionVersion: text('instruction_version').notNull(),
+    proposalSchemaVersion: text('proposal_schema_version').notNull(),
+    groundingValidatorVersion: text('grounding_validator_version').notNull(),
+    validationStatus: text('validation_status').notNull(),
+    groundingStatus: text('grounding_status').notNull(),
+    rejectionReasonsJson: text('rejection_reasons_json').notNull(),
+    proposalHash: text('proposal_hash').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    index('requirement_candidates_set_idx').on(table.requirementSetId),
+    uniqueIndex('requirement_candidates_set_hash_unique').on(
+      table.requirementSetId,
+      table.proposalHash,
+    ),
+    check(
+      'requirement_candidates_actionability_ceiling_check',
+      sql`${table.actionabilityCeiling} in ('FIT_SIGNAL_SAFE', 'REVIEW_ONLY')`,
+    ),
+    check(
+      'requirement_candidates_validation_status_check',
+      sql`${table.validationStatus} in ('ACCEPTED_FOR_REVIEW', 'DUPLICATE', 'REJECTED')`,
+    ),
+  ],
+);
+
+export const requirementCandidateSources = sqliteTable(
+  'requirement_candidate_sources',
+  {
+    id: text('id').primaryKey(),
+    requirementCandidateId: text('requirement_candidate_id')
+      .notNull()
+      .references(() => requirementCandidates.id, { onDelete: 'restrict' }),
+    sourceObservationId: text('source_observation_id')
+      .notNull()
+      .references(() => sourceObservations.id, { onDelete: 'restrict' }),
+    snapshotId: text('snapshot_id')
+      .notNull()
+      .references(() => opportunitySnapshots.id, { onDelete: 'restrict' }),
+    normalizedFragmentId: text('normalized_fragment_id').notNull(),
+    sourceFieldPath: text('source_field_path'),
+    excerpt: text('excerpt').notNull(),
+    excerptHash: text('excerpt_hash').notNull(),
+  },
+  (table) => [
+    index('requirement_candidate_sources_candidate_idx').on(
+      table.requirementCandidateId,
+    ),
+    uniqueIndex('requirement_candidate_sources_locator_unique').on(
+      table.requirementCandidateId,
+      table.sourceObservationId,
+      table.normalizedFragmentId,
+      table.excerptHash,
+    ),
+  ],
+);
+
 export const EVIDENCE_STATES = [
   'source-verified',
   'candidate-confirmed',

@@ -15,6 +15,9 @@ declare const discoveryMatchIdBrand: unique symbol;
 declare const requirementSetIdBrand: unique symbol;
 declare const requirementIdBrand: unique symbol;
 declare const requirementProvenanceIdBrand: unique symbol;
+declare const requirementCandidateIdBrand: unique symbol;
+declare const requirementCandidateSourceIdBrand: unique symbol;
+declare const requirementAssistanceRunIdBrand: unique symbol;
 declare const sourceObservationIdBrand: unique symbol;
 
 export type ApplicationId = string & { readonly [applicationIdBrand]: true };
@@ -39,6 +42,15 @@ export type RequirementSetId = string & {
 export type RequirementId = string & { readonly [requirementIdBrand]: true };
 export type RequirementProvenanceId = string & {
   readonly [requirementProvenanceIdBrand]: true;
+};
+export type RequirementCandidateId = string & {
+  readonly [requirementCandidateIdBrand]: true;
+};
+export type RequirementCandidateSourceId = string & {
+  readonly [requirementCandidateSourceIdBrand]: true;
+};
+export type RequirementAssistanceRunId = string & {
+  readonly [requirementAssistanceRunIdBrand]: true;
 };
 export type SourceObservationId = string & {
   readonly [sourceObservationIdBrand]: true;
@@ -125,6 +137,31 @@ export function requirementProvenanceId(
     value,
     'RequirementProvenanceId',
   ) as RequirementProvenanceId;
+}
+
+export function requirementCandidateId(value: string): RequirementCandidateId {
+  return requireIdentifier(
+    value,
+    'RequirementCandidateId',
+  ) as RequirementCandidateId;
+}
+
+export function requirementCandidateSourceId(
+  value: string,
+): RequirementCandidateSourceId {
+  return requireIdentifier(
+    value,
+    'RequirementCandidateSourceId',
+  ) as RequirementCandidateSourceId;
+}
+
+export function requirementAssistanceRunId(
+  value: string,
+): RequirementAssistanceRunId {
+  return requireIdentifier(
+    value,
+    'RequirementAssistanceRunId',
+  ) as RequirementAssistanceRunId;
 }
 
 export function sourceObservationId(value: string): SourceObservationId {

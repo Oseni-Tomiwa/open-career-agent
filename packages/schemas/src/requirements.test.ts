@@ -1,7 +1,10 @@
 import { Value } from '@sinclair/typebox/value';
 import { describe, expect, it } from 'vitest';
 
-import { RequirementSetArtifactSchema } from './requirements.js';
+import {
+  RequirementProposalResponseSchema,
+  RequirementSetArtifactSchema,
+} from './requirements.js';
 
 function validArtifact() {
   return {
@@ -96,5 +99,54 @@ describe('Requirement Set schemas', () => {
       candidateId: 'candidate-must-not-enter-requirement-set',
     };
     expect(Value.Check(RequirementSetArtifactSchema, artifact)).toBe(false);
+  });
+});
+
+describe('Requirement proposal response schema', () => {
+  function response() {
+    return {
+      schemaVersion: 'requirement-proposal-schema-v1',
+      proposals: [
+        {
+          category: 'TECHNICAL_SKILL',
+          value: { type: 'TERM', value: 'Neo4j' },
+          statement: 'Neo4j experience is required.',
+          strength: 'REQUIRED',
+          polarity: 'REQUIRES',
+          evaluationUse: 'FIT',
+          assertionBasis: 'EXPLICIT_TEXT',
+          actionabilityCeiling: 'FIT_SIGNAL_SAFE',
+          confidence: 'MODERATE',
+          fragmentIds: ['fragment-public-listing'],
+          excerpts: [
+            {
+              fragmentId: 'fragment-public-listing',
+              excerpt: 'Neo4j experience is required.',
+            },
+          ],
+          rationale: 'The supplied fragment explicitly names Neo4j.',
+        },
+      ],
+    };
+  }
+
+  it('accepts a strict provider-neutral proposal response', () => {
+    expect(Value.Check(RequirementProposalResponseSchema, response())).toBe(
+      true,
+    );
+  });
+
+  it('rejects hard actionability and candidate-specific extra fields', () => {
+    const hard = response();
+    hard.proposals[0]!.actionabilityCeiling = 'HARD_CONSTRAINT_SAFE';
+    expect(Value.Check(RequirementProposalResponseSchema, hard)).toBe(false);
+
+    const candidateSpecific = {
+      ...response(),
+      candidateId: 'candidate-forbidden',
+    };
+    expect(
+      Value.Check(RequirementProposalResponseSchema, candidateSpecific),
+    ).toBe(false);
   });
 });

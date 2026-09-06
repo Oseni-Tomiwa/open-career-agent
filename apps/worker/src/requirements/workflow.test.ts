@@ -14,7 +14,16 @@ import {
   type BackgroundTask,
   type DatabaseHandle,
 } from '@oca/database';
-import { candidateId, opportunityId, snapshotId } from '@oca/domain';
+import {
+  candidateId,
+  opportunityId,
+  requirementSetId,
+  snapshotId,
+} from '@oca/domain';
+import {
+  REQUIREMENT_PROPOSAL_SCHEMA_VERSION,
+  type RequirementProposalProvider,
+} from '@oca/intelligence';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createDecisionHandlers } from '../decision/workflow.js';
@@ -73,6 +82,10 @@ describe('requirements.extract V2.3.1 workflow', () => {
             {
               text: 'Requirements',
               content: '<ul><li>TypeScript</li></ul>',
+            },
+            {
+              text: 'Additional requirements',
+              content: '<ul><li>Neo4j experience is required.</li></ul>',
             },
           ],
         }),
@@ -218,5 +231,87 @@ describe('requirements.extract V2.3.1 workflow', () => {
       firstEvaluation!.requirementSetId,
     );
     expect(firstSet).not.toBeNull();
+  });
+
+  it('persists grounded model proposals as candidates without changing canonical requirements', async () => {
+    const provider: RequirementProposalProvider = {
+      id: 'synthetic-worker-provider',
+      capabilityVersion: 'synthetic-worker-v1',
+      propose: (request) => {
+        const fragment = request.fragments.find((item) =>
+          item.text.includes('Neo4j'),
+        );
+        if (!fragment) throw new Error('Expected unresolved public fragment');
+        return Promise.resolve({
+          kind: 'success',
+          response: {
+            schemaVersion: REQUIREMENT_PROPOSAL_SCHEMA_VERSION,
+            proposals: [
+              {
+                category: 'TECHNICAL_SKILL',
+                value: { type: 'TERM', value: 'Neo4j' },
+                statement: fragment.text,
+                strength: 'REQUIRED',
+                polarity: 'REQUIRES',
+                evaluationUse: 'FIT',
+                assertionBasis: 'EXPLICIT_TEXT',
+                actionabilityCeiling: 'FIT_SIGNAL_SAFE',
+                confidence: 'MODERATE',
+                fragmentIds: [fragment.id],
+                excerpts: [{ fragmentId: fragment.id, excerpt: fragment.text }],
+                rationale: 'The supplied listing fragment names Neo4j.',
+              },
+            ],
+          },
+        });
+      },
+    };
+    const handler = createRequirementHandlers({
+      db: database,
+      proposalProvider: provider,
+    })['requirements.extract']!;
+
+    await handler(task(snapshot, candidate));
+    await handler(task(snapshot, candidate));
+
+    expect(
+      database
+        .sqlite!.prepare('select count(*) count from requirement_candidates')
+        .get(),
+    ).toEqual({ count: 1 });
+    expect(
+      database
+        .sqlite!.prepare(
+          'select count(*) count from requirement_candidate_sources',
+        )
+        .get(),
+    ).toEqual({ count: 1 });
+    expect(
+      database
+        .sqlite!.prepare(
+          'select status, unsafe_promotion_attempts unsafePromotionAttempts from requirement_assistance_runs',
+        )
+        .get(),
+    ).toEqual({ status: 'SUCCEEDED', unsafePromotionAttempts: 0 });
+    expect(
+      database
+        .sqlite!.prepare(
+          "select count(*) count from canonical_requirements where normalized_key = 'technical:neo4j'",
+        )
+        .get(),
+    ).toEqual({ count: 0 });
+
+    const setRow = database
+      .sqlite!.prepare('select id from requirement_sets')
+      .get() as { id: string };
+    const persisted = await new RequirementSetRepository(database).getById(
+      requirementSetId(setRow.id),
+    );
+    expect(persisted?.candidates?.[0]).toMatchObject({
+      normalizedKey: 'technical:neo4j',
+      validationStatus: 'ACCEPTED_FOR_REVIEW',
+      actionabilityCeiling: 'FIT_SIGNAL_SAFE',
+    });
+    expect(persisted?.requirements).toHaveLength(1);
   });
 });

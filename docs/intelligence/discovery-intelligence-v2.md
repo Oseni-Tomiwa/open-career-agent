@@ -436,16 +436,21 @@ Before any draft retains `HARD_CONSTRAINT_SAFE`, a final defense-in-depth bounda
 
 ### V2.4 — optional provider-neutral assisted proposal boundary
 
-- Implement the documented capability port and one adapter behind configuration.
-- Add strict input minimization, prompt-injection defenses, structured-output validation, safe logging, typed failures, and deterministic no-provider behavior.
-- Persist proposals/call provenance, not automatic canonical requirements.
+- **Implemented without a vendor adapter.** `RequirementProposalProvider` is a narrow capability port; an unavailable provider and deterministic fixed test provider prove that no configured model or network call is required. Vendor SDK types, credentials, raw prompts, and raw responses do not enter domain or persistence contracts.
+- The versioned request contains only selected public normalized listing fragments. Selection excludes confidently handled and duplicate fragments, benefits, and recognized instruction-like listing text, then enforces 12-fragment, 1,200-character-per-fragment, and 8,000-character total bounds. Candidate profiles, claims, Evidence, applications, Decisions, and Search Preferences are absent by construction.
+- `requirement-proposal-schema-v1` accepts only strict structured proposals. The versioned instruction contract tells providers to preserve ambiguity, alternatives, and negation; treat listing text as data; cite exact excerpts; and never evaluate a candidate or assign a hard blocker.
+- Deterministic grounding resolves every cited fragment, verifies exact excerpt containment and reproducible hashes, checks lexical/structured support, modality, polarity, negation, alternatives, assertion basis, candidate-specific content, instruction-like text, and same-input contradictions. Invalid structured output is not recovered heuristically.
+- Model-originated output is persisted only as immutable `RequirementCandidate` and bounded assistance-run metadata. Rejected proposals may retain their structured fields, short rationale, rejection categories, and valid source excerpts; raw requests/responses and hidden reasoning are not stored. Candidate/source/run identity includes the set, input fingerprint, provider capability, proposal schema, instruction, selection, and grounding versions.
+- Consequential proposals are capped at `REVIEW_ONLY`; only reviewed Fit categories may retain a `FIT_SIGNAL_SAFE` ceiling. The schema, domain type, repository guard, and database constraint make `HARD_CONSTRAINT_SAFE` unavailable to model-only proposals. Candidates are not appended to Canonical Requirements and do not feed Eligibility, Fit, Quality, or Decision.
+- Unconfigured, unavailable, failed, timed-out, malformed, empty, or fully rejected assistance leaves deterministic V2.3.1 requirements authoritative. Attempted incomplete assistance is recorded as a Partial set with bounded reason/count metadata. With no provider supplied, the existing V2.3.1 pipeline identity and `NOT_REQUESTED` behavior remain unchanged.
+- `pnpm requirements:evaluate:assisted` runs fixed, network-free experimental proposals separately from `pnpm requirements:evaluate`. It reports proposal, grounding, rejection, novelty, duplication, consequential, unsafe-promotion, and recall-delta counts without blending them into deterministic accuracy.
 
-Likely modules: new `packages/providers`, `packages/config/src/server.ts`, `packages/schemas/src`, worker requirement workflow, and architecture security documentation.
+Known limitations: there is no real vendor adapter, semantic embedding, arbitrary ontology expansion, or model retry scheduler. Lexical grounding is deliberately conservative and can reject valid paraphrases. Recognized prompt-injection phrases are bounded structural defenses, not a claim of complete prompt-injection prevention. Candidate review/promotion and evaluator consumption remain V2.5 work.
 
 ### V2.5 — grounding, validation, and safe engine integration
 
-- Validate assisted proposals against spans and category rules.
-- Promote only safe proposals, create new immutable sets, and trigger reevaluation.
+- Extend the V2.4 conservative grounding rules only where reviewed semantics require it.
+- Add an explicit human/deterministic promotion workflow, create new immutable sets, and trigger reevaluation.
 - Introduce Fit assessment status separately from Fit level, with API/web compatibility migration.
 - Expose requirement provenance through API; make only necessary semantic UI changes.
 
