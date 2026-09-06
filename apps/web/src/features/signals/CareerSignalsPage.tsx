@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useProductData } from '../../app/ProductDataProvider.js';
 import { PageHeader } from '../../components/PageHeader.js';
 import { EmptyState } from '../../components/EmptyState.js';
+import { WorkspaceSectionHeader } from '../../components/WorkspaceSection.js';
 import type {
   CareerSignal,
   CareerSignalsResponse,
@@ -95,37 +96,69 @@ export function CareerSignalsPage() {
         title="Career Insights"
       />
 
-      <div
-        className="panel signals-summary-panel"
-        style={{ marginBottom: '2rem' }}
+      <section
+        className="signals-observation"
+        aria-labelledby="market-overview-heading"
       >
-        <div
-          className="signals-summary-header"
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <div>
-            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>
-              Active Market Overview
-            </h3>
-            <p className="secondary-text" style={{ margin: '0.25rem 0 0 0' }}>
-              {signals.summary}
-            </p>
-          </div>
-          <span className="badge badge-neutral" data-testid="active-opp-count">
-            {signals.activeOpportunityCount} Active Roles
-          </span>
-        </div>
-      </div>
+        <WorkspaceSectionHeader
+          id="market-overview-heading"
+          meta="Observation scope"
+          title="Active Market Overview"
+          description={signals.summary}
+          action={
+            <span className="workspace-count" data-testid="active-opp-count">
+              {signals.activeOpportunityCount} active roles
+            </span>
+          }
+        />
+      </section>
 
       {!hasAnySignals ? (
-        <EmptyState
-          description="No recurring market patterns detected yet. As Rolevia evaluates discovered jobs, evidence-backed insights will appear here."
-          title="No Career Insights Yet"
-        />
+        <section className="workspace-empty-state insight-empty-state">
+          <p className="eyebrow">Observation in progress</p>
+          <h2>No Career Insights Yet</h2>
+          <p>
+            No recurring market patterns are supported by the current
+            opportunity evidence. Rolevia will wait for repeated signals rather
+            than infer a trend from one listing.
+          </p>
+          <dl>
+            <div>
+              <dt>Observing</dt>
+              <dd>
+                Requirements, eligibility friction, work models, evidence gaps,
+                and market changes.
+              </dd>
+            </div>
+            <div>
+              <dt>Threshold</dt>
+              <dd>
+                A pattern must recur across evaluated opportunities before it
+                appears as an insight.
+              </dd>
+            </div>
+            <div>
+              <dt>Next step</dt>
+              <dd>
+                <Link to="/discover">
+                  Review the current opportunity register
+                </Link>{' '}
+                or refine Search Preferences.
+              </dd>
+            </div>
+          </dl>
+          <div className="empty-state-actions">
+            <Link className="button button-primary" to="/discover">
+              Review opportunity register
+            </Link>
+            <Link
+              className="button button-secondary"
+              to="/discover?tab=preferences"
+            >
+              Refine Search Preferences
+            </Link>
+          </div>
+        </section>
       ) : (
         <div
           className="signals-sections"

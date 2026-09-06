@@ -6,6 +6,24 @@ import { renderProduct } from '../../test/render.js';
 import AgentActivityPage from './AgentActivityPage.js';
 
 describe('Agent Activity', () => {
+  it('offers candidate-controlled next steps when no operation is recorded', async () => {
+    const repository = new SeedProductRepository();
+
+    renderProduct(<AgentActivityPage />, ['/activity'], repository);
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'No search activity recorded yet',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Review Search Preferences' }),
+    ).toHaveAttribute('href', '/discover?tab=preferences');
+    expect(
+      screen.getByRole('link', { name: 'Inspect opportunity register' }),
+    ).toHaveAttribute('href', '/discover');
+  });
+
   it('shows only persisted candidate search activity without ledger internals', async () => {
     const repository = new SeedProductRepository();
     const dashboard = await repository.getTodayDashboard();

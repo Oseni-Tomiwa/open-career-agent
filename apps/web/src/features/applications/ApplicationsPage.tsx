@@ -7,6 +7,7 @@ import { CompanyMark } from '../../components/CompanyMark.js';
 import { Icon } from '../../components/Icon.js';
 import { PageHeader } from '../../components/PageHeader.js';
 import { Timeline } from '../../components/Timeline.js';
+import { WorkspaceSectionHeader } from '../../components/WorkspaceSection.js';
 import type {
   ApplicationDetailResponse,
   ApplicationItem,
@@ -201,6 +202,7 @@ export function ApplicationsPage() {
         description="Track what happened, what comes next, and who asserted each event. Preparing materials never implies submission."
         eyebrow="Candidate-controlled history"
         title="Applications"
+        variant="operational"
       />
 
       <section
@@ -237,8 +239,8 @@ export function ApplicationsPage() {
       )}
 
       <div
-        className="application-filter-bar"
-        style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}
+        aria-label="Application filters"
+        className="workspace-tabs application-filter-bar"
       >
         {(
           [
@@ -251,9 +253,16 @@ export function ApplicationsPage() {
           ] as const
         ).map(([key, label]) => (
           <button
+            aria-pressed={activeFilter === key}
             key={key}
             type="button"
             className={`button ${activeFilter === key ? 'button-primary' : 'button-secondary'}`}
+            onFocus={(event) =>
+              event.currentTarget.scrollIntoView({
+                block: 'nearest',
+                inline: 'nearest',
+              })
+            }
             onClick={() => setActiveFilter(key)}
           >
             {label}
@@ -266,12 +275,12 @@ export function ApplicationsPage() {
           aria-labelledby="active-applications-heading"
           className="application-list-section"
         >
-          <div className="section-heading compact">
-            <div>
-              <h2 id="active-applications-heading">Pipeline and activity</h2>
-              <p>{filteredApps.length} tracked application records</p>
-            </div>
-          </div>
+          <WorkspaceSectionHeader
+            id="active-applications-heading"
+            meta="Work queue"
+            title="Pipeline and activity"
+            description={`${filteredApps.length} tracked application records · select a record for actions and provenance`}
+          />
 
           <div className="application-list">
             {filteredApps.map((application) => {
@@ -345,7 +354,7 @@ export function ApplicationsPage() {
                             </p>
                           )}
                         </div>
-                        <div style={{ display: 'flex', gap: '8px' }}>
+                        <div className="application-detail-actions">
                           {detail?.opportunity?.sourceUrl &&
                             isSafeHttpUrl(detail.opportunity.sourceUrl) && (
                               <a
@@ -368,34 +377,11 @@ export function ApplicationsPage() {
 
                       {/* State Machine Transition Actions */}
                       {allowedNext.length > 0 && (
-                        <div
-                          className="transition-actions"
-                          style={{
-                            marginBottom: '16px',
-                            padding: '12px',
-                            background: '#ffffff',
-                            borderRadius: '6px',
-                            border: '1px solid #e2e8f0',
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: '0.85rem',
-                              fontWeight: 600,
-                              display: 'block',
-                              marginBottom: '8px',
-                              color: '#334155',
-                            }}
-                          >
-                            Update Application Status:
+                        <div className="transition-actions">
+                          <span className="metric-label">
+                            Update application status
                           </span>
-                          <div
-                            style={{
-                              display: 'flex',
-                              gap: '6px',
-                              flexWrap: 'wrap',
-                            }}
-                          >
+                          <div>
                             {allowedNext.map((nextSt) => (
                               <button
                                 key={nextSt}
@@ -417,28 +403,10 @@ export function ApplicationsPage() {
                       )}
 
                       {/* Candidate Note Section */}
-                      <div
-                        className="application-note-section"
-                        style={{
-                          marginBottom: '16px',
-                          padding: '12px',
-                          background: '#ffffff',
-                          borderRadius: '6px',
-                          border: '1px solid #e2e8f0',
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginBottom: '6px',
-                          }}
-                        >
-                          <strong
-                            style={{ fontSize: '0.9rem', color: '#334155' }}
-                          >
-                            Candidate Notes (User Authored)
+                      <div className="application-note-section">
+                        <div className="application-note-heading">
+                          <strong>
+                            Candidate notes <span>(user authored)</span>
                           </strong>
                           {editingNoteId !== application.id && (
                             <button
@@ -457,25 +425,13 @@ export function ApplicationsPage() {
                         {editingNoteId === application.id ? (
                           <div>
                             <textarea
+                              className="application-note-input"
                               rows={3}
-                              style={{
-                                width: '100%',
-                                padding: '8px',
-                                borderRadius: '4px',
-                                border: '1px solid #cbd5e1',
-                                fontSize: '0.9rem',
-                              }}
                               value={noteText}
                               onChange={(e) => setNoteText(e.target.value)}
                               placeholder="Write private application notes here (e.g. referral contact, interview prep)..."
                             />
-                            <div
-                              style={{
-                                display: 'flex',
-                                gap: '8px',
-                                marginTop: '6px',
-                              }}
-                            >
+                            <div className="application-note-actions">
                               <button
                                 type="button"
                                 className="button button-primary"
@@ -495,14 +451,7 @@ export function ApplicationsPage() {
                             </div>
                           </div>
                         ) : (
-                          <p
-                            style={{
-                              margin: 0,
-                              fontSize: '0.9rem',
-                              color: '#475569',
-                              fontStyle: detail?.note ? 'normal' : 'italic',
-                            }}
-                          >
+                          <p data-empty={!detail?.note}>
                             {detail?.note || 'No notes added yet.'}
                           </p>
                         )}

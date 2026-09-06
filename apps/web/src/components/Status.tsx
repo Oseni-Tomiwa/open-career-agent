@@ -83,15 +83,14 @@ export function SignalScore({
         <strong>{level}</strong>
       </div>
       {score === null ? (
-        <small aria-label={`${label}: ${level}`}>Canonical API level</small>
+        <small aria-label={`${label}: ${level}`}>Exact score unavailable</small>
       ) : (
-        <div
+        <small
           aria-label={`${label}: ${level}, ${score} out of 100`}
-          className="score-track"
-          role="img"
+          className="signal-score-exact"
         >
-          <span style={{ width: `${score}%` }} />
-        </div>
+          {score} / 100
+        </small>
       )}
     </div>
   );

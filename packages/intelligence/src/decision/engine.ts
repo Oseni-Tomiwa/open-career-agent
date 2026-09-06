@@ -142,7 +142,14 @@ export class DecisionEngine {
 
     // 2. Confirmed Hard Blocker -> BLOCKED. Eligibility remains the authority.
     const blockerFindings = (eligibility.findings ?? [])
-      .filter((f) => f.state === 'BLOCKER' || f.state === 'HARD_BLOCKER')
+      .filter((f) => {
+        const state = f.state.toLowerCase();
+        return (
+          state === 'ineligible' ||
+          state === 'blocker' ||
+          state === 'hard_blocker'
+        );
+      })
       .map((f) => ({
         category: 'eligibility' as const,
         dimensionKey: f.dimension,
@@ -173,11 +180,10 @@ export class DecisionEngine {
       eligibility.state === 'unknown'
     ) {
       const unresolvedFindings = (eligibility.findings ?? [])
-        .filter(
-          (f) =>
-            f.state === 'UNKNOWN' ||
-            f.state === 'INVESTIGATE' ||
-            f.state === 'UNRESOLVED',
+        .filter((f) =>
+          ['unknown', 'investigate', 'unresolved'].includes(
+            f.state.toLowerCase(),
+          ),
         )
         .map((f) => ({
           category: 'eligibility' as const,
@@ -194,6 +200,21 @@ export class DecisionEngine {
         reasonCodes.push('STRONG_REQUIRED_FIT');
       }
 
+      const supplementaryFindings: DecisionFindingReference[] = [
+        ...(fit?.level === 'strong' ? fitReference(fit, 'strong') : []),
+        ...(quality?.level === 'risk'
+          ? (quality.findings ?? [])
+              .filter((finding) => finding.state === 'RISK')
+              .map((finding) => ({
+                category: 'quality' as const,
+                dimensionKey: finding.dimension,
+                state: finding.state,
+                summary:
+                  finding.explanation ?? finding.label ?? finding.dimension,
+              }))
+          : []),
+      ];
+
       const unresolvedDetails =
         unresolvedFindings.length > 0
           ? unresolvedFindings.map((u) => u.summary).join('; ')
@@ -205,7 +226,7 @@ export class DecisionEngine {
         action: 'investigate',
         reasonCodes,
         explanation: `Investigate eligibility before applying: ${unresolvedDetails}`,
-        decisiveFindings: unresolvedFindings,
+        decisiveFindings: [...unresolvedFindings, ...supplementaryFindings],
         evaluatedAt: evaluatedAtIso,
       };
     }

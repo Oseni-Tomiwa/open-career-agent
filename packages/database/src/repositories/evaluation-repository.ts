@@ -731,7 +731,21 @@ export class EvaluationRepository {
           ),
         );
 
-      if (existingRows.length > 0) return true;
+      const existingDecision = existingRows[0];
+      if (existingDecision) {
+        for (const reason of decision.reasonFindingIds) {
+          await transaction
+            .insert(decisionReasons)
+            .values({
+              id: randomUUID(),
+              decisionId: existingDecision.id,
+              reasonCode: reason.reasonCode,
+              findingId: reason.findingId,
+            })
+            .onConflictDoNothing();
+        }
+        return true;
+      }
 
       await transaction.insert(decisions).values({
         id: decision.id,

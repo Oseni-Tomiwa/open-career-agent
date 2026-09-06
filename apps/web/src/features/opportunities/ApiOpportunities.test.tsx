@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { Route, Routes } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
@@ -157,11 +157,24 @@ describe('API-mode Opportunities UI', () => {
     expect(
       screen.getByText('Ineligible due to work authorization requirement.'),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('Fit: strong')).toBeInTheDocument();
-    expect(screen.getByLabelText('Quality: moderate')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Inspect Fit: strong',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Inspect Quality: moderate',
+      }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole('button', {
         name: 'Review evidence for this opportunity',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Mark for evidence review',
       }),
     ).toBeInTheDocument();
   });
@@ -188,6 +201,43 @@ describe('API-mode Opportunities UI', () => {
     expect((await screen.findAllByText('Investigate')).length).toBeGreaterThan(
       0,
     );
+  });
+
+  it('explains a finding-free non-neutral evaluation without inventing findings', async () => {
+    const item = opportunity({
+      eligibility: 'investigate',
+      eligibilitySignals: [],
+      eligibilityExplanation:
+        'No hard eligibility constraints were extracted. Eligibility remains unresolved because it could not be established deterministically.',
+      fit: 'weak',
+      fitSignals: [],
+      fitExplanation:
+        'No deterministic Fit requirements were extracted; Fit remains weak because evidence is insufficient.',
+    });
+    renderProduct(
+      <Routes>
+        <Route
+          element={<OpportunityDetailPage />}
+          path="/opportunities/:opportunityId"
+        />
+      </Routes>,
+      ['/opportunities/api-opportunity'],
+      repository(item),
+    );
+    await screen.findByRole('heading', { name: 'API Platform Engineer' });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Eligibility' }));
+    expect(
+      screen.getAllByText(/No hard eligibility constraints were extracted/i)
+        .length,
+    ).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Fit' }));
+    expect(
+      screen.getAllByText(/No deterministic Fit requirements were extracted/i)
+        .length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText('Not evaluated.')).not.toBeInTheDocument();
   });
 
   it('renders an API error state', async () => {

@@ -12,6 +12,16 @@ describe('application pipeline', () => {
       await screen.findByRole('heading', { name: 'Applications' }),
     ).toBeInTheDocument();
     expect(
+      screen.getByRole('button', { name: /All Applications/ }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: /Active Pipeline/ }));
+    expect(
+      screen.getByRole('button', { name: /All Applications/ }),
+    ).toHaveAttribute('aria-pressed', 'false');
+    expect(
+      screen.getByRole('button', { name: /Active Pipeline/ }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(
       await screen.findAllByText('Prepare two platform ownership examples'),
     ).toHaveLength(2);
     expect(

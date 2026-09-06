@@ -26,7 +26,7 @@ describe('read-only primary surfaces', () => {
     ];
 
     const surfaces = [
-      { element: <TodayPage />, heading: /Good afternoon/ },
+      { element: <TodayPage />, heading: /^Today$/ },
       { element: <MatchesPage />, heading: /^Matches$/ },
       { element: <CareerSignalsPage />, heading: /^Career Insights$/ },
       { element: <AgentActivityPage />, heading: /^Agent Activity$/ },

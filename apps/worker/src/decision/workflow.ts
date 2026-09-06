@@ -164,6 +164,8 @@ export function createDecisionHandlers(
                 (code) =>
                   (code === 'ELIGIBILITY_BLOCKER' &&
                     reference.category === 'eligibility') ||
+                  (code === 'ELIGIBILITY_UNRESOLVED' &&
+                    reference.category === 'eligibility') ||
                   (code === 'LISTING_CLOSED' &&
                     reference.category === 'quality') ||
                   (code === 'LISTING_STALE' &&

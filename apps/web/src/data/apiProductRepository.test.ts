@@ -193,8 +193,12 @@ describe('ApiProductRepository', () => {
     const opportunity = await repository.getOpportunity('opp-1');
     expect(opportunity).toMatchObject({
       eligibility: 'eligible',
+      eligibilityExplanation:
+        'Eligibility is eligible based on the recorded hard-constraint findings.',
       fit: 'strong',
+      fitExplanation: 'Required capabilities are supported.',
       quality: 'moderate',
+      qualityExplanation: 'The listing is usable with minor uncertainty.',
       decision: 'high-priority',
       explanation: 'Eligible with strong Fit and usable Quality.',
       nextAction: 'Apply',
@@ -233,7 +237,75 @@ describe('ApiProductRepository', () => {
       eligibilitySignals: [],
       fitSignals: [],
       qualitySignals: [],
+      eligibilityExplanation:
+        'Eligibility has not been evaluated for this snapshot.',
+      fitExplanation: 'Fit has not been evaluated for this snapshot.',
+      qualityExplanation: 'Quality has not been evaluated for this snapshot.',
     });
+  });
+
+  it('distinguishes unresolved extracted Eligibility findings from absent extractable constraints and preserves a finding-free Fit basis', async () => {
+    const absentConstraints = detailBody();
+    Object.assign(absentConstraints.snapshots[0]!, {
+      eligibility: {
+        state: 'investigate',
+        engineVersion: 'eligibility-v1',
+        findings: [],
+      },
+      fit: {
+        level: 'weak',
+        summary:
+          'No deterministic Fit requirements were extracted; Fit remains weak because evidence is insufficient.',
+        engineVersion: 'fit-v1',
+        findings: [],
+      },
+    });
+    const absentRepository = new ApiProductRepository(
+      'http://api.test',
+      'candidate-1',
+      vi.fn<typeof fetch>().mockResolvedValue(response(absentConstraints)),
+    );
+    const absent = await absentRepository.getOpportunity('opp-1');
+    expect(absent).toMatchObject({
+      eligibility: 'investigate',
+      eligibilitySignals: [],
+      eligibilityExplanation:
+        'No hard eligibility constraints were extracted. Eligibility remains unresolved because it could not be established deterministically.',
+      fit: 'weak',
+      fitSignals: [],
+      fitExplanation:
+        'No deterministic Fit requirements were extracted; Fit remains weak because evidence is insufficient.',
+    });
+
+    const explicitUnknown = detailBody();
+    Object.assign(explicitUnknown.snapshots[0]!, {
+      eligibility: {
+        state: 'investigate',
+        engineVersion: 'eligibility-v1',
+        findings: [
+          {
+            id: 'finding-unknown',
+            dimension: 'work_authorization',
+            state: 'unknown',
+            summary: 'The listing contains an unresolved requirement.',
+            confidence: 'low',
+            evidence: [],
+          },
+        ],
+      },
+    });
+    const explicitRepository = new ApiProductRepository(
+      'http://api.test',
+      'candidate-1',
+      vi.fn<typeof fetch>().mockResolvedValue(response(explicitUnknown)),
+    );
+    const explicit = await explicitRepository.getOpportunity('opp-1');
+    expect(explicit).toMatchObject({
+      eligibility: 'investigate',
+      eligibilityExplanation:
+        'One or more explicit eligibility requirements remain unresolved.',
+    });
+    expect(explicit?.eligibilitySignals).toHaveLength(1);
   });
 
   it('uses browser fetch without a receiver and treats blank optional fields as missing', async () => {

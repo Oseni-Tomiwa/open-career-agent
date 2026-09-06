@@ -94,10 +94,13 @@ export interface Opportunity {
   readonly relocation: 'Supported' | 'Not offered' | 'Unknown';
   readonly eligibility: EligibilityState | null;
   readonly eligibilityLabel: string;
+  readonly eligibilityExplanation?: string;
   readonly fit: FitLevel | null;
   readonly fitScore: number | null;
+  readonly fitExplanation?: string;
   readonly quality: QualityLevel | null;
   readonly qualityScore: number | null;
+  readonly qualityExplanation?: string;
   readonly decision: Decision | null;
   readonly decisionLabel: string;
   readonly decisiveFindingIds: readonly string[];

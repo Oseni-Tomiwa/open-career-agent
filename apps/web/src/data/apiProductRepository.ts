@@ -553,10 +553,16 @@ function mapDetail(response: DetailResponse, summary?: Summary): Opportunity {
     eligibilityLabel: latest.eligibility
       ? eligibilityLabel(latest.eligibility.state)
       : 'Not evaluated',
+    eligibilityExplanation: eligibilityExplanation(latest),
     fit: latest.fit?.level ?? null,
     fitScore: null,
+    fitExplanation:
+      latest.fit?.summary ?? 'Fit has not been evaluated for this snapshot.',
     quality: latest.quality?.level ?? null,
     qualityScore: null,
+    qualityExplanation:
+      latest.quality?.summary ??
+      'Quality has not been evaluated for this snapshot.',
     decision: latest.decision?.state ?? null,
     decisionLabel: decisionLabel(latest.decision?.state),
     decisiveFindingIds:
@@ -689,6 +695,27 @@ function eligibilityLabel(state: EligibilityState): string {
     investigate: 'Investigate',
     unknown: 'Unknown',
   }[state];
+}
+
+function eligibilityExplanation(snapshot: Snapshot): string {
+  const eligibility = snapshot.eligibility;
+  if (!eligibility) {
+    return 'Eligibility has not been evaluated for this snapshot.';
+  }
+  if (
+    (eligibility.state === 'investigate' ||
+      eligibility.state === 'unknown') &&
+    eligibility.findings.length === 0
+  ) {
+    return 'No hard eligibility constraints were extracted. Eligibility remains unresolved because it could not be established deterministically.';
+  }
+  if (
+    eligibility.state === 'investigate' ||
+    eligibility.state === 'unknown'
+  ) {
+    return 'One or more explicit eligibility requirements remain unresolved.';
+  }
+  return `Eligibility is ${eligibilityLabel(eligibility.state).toLowerCase()} based on the recorded hard-constraint findings.`;
 }
 
 function decisionLabel(state?: Decision): string {

@@ -869,6 +869,24 @@ describe('Domain Persistence Foundation', () => {
         fitInputFingerprint: 'fp-fit-prov',
         qualityInputFingerprint: 'fp-qual-prov',
         reasonCodes: ['ELIGIBILITY_BLOCKER'],
+        reasonFindingIds: [],
+        evaluatedAt: new Date(),
+      });
+
+      await evaluations.persistDecision({
+        id: decisionId('dec-prov-backfill-attempt'),
+        evaluationId: evaluation,
+        candidateId: candidate,
+        snapshotId: snapshot,
+        priority: 'blocked',
+        action: 'do_not_apply',
+        explanation: 'Blocked by German work authorization requirement.',
+        engineVersion: 'decision-v1',
+        inputFingerprint: 'fp-dec-prov',
+        eligibilityInputFingerprint: 'fp-elig-prov',
+        fitInputFingerprint: 'fp-fit-prov',
+        qualityInputFingerprint: 'fp-qual-prov',
+        reasonCodes: ['ELIGIBILITY_BLOCKER'],
         reasonFindingIds: [
           { reasonCode: 'ELIGIBILITY_BLOCKER', findingId: finding },
         ],

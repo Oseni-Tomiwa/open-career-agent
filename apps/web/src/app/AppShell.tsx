@@ -3,6 +3,8 @@ import { NavLink, Outlet } from 'react-router-dom';
 
 import { getBootstrapStatus } from '../api.js';
 import { Icon, type IconName } from '../components/Icon.js';
+import { WorkspacePageEnd } from '../components/WorkspacePageEnd.js';
+import { browserConfig } from '../config.js';
 import { useProductData } from './ProductDataProvider.js';
 import { useTheme, type ThemePreference } from './ThemeProvider.js';
 import { useAuth } from './authContext.js';
@@ -127,9 +129,11 @@ export function AppShell() {
         <div className="environment-strip">
           <span>
             <Icon name="info" size={15} />{' '}
-            {dataSource === 'api'
-              ? 'API-backed candidate workspace'
-              : 'Fictional development dataset'}
+            {dataSource === 'seed'
+              ? 'Fictional development dataset'
+              : browserConfig.deploymentMode === 'development'
+                ? 'Local real-candidate data'
+                : 'API-backed candidate workspace'}
           </span>
           {apiState === 'unavailable' && (
             <span className="api-unavailable">
@@ -141,6 +145,7 @@ export function AppShell() {
         <main id="main-content" tabIndex={-1}>
           <Outlet />
         </main>
+        <WorkspacePageEnd />
       </div>
     </div>
   );
@@ -159,7 +164,7 @@ function ProductIdentity() {
       </span>
       <span>
         <strong>Rolevia</strong>
-        <small>Career intelligence</small>
+        <small>Evidence-led career intelligence</small>
       </span>
     </NavLink>
   );

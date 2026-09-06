@@ -2,6 +2,8 @@ import { useState } from 'react';
 
 import { useTheme, type ThemePreference } from '../../app/ThemeProvider.js';
 import { Icon } from '../../components/Icon.js';
+import { PageHeader } from '../../components/PageHeader.js';
+import { WorkspaceSectionHeader } from '../../components/WorkspaceSection.js';
 import ProfilePage from '../profile/ProfilePage.js';
 
 type SettingsTab = 'profile' | 'appearance';
@@ -21,22 +23,17 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="page-container">
-      <header className="page-header">
-        <div>
-          <h1>Settings</h1>
-          <p className="subtitle">
-            Manage factual career information, supporting evidence, and display
-            preferences.
-          </p>
-        </div>
-      </header>
+    <div className="page settings-page">
+      <PageHeader
+        eyebrow="Candidate workspace"
+        title="Settings"
+        description="Manage the career evidence Rolevia evaluates separately from ordinary workspace preferences."
+        variant="operational"
+      />
 
-      <div
-        className="tab-bar"
-        style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}
-      >
+      <div aria-label="Settings sections" className="workspace-tabs">
         <button
+          aria-pressed={activeTab === 'profile'}
           className={`button ${activeTab === 'profile' ? 'button-primary' : 'button-secondary'}`}
           onClick={() => setActiveTab('profile')}
           type="button"
@@ -44,6 +41,7 @@ export default function SettingsPage() {
           <Icon name="profile" size={16} /> Career Profile
         </button>
         <button
+          aria-pressed={activeTab === 'appearance'}
           className={`button ${activeTab === 'appearance' ? 'button-primary' : 'button-secondary'}`}
           onClick={() => setActiveTab('appearance')}
           type="button"
@@ -55,31 +53,22 @@ export default function SettingsPage() {
       {activeTab === 'profile' && <ProfilePage />}
 
       {activeTab === 'appearance' && (
-        <div className="card" style={{ padding: '24px', maxWidth: '600px' }}>
-          <h2>Appearance Settings</h2>
-          <p
-            style={{
-              color: 'var(--color-text-secondary)',
-              marginBottom: '20px',
-            }}
-          >
-            Choose your preferred color theme for the Rolevia interface.
-          </p>
-
-          <div style={{ display: 'flex', gap: '16px' }}>
+        <section
+          className="appearance-settings"
+          aria-labelledby="appearance-heading"
+        >
+          <WorkspaceSectionHeader
+            id="appearance-heading"
+            meta="Workspace preference"
+            title="Appearance Settings"
+            description="Choose how this browser displays Rolevia. System Default follows your operating-system preference."
+          />
+          <div className="appearance-options">
             {themeOptions.map((item) => (
               <button
                 key={item.value}
                 className={`button ${preference === item.value ? 'button-primary' : 'button-secondary'}`}
                 onClick={() => setPreference(item.value)}
-                style={{
-                  flex: 1,
-                  padding: '16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '8px',
-                }}
                 type="button"
               >
                 <Icon name={item.icon} size={24} />
@@ -87,7 +76,7 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
-        </div>
+        </section>
       )}
     </div>
   );

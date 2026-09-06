@@ -1,7 +1,8 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { Route, Routes } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import { SeedProductRepository } from '../../data/seedRepository.js';
 import { renderProduct } from '../../test/render.js';
 import { OpportunityDetailPage } from './OpportunityDetailPage.js';
 
@@ -26,7 +27,9 @@ describe('opportunity detail', () => {
       screen.getByText('Confirmed Eligibility blocker'),
     ).toBeInTheDocument();
     expect(
-      screen.getByLabelText('Fit: strong, 94 out of 100'),
+      screen.getByRole('button', {
+        name: 'Inspect Fit: strong',
+      }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'Eligibility' }));
     expect(
@@ -44,6 +47,62 @@ describe('opportunity detail', () => {
         /Check application questions for sponsorship policy/i,
       ),
     ).toHaveLength(2);
+  });
+
+  it('shows exact evaluation values and separates evidence navigation from decision actions', async () => {
+    const repository = new SeedProductRepository();
+    const setDecision = vi.spyOn(repository, 'setOpportunityDecision');
+    renderProduct(
+      detailRoute(),
+      ['/opportunities/northstar-platform-engineer'],
+      repository,
+    );
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Platform Engineer, Developer Experience',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('91 / 100')).toBeInTheDocument();
+    expect(screen.getByText('88 / 100')).toBeInTheDocument();
+    expect(screen.getByText('91% complete')).toBeInTheDocument();
+
+    const overviewTab = screen.getByRole('tab', { name: 'Overview' });
+    const evidenceTab = screen.getByRole('tab', { name: 'Evidence' });
+    expect(overviewTab).toHaveAttribute('tabindex', '0');
+    expect(evidenceTab).toHaveAttribute('tabindex', '-1');
+    fireEvent.keyDown(overviewTab, { key: 'ArrowRight' });
+    const eligibilityTab = screen.getByRole('tab', { name: 'Eligibility' });
+    expect(eligibilityTab).toHaveAttribute('aria-selected', 'true');
+    expect(eligibilityTab).toHaveAttribute('tabindex', '0');
+    expect(eligibilityTab).toHaveFocus();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Review evidence for this opportunity',
+      }),
+    );
+    expect(setDecision).not.toHaveBeenCalled();
+    expect(evidenceTab).toHaveAttribute('aria-selected', 'true');
+    expect(evidenceTab).toHaveAttribute('tabindex', '0');
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mark for evidence review' }),
+    );
+    await waitFor(() =>
+      expect(setDecision).toHaveBeenCalledWith(
+        'northstar-platform-engineer',
+        'investigate',
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Shortlist' }));
+    await waitFor(() =>
+      expect(setDecision).toHaveBeenCalledWith(
+        'northstar-platform-engineer',
+        'consider',
+      ),
+    );
   });
 
   it('renders a specific invalid-opportunity state', async () => {

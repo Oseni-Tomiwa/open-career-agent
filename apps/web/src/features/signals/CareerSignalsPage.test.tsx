@@ -6,6 +6,7 @@ import { CareerSignalsPage } from './CareerSignalsPage.js';
 import type { ProductRepository } from '../../data/types.js';
 
 import { initialSeedSnapshot } from '../../data/seed.js';
+import { SeedProductRepository } from '../../data/seedRepository.js';
 
 describe('CareerSignalsPage', () => {
   it('renders aggregated career market signals page', async () => {
@@ -20,6 +21,22 @@ describe('CareerSignalsPage', () => {
     ).toBeInTheDocument();
 
     expect(await screen.findByTestId('active-opp-count')).toBeInTheDocument();
+  });
+
+  it('offers honest next steps when no recurring insight is supported', async () => {
+    const repository = new SeedProductRepository();
+
+    renderProduct(<CareerSignalsPage />, ['/insights'], repository);
+
+    expect(
+      await screen.findByRole('heading', { name: 'No Career Insights Yet' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Review opportunity register' }),
+    ).toHaveAttribute('href', '/discover');
+    expect(
+      screen.getByRole('link', { name: 'Refine Search Preferences' }),
+    ).toHaveAttribute('href', '/discover?tab=preferences');
   });
 
   it('fails honestly when API request fails and does NOT fall back to seed signals', async () => {

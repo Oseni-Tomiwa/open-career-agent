@@ -12,6 +12,7 @@ import {
   discoveryRunId,
   discoveryMatchId,
   applicationId,
+  findingId,
 } from '@oca/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -276,6 +277,30 @@ describe('TodayRepository', () => {
     expect(dashboardAlex.needsAttention).toHaveLength(1);
     expect(dashboardAlex.needsAttention[0]!.opportunityId).toBe('opp-2');
     expect(dashboardAlex.needsAttention[0]!.category).toBe('investigate');
+    expect(dashboardAlex.needsAttention[0]).toMatchObject({
+      titleOrSummary:
+        'Eligibility could not be established deterministically: Staff Platform Engineer',
+      nextAction: 'Review the source for hard eligibility requirements',
+    });
+
+    await evalRepo.persistFinding({
+      id: findingId('finding-explicit-unknown'),
+      evaluationId: eval2,
+      category: 'eligibility',
+      dimensionKey: 'work_authorization',
+      state: 'unknown',
+      summary: 'An explicit requirement remains unresolved.',
+    });
+    const dashboardWithExplicitUnknown = await todayRepo.getTodayDashboard(
+      candidateAlex,
+      { now },
+    );
+    expect(dashboardWithExplicitUnknown.needsAttention[0]).toMatchObject({
+      titleOrSummary:
+        'Explicit eligibility requirement unresolved: Staff Platform Engineer',
+      nextAction:
+        'Review the unresolved requirement and its available evidence',
+    });
 
     const dashboardJordan = await todayRepo.getTodayDashboard(candidateJordan, {
       now,

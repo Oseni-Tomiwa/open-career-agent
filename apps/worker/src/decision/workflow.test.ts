@@ -292,6 +292,85 @@ describe('decision.evaluate durable workflow', () => {
     expect(decision?.explanation).toContain(
       'Blocked by confirmed eligibility blocker',
     );
+    const reasons = await repository.getDecisionReasons(
+      decisionId(decision!.id),
+    );
+    expect(reasons).toEqual([
+      expect.objectContaining({
+        reasonCode: 'ELIGIBILITY_BLOCKER',
+        findingId: 'find-block-1',
+      }),
+    ]);
+  });
+
+  it('links every reason to its existing stage finding while Eligibility remains unresolved', async () => {
+    const unresolvedEval = evaluationId('eval-unresolved-strong-fit');
+    await repository.persistEvaluation({
+      id: unresolvedEval,
+      candidateId: candidate,
+      snapshotId: snapshot,
+      eligibilityState: 'investigate',
+      eligibilityEngineVersion: 'eligibility-v1',
+      eligibilityInputFingerprint: 'elig-unresolved-fp',
+      fitLevel: 'strong',
+      fitEngineVersion: 'fit-v1',
+      fitInputFingerprint: 'fit-strong-fp',
+      fitSummary: 'One required capability directly matches.',
+      qualityLevel: 'strong',
+      qualityEngineVersion: 'quality-v1',
+      qualityInputFingerprint: 'quality-strong-fp',
+      qualitySummary: 'The listing has strong deterministic quality.',
+    });
+    await repository.persistFinding({
+      id: findingId('find-unresolved-eligibility'),
+      evaluationId: unresolvedEval,
+      category: 'eligibility',
+      dimensionKey: 'location',
+      state: 'unknown',
+      summary: 'An explicit location requirement remains unresolved.',
+    });
+    await repository.persistFinding({
+      id: findingId('find-strong-fit'),
+      evaluationId: unresolvedEval,
+      category: 'fit',
+      dimensionKey: 'skill',
+      label: 'TypeScript',
+      state: 'STRONG_MATCH',
+      summary: 'Supported candidate evidence directly matches.',
+      explanation: 'Supported candidate evidence directly matches.',
+      modality: 'required',
+    });
+
+    const task = await ledger.enqueue({
+      taskType: 'decision.evaluate',
+      payload: {
+        evaluationId: unresolvedEval,
+        snapshotId: snapshot,
+        candidateId: candidate,
+      },
+    });
+    await createDecisionHandlers(database)['decision.evaluate']!(task);
+
+    const decision =
+      await repository.getLatestDecisionForEvaluation(unresolvedEval);
+    expect(JSON.parse(decision?.reasonCodes ?? '[]')).toEqual([
+      'ELIGIBILITY_UNRESOLVED',
+      'STRONG_REQUIRED_FIT',
+    ]);
+    expect(
+      await repository.getDecisionReasons(decisionId(decision!.id)),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          reasonCode: 'ELIGIBILITY_UNRESOLVED',
+          findingId: 'find-unresolved-eligibility',
+        }),
+        expect.objectContaining({
+          reasonCode: 'STRONG_REQUIRED_FIT',
+          findingId: 'find-strong-fit',
+        }),
+      ]),
+    );
   });
 
   it('blocks an explicitly closed listing with Quality provenance without mutating an Application', async () => {

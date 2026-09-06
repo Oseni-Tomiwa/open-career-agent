@@ -122,15 +122,27 @@ export class TodayRepository {
 
       // Check Needs Attention
       if (decision?.priority === 'investigate') {
+        const eligibilityFindings = await this.evalRepo.getEligibilityFindings(
+          evaluationId(evalRecord.id),
+        );
+        const hasExplicitUnresolvedRequirement = eligibilityFindings.some(
+          (finding) =>
+            ['investigate', 'unknown', 'unresolved'].includes(
+              String(finding.state).toLowerCase(),
+            ),
+        );
         attentionItems.push({
           opportunityId: oppIdStr,
           title: snapshot.title,
           organization: snapshot.organization ?? null,
           category: 'investigate',
-          titleOrSummary: `Eligibility investigation required: ${snapshot.title}`,
+          titleOrSummary: hasExplicitUnresolvedRequirement
+            ? `Explicit eligibility requirement unresolved: ${snapshot.title}`
+            : `Eligibility could not be established deterministically: ${snapshot.title}`,
           explanation: decision.explanation,
-          nextAction:
-            'Review eligibility details and verify missing candidate claims',
+          nextAction: hasExplicitUnresolvedRequirement
+            ? 'Review the unresolved requirement and its available evidence'
+            : 'Review the source for hard eligibility requirements',
           eligibilityState: evalRecord.eligibilityState ?? null,
           decisionState: 'investigate',
           reasonCodes,

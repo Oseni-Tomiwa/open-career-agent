@@ -5,6 +5,7 @@ import { useProductData } from '../../app/ProductDataProvider.js';
 import { EmptyState } from '../../components/EmptyState.js';
 import { Icon } from '../../components/Icon.js';
 import { PageHeader } from '../../components/PageHeader.js';
+import { WorkspaceSectionHeader } from '../../components/WorkspaceSection.js';
 import type { Opportunity } from '../../data/types.js';
 import { SearchPage } from '../search/SearchPage.js';
 import { OpportunitySummary } from './OpportunitySummary.js';
@@ -81,14 +82,12 @@ export function OpportunitiesPage() {
             ? 'Explore API-backed jobs discovered for your candidate profile.'
             : 'Explore development jobs discovered for your candidate profile.'
         }
-        eyebrow="Job Discovery"
+        eyebrow="Opportunity intelligence"
         title="Discover Jobs"
+        variant="operational"
       />
 
-      <div
-        className="tab-bar"
-        style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}
-      >
+      <div aria-label="Discover views" className="workspace-tabs">
         <button
           className={`button ${activeTab === 'jobs' ? 'button-primary' : 'button-secondary'}`}
           onClick={() => updateParam('tab', 'jobs')}
@@ -111,7 +110,7 @@ export function OpportunitiesPage() {
         <>
           <section
             aria-label="Opportunity search and filters"
-            className="filter-shell"
+            className="workspace-filter-bar"
           >
             <label className="search-field">
               <span className="sr-only">Search jobs</span>
@@ -123,7 +122,7 @@ export function OpportunitiesPage() {
                 value={query}
               />
             </label>
-            <div className="filter-row">
+            <div className="workspace-filter-fields">
               <label>
                 <span>Eligibility</span>
                 <select
@@ -217,14 +216,22 @@ export function OpportunitiesPage() {
               }
             />
           ) : (
-            <div className="opportunity-results">
-              {results.map((opportunity) => (
-                <OpportunitySummary
-                  key={opportunity.id}
-                  opportunity={opportunity}
-                />
-              ))}
-            </div>
+            <section aria-labelledby="opportunity-register-heading">
+              <WorkspaceSectionHeader
+                id="opportunity-register-heading"
+                title="Opportunity register"
+                description="Compare recommendation, eligibility, fit, quality, and source context without collapsing them into a score."
+                meta="Current discovery"
+              />
+              <div className="opportunity-results">
+                {results.map((opportunity) => (
+                  <OpportunitySummary
+                    key={opportunity.id}
+                    opportunity={opportunity}
+                  />
+                ))}
+              </div>
+            </section>
           )}
         </>
       )}

@@ -3,12 +3,38 @@ import { Link } from 'react-router-dom';
 
 import { useProductData } from '../../app/ProductDataProvider.js';
 import { CompanyMark } from '../../components/CompanyMark.js';
-import { Icon } from '../../components/Icon.js';
-import { PageHeader } from '../../components/PageHeader.js';
 import { EmptyState } from '../../components/EmptyState.js';
-import { EligibilityStatus } from '../../components/Status.js';
-import { OpportunitySummary } from '../opportunities/OpportunitySummary.js';
-import type { TodayDashboardResponse } from '../../data/types.js';
+import { Icon } from '../../components/Icon.js';
+import {
+  DecisionBadge,
+  DiscoveryRunStatus,
+  EligibilityStatus,
+} from '../../components/Status.js';
+import { WorkspaceSectionHeader } from '../../components/WorkspaceSection.js';
+import type {
+  Decision,
+  EligibilityState,
+  TodayDashboardResponse,
+} from '../../data/types.js';
+
+function eligibilityState(value: string | null): EligibilityState {
+  return value === 'eligible' ||
+    value === 'ineligible' ||
+    value === 'investigate' ||
+    value === 'unknown'
+    ? value
+    : 'unknown';
+}
+
+function decisionState(value: string | null): Decision | null {
+  return value === 'high-priority' ||
+    value === 'consider' ||
+    value === 'investigate' ||
+    value === 'low-priority' ||
+    value === 'blocked'
+    ? value
+    : null;
+}
 
 export function TodayPage() {
   const { getTodayDashboard, snapshot } = useProductData();
@@ -21,7 +47,6 @@ export function TodayPage() {
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-
     getTodayDashboard(7, controller.signal)
       .then((data) => {
         if (active) {
@@ -39,7 +64,6 @@ export function TodayPage() {
           setLoading(false);
         }
       });
-
     return () => {
       active = false;
       controller.abort();
@@ -48,18 +72,9 @@ export function TodayPage() {
 
   if (loading) {
     return (
-      <div className="page today-page">
-        <PageHeader
-          description="Aggregating canonical intelligence and current candidate attention..."
-          eyebrow="Loading"
-          title="Overview"
-        />
-        <div
-          className="app-loading"
-          style={{ padding: '2rem', textAlign: 'center' }}
-        >
-          <p>Loading candidate attention dashboard...</p>
-        </div>
+      <div className="page today-page" role="status">
+        <p className="eyebrow">Overview</p>
+        <h1 className="workspace-page-title">Preparing today’s brief…</h1>
       </div>
     );
   }
@@ -67,11 +82,6 @@ export function TodayPage() {
   if (error || !dashboard) {
     return (
       <div className="page today-page">
-        <PageHeader
-          description="Could not load candidate dashboard data."
-          eyebrow="Error"
-          title="Overview"
-        />
         <EmptyState
           description={error ?? 'Overview dashboard is currently unavailable.'}
           title="Error loading dashboard"
@@ -88,358 +98,293 @@ export function TodayPage() {
       month: 'long',
     },
   );
-
-  // Map priority opportunities to existing snapshot opportunities if available for full UI widget rendering
-  const priorityOpportunities = dashboard.priorityOpportunities.map((prio) => {
-    const matched = snapshot.opportunities.find(
-      (o) => o.id === prio.opportunityId,
-    );
-    if (matched) return matched;
-    return {
-      id: prio.opportunityId,
-      company: {
-        id:
-          prio.organization?.toLowerCase().replace(/[^a-z0-9]+/g, '-') ?? 'org',
-        name: prio.organization ?? 'Organization',
-        initials: (prio.organization ?? 'O').slice(0, 2).toUpperCase(),
-        mark: 'none' as const,
-        color: '#475569',
-      },
-      role: prio.title,
-      summary: prio.explanation,
-      description: [prio.explanation],
-      location: prio.location ?? 'Location not stated',
-      country: '',
-      workModel: 'Not stated',
-      remotePolicy: 'Not stated',
-      compensation: null,
-      employmentType: 'Not stated',
-      seniority: 'Not stated',
-      technologies: [],
-      source: 'Recorded opportunity',
-      sourceReference: prio.opportunityId,
-      freshness: prio.freshnessBucket ?? 'recent',
-      publishedAt: prio.observedAt,
-      updatedAt: prio.observedAt,
-      sponsorship: 'Unknown' as const,
-      relocation: 'Unknown' as const,
-      eligibility: null,
-      eligibilityLabel: 'Not included in this overview projection',
-      fit: null,
-      fitScore: null,
-      quality: null,
-      qualityScore: null,
-      decision: 'high-priority' as const,
-      decisionLabel: 'High priority',
-      decisiveFindingIds: [],
-      explanation: prio.explanation,
-      nextAction: prio.action === 'apply' ? 'Apply' : prio.action,
-      completeness: null,
-      requirements: [],
-      eligibilitySignals: [],
-      fitSignals: [],
-      qualitySignals: [],
-      evidence: [],
-      history: [],
-      tags: prio.reasonCodes,
-    };
-  });
+  const priorities = dashboard.priorityOpportunities.map((item) => ({
+    item,
+    opportunity: snapshot.opportunities.find(
+      (candidate) => candidate.id === item.opportunityId,
+    ),
+  }));
+  const attentionCount =
+    dashboard.priorityOpportunities.length + dashboard.needsAttention.length;
 
   return (
     <div className="page today-page">
-      <PageHeader
-        description={dashboard.summaryText}
-        eyebrow={dateFormatted}
-        title={`Good afternoon, ${dashboard.greetingName}`}
-        actions={
-          <Link className="button button-secondary" to="/discover">
-            Explore all jobs
-          </Link>
-        }
-      />
-
-      {/* 01: Priority Opportunities */}
-      <section
-        aria-labelledby="priority-heading"
-        className="section-block priority-section"
-      >
-        <div className="section-heading">
-          <div>
-            <p className="section-index">01</p>
-            <h2 id="priority-heading">Priority matches</h2>
-            <p>Actionable roles ranked with Eligibility before Fit.</p>
-          </div>
-          <span className="section-count">
-            {dashboard.priorityOpportunities.length} ready
-          </span>
+      <header className="workspace-page-header">
+        <div>
+          <p className="eyebrow">{dateFormatted}</p>
+          <h1 className="workspace-page-title">Today</h1>
+          <p className="workspace-page-summary">
+            Good afternoon, {dashboard.greetingName}. {dashboard.summaryText}
+          </p>
         </div>
-        {priorityOpportunities.length > 0 ? (
-          <div className="priority-list">
-            {priorityOpportunities.map((opportunity) => (
-              <OpportunitySummary
-                key={opportunity.id}
-                opportunity={opportunity}
-              />
-            ))}
-          </div>
-        ) : (
-          <div
-            className="empty-card"
-            style={{
-              padding: '1.5rem',
-              background: 'var(--surface-color, #f8fafc)',
-              borderRadius: '8px',
-              color: 'var(--text-muted, #64748b)',
-            }}
-          >
-            No high-priority matches right now. Keep discovering new jobs.
-          </div>
-        )}
-      </section>
+        <Link className="button button-secondary" to="/discover">
+          Explore all jobs <Icon name="arrow-right" size={16} />
+        </Link>
+      </header>
 
-      {/* Today Grid */}
-      <div className="today-grid">
-        {/* 02: Recent Changes */}
-        <section aria-labelledby="changed-heading" className="section-block">
-          <div className="section-heading compact">
-            <div>
-              <p className="section-index">02</p>
-              <h2 id="changed-heading">Since your last scan</h2>
-            </div>
-            <Link to="/discover?sort=freshness">View scan results</Link>
-          </div>
-          {dashboard.recentChanges.length > 0 ? (
-            <div className="change-list">
-              {dashboard.recentChanges.map((change) => (
+      <div className="today-command-grid">
+        <section
+          className="attention-board"
+          aria-labelledby="attention-heading"
+        >
+          <WorkspaceSectionHeader
+            id="attention-heading"
+            title="What deserves attention"
+            description="Decisions and unknowns with a concrete next step. Eligibility remains the first gate."
+            meta={`${attentionCount} items in the current brief`}
+          />
+          <div className="attention-ledger">
+            {priorities.map(({ item, opportunity }) => (
+              <article className="attention-row" key={item.opportunityId}>
+                <div className="attention-row-identity">
+                  {opportunity ? (
+                    <CompanyMark company={opportunity.company} size="small" />
+                  ) : (
+                    <span className="attention-row-mark" aria-hidden="true">
+                      {(item.organization ?? 'O').slice(0, 1)}
+                    </span>
+                  )}
+                  <div>
+                    <span>{item.organization ?? 'Organization'}</span>
+                    <h3>
+                      <Link to={`/discover/${item.opportunityId}`}>
+                        {item.title}
+                      </Link>
+                    </h3>
+                    <small>{item.location ?? 'Location not stated'}</small>
+                  </div>
+                </div>
+                <div className="attention-row-state">
+                  <DecisionBadge decision="high-priority" />
+                  <EligibilityStatus state={opportunity?.eligibility ?? null} />
+                </div>
+                <p>{item.explanation}</p>
                 <Link
-                  key={`${change.opportunityId}-${change.occurredAt}`}
-                  to={`/discover/${change.opportunityId}`}
+                  className="attention-row-action"
+                  to={`/discover/${item.opportunityId}`}
                 >
-                  <CompanyMark
-                    company={{
-                      id: change.organization?.toLowerCase() ?? 'org',
-                      name: change.organization ?? 'Org',
-                      initials: (change.organization ?? 'O').slice(0, 2),
-                      mark: 'none',
-                      color: '#475569',
-                    }}
-                    size="small"
-                  />
-                  <span>
-                    <strong>{change.title}</strong>
-                    <small>{change.organization ?? 'Organization'}</small>
-                  </span>
-                  <span className="change-copy">{change.headline}</span>
+                  <span>{item.action}</span>
                   <Icon name="arrow-right" size={16} />
                 </Link>
-              ))}
-            </div>
-          ) : (
-            <p
-              className="empty-copy"
-              style={{ color: '#64748b', fontSize: '0.875rem' }}
-            >
-              No recent changes in the last {dashboard.timeWindowDays} days.
-            </p>
-          )}
-        </section>
-
-        {/* 03: Needs Attention / Investigation */}
-        <section
-          aria-labelledby="investigation-heading"
-          className="section-block investigation-section"
-        >
-          <div className="section-heading compact">
-            <div>
-              <p className="section-index">03</p>
-              <h2 id="investigation-heading">Needs investigation</h2>
-            </div>
-            <span className="section-count">Recommendation-relevant items</span>
-          </div>
-          {dashboard.needsAttention.length > 0 ? (
-            <ul className="investigation-list">
-              {dashboard.needsAttention.map((item) => (
-                <li key={`${item.opportunityId}-${item.category}`}>
-                  <Icon
-                    name={
-                      item.category === 'blocked_closed' ? 'blocker' : 'unknown'
-                    }
-                  />
-                  <div>
-                    <Link to={`/discover/${item.opportunityId}`}>
-                      {item.title} · {item.organization ?? 'Organization'}
-                    </Link>
-                    <p>{item.explanation}</p>
-                    <small>{item.nextAction}</small>
-                  </div>
-                  <EligibilityStatus
-                    state={
-                      item.eligibilityState === 'eligible' ||
-                      item.eligibilityState === 'ineligible' ||
-                      item.eligibilityState === 'investigate'
-                        ? item.eligibilityState
-                        : 'unknown'
-                    }
-                  />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p
-              className="empty-copy"
-              style={{ color: '#64748b', fontSize: '0.875rem' }}
-            >
-              All current jobs are clear.
-            </p>
-          )}
-        </section>
-      </div>
-
-      {/* Today Lower Grid */}
-      <div className="today-grid lower-grid">
-        {/* 04: Application Activity */}
-        <section aria-labelledby="activity-heading" className="section-block">
-          <div className="section-heading compact">
-            <div>
-              <p className="section-index">04</p>
-              <h2 id="activity-heading">Application activity</h2>
-            </div>
-            <Link to="/applications">Open pipeline</Link>
-          </div>
-          {dashboard.applicationActivity.length > 0 ? (
-            <div className="application-briefs">
-              {dashboard.applicationActivity.map((app) => (
-                <div key={`${app.opportunityId}-${app.status}`}>
-                  <span
-                    className="application-status-dot"
-                    data-status={app.status}
-                  />
-                  <div>
-                    <strong>{app.status.replace('_', ' ')}</strong>
-                    <span>
-                      {app.title} · {app.organization ?? 'Organization'}
-                    </span>
-                    <small>{app.nextAction}</small>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p
-              className="empty-copy"
-              style={{ color: '#64748b', fontSize: '0.875rem' }}
-            >
-              No active applications.
-            </p>
-          )}
-        </section>
-
-        {/* 05: Career Memory Attention */}
-        <section
-          aria-labelledby="signals-heading"
-          className="section-block career-signals"
-        >
-          <div className="section-heading compact">
-            <div>
-              <p className="section-index">05</p>
-              <h2 id="signals-heading">Career Profile attention</h2>
-            </div>
-            <Link to="/settings">Review Career Profile</Link>
-          </div>
-          {dashboard.careerMemoryAttention.length > 0 ? (
-            <div className="memory-attention-list">
-              {dashboard.careerMemoryAttention.map((item) => (
-                <div key={item.claimKind} style={{ marginBottom: '1rem' }}>
-                  <strong>{item.headline}</strong>
-                  <p
-                    style={{
-                      fontSize: '0.875rem',
-                      color: '#475569',
-                      margin: '0.25rem 0',
-                    }}
-                  >
-                    {item.explanation}
-                  </p>
-                  <Link
-                    to="/profile"
-                    style={{ fontSize: '0.8125rem', color: '#2563eb' }}
-                  >
-                    Provide evidence in Profile →
-                  </Link>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p
-              className="empty-copy"
-              style={{ color: '#64748b', fontSize: '0.875rem' }}
-            >
-              Your Career Profile is up to date and all evidence questions are
-              resolved.
-            </p>
-          )}
-        </section>
-      </div>
-
-      {/* 06: Discovery Activity */}
-      {dashboard.discoveryActivity.length > 0 && (
-        <section
-          aria-labelledby="discovery-activity-heading"
-          className="section-block"
-          style={{ marginTop: '2rem' }}
-        >
-          <div className="section-heading compact">
-            <div>
-              <p className="section-index">06</p>
-              <h2 id="discovery-activity-heading">Discovery activity</h2>
-            </div>
-            <Link to="/search">Manage discovery targets</Link>
-          </div>
-          <div
-            className="discovery-activity-list"
-            style={{ display: 'grid', gap: '0.75rem' }}
-          >
-            {dashboard.discoveryActivity.map((run) => (
-              <div
-                key={run.runId}
-                style={{
-                  padding: '0.75rem 1rem',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '6px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  fontSize: '0.875rem',
-                }}
-              >
-                <div>
-                  <strong>{run.searchTargetName}</strong> ({run.sourceSystem})
-                  <span
-                    style={{
-                      marginLeft: '0.5rem',
-                      fontSize: '0.75rem',
-                      padding: '2px 6px',
-                      borderRadius: '4px',
-                      background:
-                        run.status === 'COMPLETED' ? '#dcfce7' : '#fee2e2',
-                      color: run.status === 'COMPLETED' ? '#166534' : '#991b1b',
-                    }}
-                  >
-                    {run.status}
-                  </span>
-                </div>
-                <div style={{ color: '#64748b', fontSize: '0.8125rem' }}>
-                  {run.acceptedCount} accepted · {run.rejectedCount} rejected ·{' '}
-                  {new Date(run.startedAt).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </div>
-              </div>
+              </article>
             ))}
+            {dashboard.needsAttention.map((item) => (
+              <article
+                className="attention-row attention-row-unknown"
+                key={`${item.opportunityId}-${item.category}`}
+              >
+                <div className="attention-row-identity">
+                  <span className="attention-row-mark" aria-hidden="true">
+                    <Icon name="unknown" size={16} />
+                  </span>
+                  <div>
+                    <span>{item.organization ?? 'Organization'}</span>
+                    <h3>
+                      <Link to={`/discover/${item.opportunityId}`}>
+                        {item.title}
+                      </Link>
+                    </h3>
+                    <small>Eligibility remains unresolved</small>
+                  </div>
+                </div>
+                <div className="attention-row-state">
+                  <DecisionBadge decision={decisionState(item.decisionState)} />
+                  <EligibilityStatus
+                    state={eligibilityState(item.eligibilityState)}
+                  />
+                </div>
+                <p>{item.explanation}</p>
+                <Link
+                  className="attention-row-action"
+                  to={`/discover/${item.opportunityId}`}
+                >
+                  <span>{item.nextAction}</span>
+                  <Icon name="arrow-right" size={16} />
+                </Link>
+              </article>
+            ))}
+            {attentionCount === 0 && (
+              <p className="ledger-empty">
+                Nothing currently needs a decision. New findings will appear
+                here when the evidence changes.
+              </p>
+            )}
           </div>
         </section>
-      )}
+
+        <aside className="today-brief" aria-label="Current workspace brief">
+          <WorkspaceSectionHeader
+            title="Brief status"
+            description="A factual snapshot, not a performance score."
+            meta="Current workspace"
+          />
+          <dl className="brief-register">
+            <div>
+              <dt>High priority</dt>
+              <dd>
+                <strong>{dashboard.priorityOpportunities.length}</strong>
+                <small>Ready for candidate review</small>
+              </dd>
+            </div>
+            <div>
+              <dt>Needs investigation</dt>
+              <dd>
+                <strong>{dashboard.needsAttention.length}</strong>
+                <small>Unknowns or blockers to resolve</small>
+              </dd>
+            </div>
+            <div>
+              <dt>Changed in {dashboard.timeWindowDays} days</dt>
+              <dd>
+                <strong>{dashboard.recentChanges.length}</strong>
+                <small>New or materially updated records</small>
+              </dd>
+            </div>
+          </dl>
+          <p className="brief-principle">
+            <Icon name="evidence" size={17} /> Recommendations use recorded
+            evidence. Missing evidence is never treated as a confirmed negative.
+          </p>
+        </aside>
+      </div>
+
+      <div className="today-workspace-grid">
+        <section className="workspace-ledger" aria-labelledby="changes-heading">
+          <WorkspaceSectionHeader
+            id="changes-heading"
+            title="What changed"
+            description={`Opportunity changes observed during the last ${dashboard.timeWindowDays} days.`}
+            meta="Discovery"
+            action={
+              <Link to="/discover?sort=freshness">View scan results</Link>
+            }
+          />
+          <div className="change-register">
+            {dashboard.recentChanges.map((change) => (
+              <Link
+                className="change-register-row"
+                key={`${change.opportunityId}-${change.occurredAt}`}
+                to={`/discover/${change.opportunityId}`}
+              >
+                <time dateTime={change.occurredAt}>
+                  {new Date(change.occurredAt).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </time>
+                <span>
+                  <strong>{change.title}</strong>
+                  <small>{change.organization ?? 'Organization'}</small>
+                </span>
+                <p>{change.headline}</p>
+                <Icon name="arrow-right" size={16} />
+              </Link>
+            ))}
+            {dashboard.recentChanges.length === 0 && (
+              <p className="ledger-empty">
+                No opportunity changes were recorded in this window.
+              </p>
+            )}
+          </div>
+        </section>
+
+        <div className="today-secondary-stack">
+          <section
+            className="workspace-ledger"
+            aria-label="Career Profile signals"
+          >
+            <WorkspaceSectionHeader
+              title="Career Profile signals"
+              description="Claims that could change an opportunity decision."
+              meta="Evidence health"
+              action={<Link to="/settings">Review profile</Link>}
+            />
+            {dashboard.careerMemoryAttention.length > 0 ? (
+              <ul className="signal-register">
+                {dashboard.careerMemoryAttention.map((item) => (
+                  <li key={item.claimKind}>
+                    <Icon name="warning" size={17} />
+                    <div>
+                      <strong>{item.headline}</strong>
+                      <p>{item.explanation}</p>
+                      <small>
+                        Affects {item.affectedOpportunityCount} opportunities
+                      </small>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="ledger-empty ledger-empty-confirmed">
+                <Icon name="check" size={17} /> No unresolved Career Profile
+                evidence questions are in this brief.
+              </p>
+            )}
+          </section>
+
+          <section
+            className="workspace-ledger"
+            aria-label="Application pipeline"
+          >
+            <WorkspaceSectionHeader
+              title="Application pipeline"
+              description="Candidate-recorded activity only."
+              meta="In progress"
+              action={<Link to="/applications">Open pipeline</Link>}
+            />
+            {dashboard.applicationActivity.length > 0 ? (
+              <ul className="activity-register">
+                {dashboard.applicationActivity.map((item) => (
+                  <li key={`${item.opportunityId}-${item.status}`}>
+                    <span
+                      className="application-status-dot"
+                      data-status={item.status}
+                    />
+                    <div>
+                      <strong>{item.title}</strong>
+                      <p>{item.nextAction}</p>
+                    </div>
+                    <span>{item.status.replace('_', ' ')}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="ledger-empty">
+                No application activity is present in the current dashboard
+                response.
+              </p>
+            )}
+          </section>
+
+          <section className="workspace-ledger" aria-label="System activity">
+            <WorkspaceSectionHeader
+              title="System activity"
+              description="Recent discovery work, shown as an audit trail."
+              meta="Processing"
+              action={<Link to="/activity">View activity</Link>}
+            />
+            {dashboard.discoveryActivity.length > 0 ? (
+              <ul className="activity-register system-register">
+                {dashboard.discoveryActivity.map((run) => (
+                  <li key={run.runId}>
+                    <Icon name="source" size={17} />
+                    <div>
+                      <strong>{run.searchTargetName}</strong>
+                      <p>{run.sourceSystem}</p>
+                    </div>
+                    <DiscoveryRunStatus status={run.status} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="ledger-empty">
+                No discovery runs are included in the current dashboard
+                response.
+              </p>
+            )}
+          </section>
+        </div>
+      </div>
     </div>
   );
 }

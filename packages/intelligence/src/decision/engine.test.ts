@@ -28,6 +28,15 @@ describe('DecisionEngine V1', () => {
         fit: {
           level: 'strong',
           engineVersion: 'fit-v1',
+          findings: [
+            {
+              dimensionKey: 'skill',
+              label: 'TypeScript',
+              state: 'STRONG_MATCH',
+              modality: 'required',
+              explanation: 'Supported candidate evidence directly matches.',
+            },
+          ],
           summary: '100% direct match across all 10 requirements.',
         },
         quality: {
@@ -99,7 +108,7 @@ describe('DecisionEngine V1', () => {
           findings: [
             {
               dimension: 'work_authorization',
-              state: 'INVESTIGATE',
+              state: 'investigate',
               summary:
                 'Candidate requires visa sponsorship; listing does not state whether sponsorship is provided.',
             },
@@ -108,6 +117,15 @@ describe('DecisionEngine V1', () => {
         fit: {
           level: 'strong',
           engineVersion: 'fit-v1',
+          findings: [
+            {
+              dimensionKey: 'skill',
+              label: 'TypeScript',
+              state: 'STRONG_MATCH',
+              modality: 'required',
+              explanation: 'Supported candidate evidence directly matches.',
+            },
+          ],
         },
         quality: {
           level: 'strong',
@@ -124,6 +142,18 @@ describe('DecisionEngine V1', () => {
         'Investigate eligibility before applying',
       );
       expect(result.explanation).toContain('visa sponsorship');
+      expect(result.decisiveFindings).toEqual([
+        expect.objectContaining({
+          category: 'eligibility',
+          dimensionKey: 'work_authorization',
+          state: 'investigate',
+        }),
+        expect.objectContaining({
+          category: 'fit',
+          dimensionKey: 'skill',
+          state: 'STRONG_MATCH',
+        }),
+      ]);
     });
 
     it('returns investigate when Eligibility is unknown with Weak Fit', () => {
@@ -135,7 +165,7 @@ describe('DecisionEngine V1', () => {
           findings: [
             {
               dimension: 'location',
-              state: 'UNKNOWN',
+              state: 'unknown',
               summary: 'Location requirements could not be extracted.',
             },
           ],
@@ -154,6 +184,13 @@ describe('DecisionEngine V1', () => {
       expect(result.state).toBe('investigate');
       expect(result.action).toBe('investigate');
       expect(result.reasonCodes).toContain('ELIGIBILITY_UNRESOLVED');
+      expect(result.decisiveFindings).toEqual([
+        expect.objectContaining({
+          category: 'eligibility',
+          dimensionKey: 'location',
+          state: 'unknown',
+        }),
+      ]);
     });
   });
 

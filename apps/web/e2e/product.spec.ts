@@ -10,7 +10,7 @@ test('all seven primary navigation routes render successfully in the browser run
   page,
 }) => {
   const routes = [
-    { url: '/overview', expectedHeading: /Good afternoon|Overview/i },
+    { url: '/overview', expectedHeading: /^Today$/i },
     { url: '/discover', expectedHeading: /Discover Jobs/i },
     { url: '/matches', expectedHeading: /^Matches$/i },
     { url: '/applications', expectedHeading: /^Applications$/i },
@@ -41,7 +41,7 @@ test('legacy route aliases redirect to canonical V1 destinations and render cont
     {
       from: '/today',
       to: /\/overview$/,
-      expectedHeading: /Good afternoon|Overview/i,
+      expectedHeading: /^Today$/i,
     },
     {
       from: '/opportunities',
@@ -80,9 +80,12 @@ test('opens a priority opportunity and inspects Eligibility evidence', async ({
 }) => {
   await page.goto('/overview');
   await expect(
-    page.getByRole('heading', { name: 'Priority matches' }),
+    page.getByRole('heading', { name: 'What deserves attention' }),
   ).toBeVisible();
-  await page.getByRole('link', { name: 'View analysis' }).first().click();
+  await page
+    .getByRole('link', { name: 'Platform Engineer, Developer Experience' })
+    .first()
+    .click();
   await expect(
     page.getByRole('heading', {
       name: /Platform Engineer, Developer Experience/i,
@@ -326,9 +329,7 @@ test('anonymous browser context starts from root / and can discover, navigate to
     .getByRole('button', { name: 'Continue with development profile' })
     .click();
   await expect(page).toHaveURL(/\/overview$/);
-  await expect(
-    page.getByRole('heading', { name: /Good afternoon|Overview/i }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Today$/i })).toBeVisible();
 
   // Authenticated user navigating to public entry routes redirects to Overview
   await page.goto('/');

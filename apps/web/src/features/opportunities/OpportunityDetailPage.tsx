@@ -8,9 +8,9 @@ import {
   DecisionBadge,
   EligibilityStatus,
   EvidenceStateLabel,
-  SignalScore,
 } from '../../components/Status.js';
 import { Timeline } from '../../components/Timeline.js';
+import { WorkspaceSectionHeader } from '../../components/WorkspaceSection.js';
 import type {
   EvaluationSignal,
   FitSignal,
@@ -178,7 +178,7 @@ export function OpportunityDetailPage() {
         <Icon name="arrow-left" size={16} /> Back to Discover Jobs
       </Link>
 
-      <header className="detail-header">
+      <header className="detail-header detail-header-v2">
         <div className="detail-identity">
           <CompanyMark company={opportunity.company} size="large" />
           <div>
@@ -204,78 +204,10 @@ export function OpportunityDetailPage() {
             </div>
           </div>
         </div>
-        <div className="detail-actions">
-          {applicationLookup === 'loading' ? (
-            <span className="session-notice" role="status">
-              Checking application tracking…
-            </span>
-          ) : applicationLookup === 'error' ? (
-            <span className="session-notice" role="alert">
-              Application tracking could not be loaded. No local fallback was
-              used.
-            </span>
-          ) : appStatus ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span
-                className="application-stage"
-                data-status={appStatus}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: '16px',
-                  fontWeight: 600,
-                  fontSize: '0.85rem',
-                }}
-              >
-                Tracked: {appStatus}
-              </span>
-              <Link className="button button-secondary" to="/applications">
-                View in Applications
-              </Link>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button
-                className="button button-secondary"
-                onClick={() => void handleCreateApp('Saved')}
-                type="button"
-              >
-                Save opportunity
-              </button>
-              <button
-                className="button button-primary"
-                onClick={() => void handleCreateApp('Preparing')}
-                type="button"
-              >
-                Start application
-              </button>
-              <button
-                className="button button-secondary"
-                onClick={() => void handleCreateApp('Applied')}
-                type="button"
-              >
-                Mark as applied
-              </button>
-            </div>
-          )}
-          <button
-            className="button button-secondary"
-            aria-label="Review evidence for this opportunity"
-            onClick={() => {
-              void act('investigate', 'Marked for evidence review');
-            }}
-            type="button"
-          >
-            Review evidence
-          </button>
-          <button
-            className="button button-quiet"
-            onClick={() => {
-              void act('consider', 'Shortlisted');
-            }}
-            type="button"
-          >
-            Shortlist
-          </button>
+        <div className="detail-provenance-summary">
+          <span className="metric-label">Source record</span>
+          <strong>{opportunity.source}</strong>
+          <small>{opportunity.sourceReference}</small>
         </div>
       </header>
       {actionNotice && (
@@ -284,78 +216,269 @@ export function OpportunityDetailPage() {
         </p>
       )}
 
-      <section
-        aria-labelledby="decision-summary-heading"
-        className="decision-summary"
-      >
-        <div className="decision-summary-copy">
-          <span className="metric-label">Recommendation</span>
-          <div>
-            <DecisionBadge decision={opportunity.decision} />
-            <h2 id="decision-summary-heading">{opportunity.decisionLabel}</h2>
-          </div>
-          <p>{opportunity.explanation}</p>
-          <span className="next-action">
-            <Icon name="arrow-right" size={15} /> {opportunity.nextAction}
-          </span>
-        </div>
-        <div className="decision-metrics">
-          <div>
-            <span className="metric-label">Eligibility</span>
-            <EligibilityStatus state={opportunity.eligibility} />
-            <small>{opportunity.eligibilityLabel}</small>
-          </div>
-          <SignalScore
-            label="Fit"
-            level={opportunity.fit}
-            score={opportunity.fitScore}
-          />
-          <SignalScore
-            label="Quality"
-            level={opportunity.quality}
-            score={opportunity.qualityScore}
-          />
-          <div className="completeness-metric">
-            <span className="metric-label">Evidence completeness</span>
-            <strong>
-              {opportunity.completeness === null
-                ? 'Not evaluated'
-                : `${opportunity.completeness}%`}
-            </strong>
-            <small>
-              {opportunity.completeness === null
-                ? 'No canonical completeness result is available'
-                : opportunity.completeness < 75
-                  ? 'Material information is still missing'
-                  : 'Adequate for this recommendation'}
-            </small>
-          </div>
-        </div>
-      </section>
+      <div className="detail-workbench">
+        <section
+          className="detail-intelligence"
+          aria-labelledby="decision-summary-heading"
+        >
+          <section className="decision-brief">
+            <p className="metric-label">Decision</p>
+            <div className="decision-brief-heading">
+              <DecisionBadge decision={opportunity.decision} />
+              <h2 id="decision-summary-heading">{opportunity.decisionLabel}</h2>
+            </div>
+            <p className="decision-reason">{opportunity.explanation}</p>
+            <div className="recommended-next-step">
+              <span>Recommended next step</span>
+              <strong>
+                <Icon name="arrow-right" size={16} /> {opportunity.nextAction}
+              </strong>
+            </div>
+          </section>
 
-      {opportunity.eligibility === 'ineligible' && (
-        <div className="blocker-banner" role="note">
-          <Icon name="blocker" />
-          <div>
-            <strong>Confirmed Eligibility blocker</strong>
-            <p>
-              {opportunity.eligibilityLabel}. Strong Fit does not override this
-              requirement.
-            </p>
-          </div>
-        </div>
-      )}
-      {(opportunity.eligibility === 'investigate' ||
-        opportunity.eligibility === 'unknown') && (
-        <div className="unknown-banner" role="note">
-          <Icon name="unknown" />
-          <div>
-            <strong>This is unknown, not a negative answer</strong>
-            <p>{opportunity.nextAction}</p>
-          </div>
-        </div>
-      )}
+          <section
+            className="intelligence-ledger"
+            aria-labelledby="intelligence-heading"
+          >
+            <WorkspaceSectionHeader
+              id="intelligence-heading"
+              title="Decision path"
+              description="Four separate judgments. No blended match score."
+              meta="Eligibility → Fit → Quality → Decision"
+            />
+            <div>
+              <button
+                aria-label={`Inspect Eligibility: ${opportunity.eligibility ?? 'not evaluated'}`}
+                className="intelligence-stage"
+                onClick={() => setActiveTab('eligibility')}
+                type="button"
+              >
+                <span className="stage-index">01</span>
+                <span>
+                  <strong>Eligibility</strong>
+                  <small>Hard constraints first</small>
+                </span>
+                <EligibilityStatus state={opportunity.eligibility} />
+                <p>
+                  {opportunity.eligibilityExplanation ??
+                    opportunity.eligibilityLabel}
+                </p>
+                <Icon name="arrow-right" size={16} />
+              </button>
+              <button
+                aria-label={`Inspect Fit: ${opportunity.fit ?? 'not evaluated'}`}
+                className="intelligence-stage"
+                onClick={() => setActiveTab('fit')}
+                type="button"
+              >
+                <span className="stage-index">02</span>
+                <span>
+                  <strong>Fit</strong>
+                  <small>Candidate evidence alignment</small>
+                </span>
+                <strong className="stage-value">
+                  <span>{opportunity.fit ?? 'Not evaluated'}</span>
+                  {opportunity.fitScore !== null && (
+                    <small>{opportunity.fitScore} / 100</small>
+                  )}
+                </strong>
+                <p>
+                  {opportunity.fitSignals[0]?.summary ??
+                    opportunity.fitExplanation ??
+                    'Fit has not been evaluated.'}
+                </p>
+                <Icon name="arrow-right" size={16} />
+              </button>
+              <button
+                aria-label={`Inspect Quality: ${opportunity.quality ?? 'not evaluated'}`}
+                className="intelligence-stage"
+                onClick={() => setActiveTab('quality')}
+                type="button"
+              >
+                <span className="stage-index">03</span>
+                <span>
+                  <strong>Quality</strong>
+                  <small>Opportunity integrity</small>
+                </span>
+                <strong className="stage-value">
+                  <span>{opportunity.quality ?? 'Not evaluated'}</span>
+                  {opportunity.qualityScore !== null && (
+                    <small>{opportunity.qualityScore} / 100</small>
+                  )}
+                </strong>
+                <p>
+                  {opportunity.qualitySignals[0]?.summary ??
+                    'No Quality findings are recorded.'}
+                </p>
+                <Icon name="arrow-right" size={16} />
+              </button>
+              <button
+                aria-label={`Inspect finding evidence: ${opportunity.evidence.length} linked records`}
+                className="intelligence-stage"
+                onClick={() => setActiveTab('evidence')}
+                type="button"
+              >
+                <span className="stage-index">04</span>
+                <span>
+                  <strong>Finding evidence</strong>
+                  <small>Linked records and unknowns</small>
+                </span>
+                <strong className="stage-value">
+                  <span>{opportunity.evidence.length} linked records</span>
+                  {opportunity.completeness !== null && (
+                    <small>{opportunity.completeness}% complete</small>
+                  )}
+                </strong>
+                <p>
+                  {opportunity.completeness === null
+                    ? 'Evidence coverage has not been assessed.'
+                    : opportunity.completeness < 75
+                      ? 'Material information is still missing.'
+                      : 'Coverage is adequate for the current recommendation.'}
+                </p>
+                <Icon name="arrow-right" size={16} />
+              </button>
+            </div>
+          </section>
 
+          {opportunity.eligibility === 'ineligible' && (
+            <div className="blocker-banner" role="note">
+              <Icon name="blocker" />
+              <div>
+                <strong>Confirmed Eligibility blocker</strong>
+                <p>
+                  {opportunity.eligibilityLabel}. Strong Fit does not override
+                  this requirement.
+                </p>
+              </div>
+            </div>
+          )}
+          {(opportunity.eligibility === 'investigate' ||
+            opportunity.eligibility === 'unknown') && (
+            <div className="unknown-banner" role="note">
+              <Icon name="unknown" />
+              <div>
+                <strong>This is unknown, not a negative answer</strong>
+                <p>{opportunity.nextAction}</p>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <aside
+          className="detail-action-rail"
+          aria-label="Opportunity actions and source facts"
+        >
+          <section>
+            <p className="metric-label">Candidate control</p>
+            <h2>Next action</h2>
+            <div className="detail-actions">
+              {applicationLookup === 'loading' ? (
+                <span className="session-notice" role="status">
+                  Checking application tracking…
+                </span>
+              ) : applicationLookup === 'error' ? (
+                <span className="session-notice" role="alert">
+                  Application tracking could not be loaded. No local fallback
+                  was used.
+                </span>
+              ) : appStatus ? (
+                <div className="tracked-application">
+                  <span className="application-stage" data-status={appStatus}>
+                    Tracked: {appStatus}
+                  </span>
+                  <Link className="button button-secondary" to="/applications">
+                    View in Applications
+                  </Link>
+                </div>
+              ) : (
+                <div className="untracked-actions">
+                  <button
+                    className="button button-secondary"
+                    onClick={() => void handleCreateApp('Saved')}
+                    type="button"
+                  >
+                    Save opportunity
+                  </button>
+                  <button
+                    className="button button-primary"
+                    onClick={() => void handleCreateApp('Preparing')}
+                    type="button"
+                  >
+                    Start application
+                  </button>
+                  <button
+                    className="button button-secondary"
+                    onClick={() => void handleCreateApp('Applied')}
+                    type="button"
+                  >
+                    Mark as applied
+                  </button>
+                </div>
+              )}
+              <button
+                className="button button-secondary"
+                aria-label="Review evidence for this opportunity"
+                onClick={() => setActiveTab('evidence')}
+                type="button"
+              >
+                Review evidence
+              </button>
+              {opportunity.decision !== 'investigate' && (
+                <button
+                  className="button button-secondary"
+                  onClick={() => {
+                    void act('investigate', 'Marked for evidence review');
+                  }}
+                  type="button"
+                >
+                  Mark for evidence review
+                </button>
+              )}
+              <button
+                className="button button-quiet"
+                onClick={() => {
+                  void act('consider', 'Shortlisted');
+                }}
+                type="button"
+              >
+                Shortlist
+              </button>
+            </div>
+          </section>
+          <section className="source-register">
+            <p className="metric-label">Opportunity record</p>
+            <dl>
+              <div>
+                <dt>Compensation</dt>
+                <dd>{opportunity.compensation ?? 'Not stated'}</dd>
+              </div>
+              <div>
+                <dt>Employment</dt>
+                <dd>{opportunity.employmentType}</dd>
+              </div>
+              <div>
+                <dt>Remote policy</dt>
+                <dd>{opportunity.remotePolicy}</dd>
+              </div>
+              <div>
+                <dt>Sponsorship</dt>
+                <dd>{opportunity.sponsorship}</dd>
+              </div>
+              <div>
+                <dt>Observed</dt>
+                <dd>{opportunity.freshness}</dd>
+              </div>
+            </dl>
+          </section>
+        </aside>
+      </div>
+
+      <WorkspaceSectionHeader
+        title="Inspect the reasoning"
+        description="Move between the role record, findings, evidence, and retained history."
+        meta="Analysis record"
+      />
       <div
         className="detail-tabs"
         role="tablist"
@@ -367,8 +490,37 @@ export function OpportunityDetailPage() {
             aria-selected={activeTab === tab.value}
             id={`tab-${tab.value}`}
             key={tab.value}
+            onKeyDown={(event) => {
+              if (
+                event.key !== 'ArrowLeft' &&
+                event.key !== 'ArrowRight' &&
+                event.key !== 'Home' &&
+                event.key !== 'End'
+              ) {
+                return;
+              }
+              event.preventDefault();
+              const buttons = Array.from(
+                event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
+                  '[role="tab"]',
+                ) ?? [],
+              );
+              const current = buttons.indexOf(event.currentTarget);
+              const next =
+                event.key === 'Home'
+                  ? 0
+                  : event.key === 'End'
+                    ? buttons.length - 1
+                    : (current +
+                        (event.key === 'ArrowRight' ? 1 : -1) +
+                        buttons.length) %
+                      buttons.length;
+              buttons[next]?.focus();
+              buttons[next]?.click();
+            }}
             onClick={() => setActiveTab(tab.value)}
             role="tab"
+            tabIndex={activeTab === tab.value ? 0 : -1}
             type="button"
           >
             {tab.label}
@@ -407,11 +559,15 @@ export function OpportunityDetailPage() {
 }
 
 function Overview({ opportunity }: { readonly opportunity: Opportunity }) {
+  const watchItem = opportunity.eligibilitySignals[0]?.summary;
+  const improvement = opportunity.fitSignals.find(
+    (signal) => signal.state !== 'matched',
+  )?.summary;
   return (
-    <div className="detail-overview-grid">
+    <div className="detail-overview-grid detail-overview-v2">
       <AnalysisSection
-        description="A concise reading of the role data received from the source."
-        title="Role overview"
+        description="A concise reading of the role data captured from the source."
+        title="Opportunity brief"
       >
         {opportunity.description.map((paragraph) => (
           <p key={paragraph}>{paragraph}</p>
@@ -420,35 +576,6 @@ function Overview({ opportunity }: { readonly opportunity: Opportunity }) {
           <p>No description supplied.</p>
         )}
       </AnalysisSection>
-      <aside className="role-facts">
-        <h3>Role facts</h3>
-        <dl>
-          <div>
-            <dt>Compensation</dt>
-            <dd>{opportunity.compensation ?? 'Not stated'}</dd>
-          </div>
-          <div>
-            <dt>Employment</dt>
-            <dd>{opportunity.employmentType}</dd>
-          </div>
-          <div>
-            <dt>Seniority</dt>
-            <dd>{opportunity.seniority}</dd>
-          </div>
-          <div>
-            <dt>Remote policy</dt>
-            <dd>{opportunity.remotePolicy}</dd>
-          </div>
-          <div>
-            <dt>Sponsorship</dt>
-            <dd>{opportunity.sponsorship}</dd>
-          </div>
-          <div>
-            <dt>Relocation</dt>
-            <dd>{opportunity.relocation}</dd>
-          </div>
-        </dl>
-      </aside>
       <AnalysisSection
         description="Requirement strength matters: preferences affect Fit but do not automatically become blockers."
         title="Key requirements"
@@ -463,28 +590,37 @@ function Overview({ opportunity }: { readonly opportunity: Opportunity }) {
         </ul>
       </AnalysisSection>
       <AnalysisSection
-        description="The recommendation is assembled from structured signals, not a prose-only model response."
-        title="Why this opportunity?"
+        description="The recommendation is assembled from structured findings, not a prose-only model response."
+        title="Reasoning summary"
       >
-        <div className="why-grid">
+        <dl className="reasoning-register">
           <div>
-            <strong>Ranks well because</strong>
-            <p>{opportunity.fitSignals[0]?.summary}</p>
+            <dt>Supports the decision</dt>
+            <dd>
+              {opportunity.fitSignals[0]?.summary ??
+                'No supporting Fit finding is recorded.'}
+            </dd>
           </div>
           <div>
-            <strong>Watch closely</strong>
-            <p>{opportunity.eligibilitySignals[0]?.summary}</p>
+            <dt>Hard gate to watch</dt>
+            <dd>{watchItem ?? 'No Eligibility finding is recorded.'}</dd>
           </div>
           <div>
-            <strong>Would improve Fit</strong>
-            <p>
-              {opportunity.fitSignals.find(
-                (signal) => signal.state !== 'matched',
-              )?.summary ?? 'No decisive Fit gap is currently recorded.'}
-            </p>
+            <dt>Missing or partial evidence</dt>
+            <dd>
+              {improvement ?? 'No decisive Fit gap is currently recorded.'}
+            </dd>
           </div>
-        </div>
+        </dl>
       </AnalysisSection>
+      <aside className="provenance-note">
+        <Icon name="source" size={18} />
+        <div>
+          <strong>Provenance retained</strong>
+          <p>{opportunity.sourceReference}</p>
+          <small>Observed {opportunity.freshness.toLowerCase()}</small>
+        </div>
+      </aside>
     </div>
   );
 }
@@ -499,6 +635,9 @@ function EligibilityAnalysis({
       description="Each condition retains requirement strength, candidate context, confidence, and evidence."
       title="Can I realistically pursue this opportunity?"
     >
+      {opportunity.eligibilityExplanation && (
+        <p>{opportunity.eligibilityExplanation}</p>
+      )}
       <div className="analysis-list">
         {opportunity.eligibilitySignals.map((signal) => (
           <EligibilitySignalRow
@@ -508,7 +647,12 @@ function EligibilityAnalysis({
           />
         ))}
       </div>
-      {opportunity.eligibilitySignals.length === 0 && <p>Not evaluated.</p>}
+      {opportunity.eligibilitySignals.length === 0 && (
+        <p>
+          {opportunity.eligibilityExplanation ??
+            'Eligibility has not been evaluated.'}
+        </p>
+      )}
     </AnalysisSection>
   );
 }
@@ -576,7 +720,9 @@ function FitAnalysis({ opportunity }: { readonly opportunity: Opportunity }) {
           />
         ))}
       </div>
-      {opportunity.fitSignals.length === 0 && <p>Not evaluated.</p>}
+      {opportunity.fitSignals.length === 0 && (
+        <p>{opportunity.fitExplanation ?? 'Fit has not been evaluated.'}</p>
+      )}
     </AnalysisSection>
   );
 }
@@ -637,7 +783,11 @@ function QualityAnalysis({
           />
         ))}
       </div>
-      {opportunity.qualitySignals.length === 0 && <p>Not evaluated.</p>}
+      {opportunity.qualitySignals.length === 0 && (
+        <p>
+          {opportunity.qualityExplanation ?? 'Quality has not been evaluated.'}
+        </p>
+      )}
     </AnalysisSection>
   );
 }
@@ -687,7 +837,7 @@ function EvidenceAnalysis({
 }) {
   return (
     <AnalysisSection
-      description="Source references keep findings reviewable without exposing unsafe source markup."
+      description="These are unique source or candidate evidence records linked to evaluation findings; coverage is a separate assessment."
       title="Evidence and provenance"
     >
       <div className="evidence-grid">
@@ -712,7 +862,9 @@ function EvidenceAnalysis({
           </article>
         ))}
       </div>
-      {opportunity.evidence.length === 0 && <p>No Evidence is attached.</p>}
+      {opportunity.evidence.length === 0 && (
+        <p>No evidence records are linked to the current findings.</p>
+      )}
     </AnalysisSection>
   );
 }

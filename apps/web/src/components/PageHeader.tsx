@@ -5,14 +5,16 @@ export function PageHeader({
   title,
   description,
   actions,
+  variant = 'editorial',
 }: {
   readonly eyebrow?: string;
   readonly title: string;
   readonly description?: string;
   readonly actions?: ReactNode;
+  readonly variant?: 'editorial' | 'operational';
 }) {
   return (
-    <header className="page-header">
+    <header className="page-header" data-variant={variant}>
       <div>
         {eyebrow && <p className="eyebrow">{eyebrow}</p>}
         <h1>{title}</h1>

@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import { useProductData } from '../../app/ProductDataProvider.js';
 import { Icon } from '../../components/Icon.js';
+import { PageHeader } from '../../components/PageHeader.js';
 import { DiscoveryRunStatus } from '../../components/Status.js';
+import { WorkspaceSectionHeader } from '../../components/WorkspaceSection.js';
 import type { DiscoveryActivityItem } from '../../data/types.js';
 
 export default function AgentActivityPage() {
@@ -35,96 +38,117 @@ export default function AgentActivityPage() {
 
   if (loading) {
     return (
-      <div className="page-container">
-        <header className="page-header">
-          <div>
-            <h1>Agent Activity</h1>
-            <p className="subtitle">Loading recent job-search activity…</p>
-          </div>
-        </header>
+      <div className="page activity-page">
+        <PageHeader
+          eyebrow="Operations ledger"
+          title="Agent Activity"
+          description="Loading candidate-scoped discovery operations…"
+          variant="operational"
+        />
       </div>
     );
   }
 
   return (
-    <div className="page-container">
-      <header className="page-header">
-        <div>
-          <h1>Agent Activity</h1>
-          <p className="subtitle">
-            Recent job-search runs recorded for your search preferences.
-          </p>
-        </div>
-      </header>
+    <div className="page activity-page">
+      <PageHeader
+        eyebrow="Operations ledger"
+        title="Agent Activity"
+        description="Inspect candidate-scoped discovery runs, their sources, record counts, status, and timing."
+        variant="operational"
+      />
 
       {loadError ? (
-        <div className="empty-state card" role="alert">
+        <section className="workspace-empty-state" role="alert">
           <Icon name="warning" size={32} />
-          <h3>Search activity is unavailable</h3>
+          <h2>Search activity is unavailable</h2>
           <p>Rolevia could not load your recent search activity.</p>
-        </div>
+        </section>
       ) : activityList.length === 0 ? (
-        <div className="empty-state card">
-          <Icon name="history" size={32} />
-          <h3>No search activity recorded yet</h3>
-          <p>Completed and in-progress job searches will appear here.</p>
-        </div>
+        <section className="workspace-empty-state activity-empty-state">
+          <p className="eyebrow">No recorded operations</p>
+          <h2>No search activity recorded yet</h2>
+          <p>
+            Nothing has run for this candidate yet. Completed and in-progress
+            searches will appear as auditable records after a Search Preference
+            is run.
+          </p>
+          <dl>
+            <div>
+              <dt>Each record will show</dt>
+              <dd>
+                Timestamp, search preference, direct source system,
+                accepted/rejected record counts, and run status.
+              </dd>
+            </div>
+            <div>
+              <dt>Candidate control</dt>
+              <dd>
+                Discovery evaluates records; it does not submit applications.
+              </dd>
+            </div>
+          </dl>
+          <div className="empty-state-actions">
+            <Link
+              className="button button-primary"
+              to="/discover?tab=preferences"
+            >
+              Review Search Preferences
+            </Link>
+            <Link className="button button-secondary" to="/discover">
+              Inspect opportunity register
+            </Link>
+          </div>
+        </section>
       ) : (
-        <div className="card" style={{ overflowX: 'auto' }}>
-          <table
-            style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-              textAlign: 'left',
-            }}
-          >
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
-                <th style={{ padding: '12px' }}>Search Preference</th>
-                <th style={{ padding: '12px' }}>Source System</th>
-                <th style={{ padding: '12px' }}>Discovered</th>
-                <th style={{ padding: '12px' }}>Accepted</th>
-                <th style={{ padding: '12px' }}>Rejected</th>
-                <th style={{ padding: '12px' }}>Status</th>
-                <th style={{ padding: '12px' }}>Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>
-              {activityList.map((item: DiscoveryActivityItem) => (
-                <tr
-                  key={item.runId}
-                  style={{
-                    borderBottom: '1px solid var(--color-border-subtle, #eee)',
-                  }}
-                >
-                  <td style={{ padding: '12px', fontWeight: 500 }}>
-                    {item.searchTargetName}
-                  </td>
-                  <td style={{ padding: '12px', textTransform: 'capitalize' }}>
-                    {item.sourceSystem}
-                  </td>
-                  <td style={{ padding: '12px' }}>
-                    {item.discoveredCount} jobs
-                  </td>
-                  <td style={{ padding: '12px' }}>{item.acceptedCount}</td>
-                  <td style={{ padding: '12px' }}>{item.rejectedCount}</td>
-                  <td style={{ padding: '12px' }}>
-                    <DiscoveryRunStatus status={item.status} />
-                  </td>
-                  <td
-                    style={{
-                      padding: '12px',
-                      color: 'var(--color-text-muted)',
-                      fontSize: '0.85rem',
-                    }}
-                  >
-                    {new Date(item.startedAt).toLocaleString()}
-                  </td>
+        <section
+          aria-labelledby="activity-register-heading"
+          className="activity-register"
+        >
+          <WorkspaceSectionHeader
+            id="activity-register-heading"
+            meta="Past 7 days"
+            title="Discovery operations"
+            description="Persisted activity only. Internal task-ledger details are intentionally excluded."
+          />
+          <div className="workspace-table-scroll">
+            <table className="workspace-table">
+              <thead>
+                <tr>
+                  <th>Search preference</th>
+                  <th>Source</th>
+                  <th>Records</th>
+                  <th>Evaluation</th>
+                  <th>Status</th>
+                  <th>Timestamp</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {activityList.map((item: DiscoveryActivityItem) => (
+                  <tr key={item.runId}>
+                    <td>
+                      <strong>{item.searchTargetName}</strong>
+                    </td>
+                    <td className="capitalize">{item.sourceSystem}</td>
+                    <td>{item.discoveredCount} jobs</td>
+                    <td>
+                      {item.acceptedCount} accepted · {item.rejectedCount}{' '}
+                      rejected
+                    </td>
+                    <td>
+                      <DiscoveryRunStatus status={item.status} />
+                    </td>
+                    <td>
+                      <time dateTime={item.startedAt}>
+                        {new Date(item.startedAt).toLocaleString()}
+                      </time>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
     </div>
   );

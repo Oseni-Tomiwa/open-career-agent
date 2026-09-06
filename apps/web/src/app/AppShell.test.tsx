@@ -24,6 +24,15 @@ describe('application shell navigation', () => {
     expect(
       await screen.findByRole('heading', { name: 'Overview workspace' }),
     ).toBeInTheDocument();
+    expect(screen.getByText('Fictional development dataset')).toBeVisible();
+    expect(
+      screen.getByText(
+        'Eligibility before fit. Evidence stays inspectable. Consequential actions remain yours.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('.workspace-page-end-wordmark'),
+    ).toHaveTextContent('ROLEVIA');
     fireEvent.click(screen.getByRole('link', { name: 'Applications' }));
     expect(
       screen.getByRole('heading', { name: 'Application pipeline' }),
