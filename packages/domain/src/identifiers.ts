@@ -12,6 +12,10 @@ declare const findingIdBrand: unique symbol;
 declare const searchTargetIdBrand: unique symbol;
 declare const discoveryRunIdBrand: unique symbol;
 declare const discoveryMatchIdBrand: unique symbol;
+declare const requirementSetIdBrand: unique symbol;
+declare const requirementIdBrand: unique symbol;
+declare const requirementProvenanceIdBrand: unique symbol;
+declare const sourceObservationIdBrand: unique symbol;
 
 export type ApplicationId = string & { readonly [applicationIdBrand]: true };
 export type CandidateId = string & { readonly [candidateIdBrand]: true };
@@ -28,6 +32,16 @@ export type SearchTargetId = string & { readonly [searchTargetIdBrand]: true };
 export type DiscoveryRunId = string & { readonly [discoveryRunIdBrand]: true };
 export type DiscoveryMatchId = string & {
   readonly [discoveryMatchIdBrand]: true;
+};
+export type RequirementSetId = string & {
+  readonly [requirementSetIdBrand]: true;
+};
+export type RequirementId = string & { readonly [requirementIdBrand]: true };
+export type RequirementProvenanceId = string & {
+  readonly [requirementProvenanceIdBrand]: true;
+};
+export type SourceObservationId = string & {
+  readonly [sourceObservationIdBrand]: true;
 };
 
 function requireIdentifier(value: string, name: string): string {
@@ -94,4 +108,25 @@ export function discoveryRunId(value: string): DiscoveryRunId {
 
 export function discoveryMatchId(value: string): DiscoveryMatchId {
   return requireIdentifier(value, 'DiscoveryMatchId') as DiscoveryMatchId;
+}
+
+export function requirementSetId(value: string): RequirementSetId {
+  return requireIdentifier(value, 'RequirementSetId') as RequirementSetId;
+}
+
+export function requirementId(value: string): RequirementId {
+  return requireIdentifier(value, 'RequirementId') as RequirementId;
+}
+
+export function requirementProvenanceId(
+  value: string,
+): RequirementProvenanceId {
+  return requireIdentifier(
+    value,
+    'RequirementProvenanceId',
+  ) as RequirementProvenanceId;
+}
+
+export function sourceObservationId(value: string): SourceObservationId {
+  return requireIdentifier(value, 'SourceObservationId') as SourceObservationId;
 }

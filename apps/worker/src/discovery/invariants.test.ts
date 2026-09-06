@@ -28,6 +28,7 @@ import { createDecisionHandlers } from '../decision/workflow.js';
 import { createEligibilityHandlers } from '../eligibility/workflow.js';
 import { createFitHandlers } from '../fit/workflow.js';
 import { createQualityHandlers } from '../quality/workflow.js';
+import { createRequirementHandlers } from '../requirements/workflow.js';
 import { BackgroundWorker } from '../worker.js';
 import { createDiscoveryHandlers } from './workflow.js';
 import { isSafeHttpUrl } from '@oca/sources';
@@ -65,6 +66,7 @@ describe('Multi-Source Discovery V1 Invariants Audit', () => {
       ledger,
       handlers: {
         ...createDiscoveryHandlers({ db }),
+        ...createRequirementHandlers({ db }),
         ...createEligibilityHandlers({ db }),
         ...createFitHandlers({ db }),
         ...createQualityHandlers({ db }),

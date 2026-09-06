@@ -13,6 +13,10 @@ export type {
   SearchTargetId,
   DiscoveryRunId,
   DiscoveryMatchId,
+  RequirementSetId,
+  RequirementId,
+  RequirementProvenanceId,
+  SourceObservationId,
 } from './identifiers.js';
 export {
   applicationId,
@@ -29,9 +33,14 @@ export {
   searchTargetId,
   discoveryRunId,
   discoveryMatchId,
+  requirementSetId,
+  requirementId,
+  requirementProvenanceId,
+  sourceObservationId,
 } from './identifiers.js';
 export type { OpportunityType } from './opportunity.js';
 export { OPPORTUNITY_TYPES } from './opportunity.js';
+export * from './requirements.js';
 export {
   CAREER_MEMORY_CLAIM_STATES,
   canTransitionClaimState,

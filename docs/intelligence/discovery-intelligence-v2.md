@@ -4,6 +4,34 @@ Status: proposed for implementation
 Scope: requirement extraction and its provenance boundary  
 Out of scope: new source adapters, UI redesign, direct model decisions, and changes to current evaluation outcomes
 
+### V2.1 compatibility rollout
+
+V2.1 implements the persistence and lineage foundation with a dual-path rollout. A
+candidate-independent `requirements.extract` task runs after snapshot persistence,
+stores an immutable Requirement Set, and passes its identity to the existing
+candidate-specific evaluation workflow. Eligibility and Fit continue to run their
+V1 extractors independently in V2.1 so their outcomes do not change; consuming the
+persisted Requirement Set is deferred to V2.5.
+
+The compatibility mapper preserves V1 modalities as follows:
+
+| V1 output | Canonical strength | Evaluation use | Actionability |
+| --- | --- | --- | --- |
+| Eligibility mandatory | Required | Eligibility | Hard-constraint safe |
+| Eligibility preferred | Preferred | Context only | Review only |
+| Eligibility ambiguous | Contextual | Context only | Review only |
+| Fit required | Required | Fit | Fit-signal safe |
+| Fit preferred | Preferred | Fit | Fit-signal safe |
+| Fit optional | Contextual | Context only | Review only |
+
+This is a compatibility description, not broader extraction approval. It records
+only constraints already emitted by the V1 deterministic extractors. V2.1 makes no
+model calls and persists no Requirement Candidates because ambiguous proposals are
+not yet being generated. Provenance is limited to the linked source observation,
+snapshot, a normalized `title`, `location`, or `content` section, and the strongest
+honest excerpt available from the flattened V1 snapshot. Raw provider field paths
+and exact offsets remain absent when V1 cannot establish them reliably.
+
 ## 1. Problem statement
 
 Discovery V1 reliably retrieves, normalizes, deduplicates, persists, and evaluates public Ashby, Lever, and Greenhouse listings. Its limiting factor is not retrieval breadth. Requirement extraction is performed independently inside the Eligibility and Fit engines, is intentionally narrow, and is not persisted as a candidate-independent domain artifact.
@@ -408,4 +436,3 @@ Explicit non-goals:
 4. Approve adding `FitAssessmentStatus` so insufficient listing requirements are no longer labelled Weak. **Recommended for V2.5, not V2.1.**
 5. Choose model-assisted retention policy before V2.4: store validated structured proposals and hashes/metadata by default; raw prompts/responses should be disabled or short-lived and redacted. **Recommended: no durable raw prompt/response retention.**
 6. Decide rejected-observation retention separately. **Recommended: persist bounded diagnostic metadata later; do not retain full rejected payloads by default.**
-

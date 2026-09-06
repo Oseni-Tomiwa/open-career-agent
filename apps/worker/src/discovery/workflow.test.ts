@@ -29,6 +29,7 @@ import { createDecisionHandlers } from '../decision/workflow.js';
 import { createEligibilityHandlers } from '../eligibility/workflow.js';
 import { createFitHandlers } from '../fit/workflow.js';
 import { createQualityHandlers } from '../quality/workflow.js';
+import { createRequirementHandlers } from '../requirements/workflow.js';
 import { BackgroundWorker } from '../worker.js';
 import { createDiscoveryHandlers } from './workflow.js';
 
@@ -63,6 +64,7 @@ describe('Discovery Worker Workflow & E2E Scenarios', () => {
       ledger,
       handlers: {
         ...createDiscoveryHandlers({ db }),
+        ...createRequirementHandlers({ db }),
         ...createEligibilityHandlers({ db }),
         ...createFitHandlers({ db }),
         ...createQualityHandlers({ db }),

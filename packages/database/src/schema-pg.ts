@@ -453,6 +453,133 @@ export const sourceObservationsPg = pgTable(
   ],
 );
 
+export const requirementSetsPg = pgTable(
+  'requirement_sets',
+  {
+    id: text('id').primaryKey(),
+    snapshotId: text('snapshot_id')
+      .notNull()
+      .references(() => opportunitySnapshotsPg.id, { onDelete: 'restrict' }),
+    modelVersion: text('model_version').notNull(),
+    inputFingerprint: text('input_fingerprint').notNull(),
+    extractorPipelineVersion: text('extractor_pipeline_version').notNull(),
+    deterministicExtractorVersion: text(
+      'deterministic_extractor_version',
+    ).notNull(),
+    status: text('status').notNull(),
+    deterministicStatus: text('deterministic_status').notNull(),
+    assistedStatus: text('assisted_status').notNull(),
+    createdAt: timestamp('created_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+  },
+  (table) => [
+    index('pg_requirement_sets_snapshot_idx').on(table.snapshotId),
+    uniqueIndex('pg_requirement_sets_compatible_input_unique').on(
+      table.snapshotId,
+      table.extractorPipelineVersion,
+      table.inputFingerprint,
+    ),
+    check(
+      'pg_requirement_sets_status_check',
+      sql`${table.status} in ('COMPLETE', 'PARTIAL', 'FAILED')`,
+    ),
+    check(
+      'pg_requirement_sets_deterministic_status_check',
+      sql`${table.deterministicStatus} in ('SUCCEEDED', 'FAILED')`,
+    ),
+    check(
+      'pg_requirement_sets_assisted_status_check',
+      sql`${table.assistedStatus} in ('NOT_REQUESTED', 'SUCCEEDED', 'UNAVAILABLE', 'REJECTED', 'FAILED')`,
+    ),
+  ],
+);
+
+export const canonicalRequirementsPg = pgTable(
+  'canonical_requirements',
+  {
+    id: text('id').primaryKey(),
+    requirementSetId: text('requirement_set_id')
+      .notNull()
+      .references(() => requirementSetsPg.id, { onDelete: 'restrict' }),
+    category: text('category').notNull(),
+    normalizedKey: text('normalized_key').notNull(),
+    valueJson: text('value_json').notNull(),
+    statement: text('statement').notNull(),
+    strength: text('strength').notNull(),
+    polarity: text('polarity').notNull(),
+    assertionBasis: text('assertion_basis').notNull(),
+    evaluationUse: text('evaluation_use').notNull(),
+    actionability: text('actionability').notNull(),
+    extractionConfidence: text('extraction_confidence').notNull(),
+    extractorId: text('extractor_id').notNull(),
+    extractorVersion: text('extractor_version').notNull(),
+    canonicalHash: text('canonical_hash').notNull(),
+    createdAt: timestamp('created_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+  },
+  (table) => [
+    index('pg_canonical_requirements_set_idx').on(table.requirementSetId),
+    uniqueIndex('pg_canonical_requirements_set_hash_unique').on(
+      table.requirementSetId,
+      table.canonicalHash,
+    ),
+    check(
+      'pg_canonical_requirements_strength_check',
+      sql`${table.strength} in ('REQUIRED', 'PREFERRED', 'CONTEXTUAL')`,
+    ),
+    check(
+      'pg_canonical_requirements_hard_safety_check',
+      sql`${table.actionability} <> 'HARD_CONSTRAINT_SAFE' OR (${table.strength} = 'REQUIRED' AND ${table.evaluationUse} = 'ELIGIBILITY' AND ${table.assertionBasis} in ('EXPLICIT_STRUCTURED', 'EXPLICIT_TEXT') AND ${table.extractionConfidence} = 'HIGH')`,
+    ),
+  ],
+);
+
+export const requirementProvenancePg = pgTable(
+  'requirement_provenance',
+  {
+    id: text('id').primaryKey(),
+    requirementId: text('requirement_id')
+      .notNull()
+      .references(() => canonicalRequirementsPg.id, { onDelete: 'restrict' }),
+    sourceObservationId: text('source_observation_id')
+      .notNull()
+      .references(() => sourceObservationsPg.id, { onDelete: 'restrict' }),
+    snapshotId: text('snapshot_id')
+      .notNull()
+      .references(() => opportunitySnapshotsPg.id, { onDelete: 'restrict' }),
+    sourceFieldPath: text('source_field_path'),
+    normalizedSection: text('normalized_section'),
+    startOffset: integer('start_offset'),
+    endOffset: integer('end_offset'),
+    excerpt: text('excerpt').notNull(),
+    excerptHash: text('excerpt_hash').notNull(),
+    locatorVersion: text('locator_version').notNull(),
+    extractorId: text('extractor_id').notNull(),
+    extractorVersion: text('extractor_version').notNull(),
+  },
+  (table) => [
+    index('pg_requirement_provenance_requirement_idx').on(table.requirementId),
+    index('pg_requirement_provenance_observation_idx').on(
+      table.sourceObservationId,
+    ),
+    index('pg_requirement_provenance_snapshot_idx').on(table.snapshotId),
+    uniqueIndex('pg_requirement_provenance_locator_unique').on(
+      table.requirementId,
+      table.sourceObservationId,
+      table.excerptHash,
+      table.locatorVersion,
+    ),
+    check(
+      'pg_requirement_provenance_offsets_check',
+      sql`(${table.startOffset} is null AND ${table.endOffset} is null) OR (${table.startOffset} >= 0 AND ${table.endOffset} >= ${table.startOffset})`,
+    ),
+  ],
+);
+
 export const opportunitySnapshotSourcesPg = pgTable(
   'opportunity_snapshot_sources',
   {
@@ -528,6 +655,11 @@ export const evaluationsPg = pgTable(
     snapshotId: text('snapshot_id')
       .notNull()
       .references(() => opportunitySnapshotsPg.id, { onDelete: 'restrict' }),
+    requirementSetId: text('requirement_set_id').references(
+      () => requirementSetsPg.id,
+      { onDelete: 'restrict' },
+    ),
+    requirementInputFingerprint: text('requirement_input_fingerprint'),
     eligibilityState: text('eligibility_state').notNull(),
     eligibilityEngineVersion: text('eligibility_engine_version'),
     eligibilityInputFingerprint: text('eligibility_input_fingerprint'),
@@ -559,6 +691,7 @@ export const evaluationsPg = pgTable(
       table.candidateId,
       table.snapshotId,
     ),
+    index('pg_evaluations_requirement_set_idx').on(table.requirementSetId),
   ],
 );
 

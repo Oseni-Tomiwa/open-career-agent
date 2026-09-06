@@ -4,6 +4,7 @@ import {
   CandidateRepository,
   EvaluationRepository,
   BackgroundTaskLedger,
+  RequirementSetRepository,
 } from '@oca/database';
 import type { BackgroundTaskHandler } from '../worker.js';
 import type { BackgroundTask } from '@oca/database';
@@ -13,7 +14,12 @@ import type {
   EvaluationId,
   FindingId,
 } from '@oca/domain';
-import { EligibilityEngine } from '@oca/intelligence';
+import { requirementSetId } from '@oca/domain';
+import {
+  EligibilityEngine,
+  V1_COMPAT_DETERMINISTIC_EXTRACTOR_VERSION,
+  V1_COMPAT_PIPELINE_VERSION,
+} from '@oca/intelligence';
 import { createHash, randomUUID } from 'node:crypto';
 
 function fingerprintEligibilityInputs(input: {
@@ -25,11 +31,15 @@ function fingerprintEligibilityInputs(input: {
     scope: string | null;
   }[];
   engineVersion: string;
+  requirementInputFingerprint?: string;
 }): string {
   return createHash('sha256')
     .update(
       JSON.stringify({
         engineVersion: input.engineVersion,
+        ...(input.requirementInputFingerprint
+          ? { requirementInputFingerprint: input.requirementInputFingerprint }
+          : {}),
         snapshotFingerprint: input.snapshotFingerprint,
         claims: [...input.claims].sort((a, b) =>
           JSON.stringify(a).localeCompare(JSON.stringify(b)),
@@ -47,6 +57,7 @@ export function createEligibilityHandlers(deps: {
   const evalRepo = new EvaluationRepository(deps.db);
   const engine = new EligibilityEngine();
   const ledger = new BackgroundTaskLedger(deps.db);
+  const requirementSets = new RequirementSetRepository(deps.db);
 
   return {
     'eligibility.evaluate': async (task: BackgroundTask) => {
@@ -54,6 +65,8 @@ export function createEligibilityHandlers(deps: {
         snapshotId: string;
         candidateId?: string;
         profileReevaluationId?: string;
+        requirementSetId?: string;
+        requirementInputFingerprint?: string;
       };
       const snapId = payload.snapshotId;
 
@@ -69,6 +82,25 @@ export function createEligibilityHandlers(deps: {
       }
 
       const candId = payload.candidateId;
+      const linkedSet = payload.requirementSetId
+        ? await requirementSets.getById(
+            requirementSetId(payload.requirementSetId),
+          )
+        : await requirementSets.getLatestCompatible({
+            snapshotId: snapId as SnapshotId,
+            extractorPipelineVersion: V1_COMPAT_PIPELINE_VERSION,
+            deterministicExtractorVersion:
+              V1_COMPAT_DETERMINISTIC_EXTRACTOR_VERSION,
+          });
+      if (
+        payload.requirementSetId &&
+        (!linkedSet ||
+          linkedSet.set.snapshotId !== snapId ||
+          linkedSet.set.inputFingerprint !==
+            payload.requirementInputFingerprint)
+      ) {
+        throw new Error('Eligibility task Requirement Set lineage is invalid');
+      }
       const claims = await candidateRepo.getClaims(
         candId as unknown as CandidateId,
       );
@@ -87,6 +119,9 @@ export function createEligibilityHandlers(deps: {
       const evalId = randomUUID();
       const inputFingerprint = fingerprintEligibilityInputs({
         engineVersion: result.version,
+        ...(linkedSet
+          ? { requirementInputFingerprint: linkedSet.set.inputFingerprint }
+          : {}),
         snapshotFingerprint: snapshot.fingerprint,
         claims: claims.map((claim) => ({
           kind: claim.kind,
@@ -106,6 +141,12 @@ export function createEligibilityHandlers(deps: {
           id: evalId as unknown as EvaluationId,
           candidateId: candId as unknown as CandidateId,
           snapshotId: snapId as unknown as SnapshotId,
+          ...(linkedSet
+            ? {
+                requirementSetId: linkedSet.set.id,
+                requirementInputFingerprint: linkedSet.set.inputFingerprint,
+              }
+            : {}),
           eligibilityState: result.overallState,
           eligibilityEngineVersion: result.version,
           eligibilityInputFingerprint: inputFingerprint,

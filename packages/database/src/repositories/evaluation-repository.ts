@@ -10,6 +10,7 @@ import type {
   FindingId,
   EvidenceId,
   OpportunityId,
+  RequirementSetId,
 } from '@oca/domain';
 
 export class EvaluationRepository {
@@ -20,6 +21,8 @@ export class EvaluationRepository {
       id: EvaluationId;
       candidateId: CandidateId;
       snapshotId: SnapshotId;
+      requirementSetId?: RequirementSetId | null;
+      requirementInputFingerprint?: string | null;
       eligibilityState: 'eligible' | 'ineligible' | 'investigate' | 'unknown';
       eligibilityEngineVersion?: string | null;
       eligibilityInputFingerprint?: string | null;
@@ -44,6 +47,9 @@ export class EvaluationRepository {
       id: evaluation.id,
       candidateId: evaluation.candidateId,
       snapshotId: evaluation.snapshotId,
+      requirementSetId: evaluation.requirementSetId ?? null,
+      requirementInputFingerprint:
+        evaluation.requirementInputFingerprint ?? null,
       eligibilityState: evaluation.eligibilityState,
       eligibilityEngineVersion: evaluation.eligibilityEngineVersion ?? null,
       eligibilityInputFingerprint:

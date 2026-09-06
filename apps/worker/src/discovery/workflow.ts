@@ -253,12 +253,13 @@ export function createDiscoveryHandlers(deps: {
               retainedUnresolved: matchResult.retainedUnresolved,
             });
 
-            // Enqueue eligibility evaluation if snapshot exists
+            // Persist candidate-independent V1-compatible requirements before
+            // continuing through the unchanged V1 evaluation engines.
             if (snapId) {
               await taskLedger.enqueue({
-                taskType: 'eligibility.evaluate',
+                taskType: 'requirements.extract',
                 payload: { snapshotId: snapId, candidateId: cId },
-                idempotencyKey: `eligibility-${cId}-${snapId}`,
+                idempotencyKey: `requirements-${cId}-${snapId}-${obsId}-requirements-v2.1-v1-compat`,
               });
             }
           }

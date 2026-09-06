@@ -29,6 +29,7 @@ import { createDecisionHandlers } from '../decision/workflow.js';
 import { createFitHandlers } from '../fit/workflow.js';
 import { createEligibilityHandlers } from '../eligibility/workflow.js';
 import { createTaskHandlers } from '../ingestion/workflow.js';
+import { createRequirementHandlers } from '../requirements/workflow.js';
 
 const DAY_MS = 86_400_000;
 
@@ -497,6 +498,7 @@ describe('quality.evaluate durable workflow', () => {
     };
 
     const taskHandlers = createTaskHandlers({ db: database, config });
+    const requirementHandlers = createRequirementHandlers({ db: database });
     const eligibilityHandlers = createEligibilityHandlers({ db: database });
     const fitHandlers = createFitHandlers({ db: database });
     const qualityHandlers = createQualityHandlers({ db: database });
@@ -509,6 +511,14 @@ describe('quality.evaluate durable workflow', () => {
     );
 
     const ledger = new BackgroundTaskLedger(database);
+
+    const requirementTask = await ledger.claimNext({
+      leaseOwner: 'worker-1',
+      leaseDurationMs: 30_000,
+    });
+    expect(requirementTask?.taskType).toBe('requirements.extract');
+    await requirementHandlers['requirements.extract']!(requirementTask!);
+    await ledger.markSucceeded(requirementTask!.id, 'worker-1');
 
     const eligTask = await ledger.claimNext({
       leaseOwner: 'worker-1',

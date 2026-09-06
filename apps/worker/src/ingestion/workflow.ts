@@ -137,12 +137,12 @@ export function createTaskHandlers(deps: {
             });
             if (payload.candidateId) {
               await taskLedger.enqueue({
-                taskType: 'eligibility.evaluate',
+                taskType: 'requirements.extract',
                 payload: {
                   snapshotId: snapId,
                   candidateId: payload.candidateId,
                 },
-                idempotencyKey: `eligibility-${payload.candidateId}-${snapId}`,
+                idempotencyKey: `requirements-${payload.candidateId}-${snapId}-${obsId}-requirements-v2.1-v1-compat`,
               });
             }
           }

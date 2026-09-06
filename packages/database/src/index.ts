@@ -36,6 +36,10 @@ export {
 } from './repositories/career-memory-repository.js';
 export { OpportunityRepository } from './repositories/opportunity-repository.js';
 export { EvaluationRepository } from './repositories/evaluation-repository.js';
+export {
+  RequirementSetRepository,
+  RequirementSetConflictError,
+} from './repositories/requirement-set-repository.js';
 export { EvidenceRepository } from './repositories/evidence-repository.js';
 export { ApplicationRepository } from './repositories/application-repository.js';
 export { SourceListingRepository } from './repositories/source-listing-repository.js';
