@@ -27,6 +27,8 @@ import { NORMALIZED_LISTING_DOCUMENT_VERSION } from '@oca/sources';
 export const V2_2_PIPELINE_VERSION = 'requirements-v2.2-rich-document';
 export const V2_2_DETERMINISTIC_EXTRACTOR_VERSION =
   'requirements-deterministic-v2.2';
+export const V2_3_1_DETERMINISTIC_EXTRACTOR_VERSION =
+  'requirements-deterministic-v2.3.1';
 export const V2_2_LOCATOR_VERSION = 'listing-fragment-v2.2';
 export const MAX_REQUIREMENT_OBSERVATIONS = 16;
 export const MAX_EXTRACTION_FRAGMENTS = 512;
@@ -53,6 +55,13 @@ interface RequirementDraft {
   readonly polarity: RequirementPolarity;
   readonly evaluationUse: RequirementEvaluationUse;
   readonly actionability: RequirementActionability;
+  readonly fragment: NormalizedListingFragment;
+  readonly observationId: string;
+}
+
+interface RequirementContradictionSignal {
+  readonly category: RequirementCategory;
+  readonly normalizedKey?: string;
   readonly fragment: NormalizedListingFragment;
   readonly observationId: string;
 }
@@ -179,6 +188,41 @@ function containsTerm(text: string, term: string): boolean {
   return new RegExp(pattern, 'i').test(text);
 }
 
+function sentenceSegments(text: string): string[] {
+  return text
+    .split(/(?<=[.!?])\s+|[\n\r]+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function surfacesForTechnicalTerm(term: string): readonly string[] {
+  return TECHNICAL_TERMS.filter(([, canonical]) => canonical === term).map(
+    ([surface]) => surface,
+  );
+}
+
+function technicalTermSegments(text: string, term: string): string[] {
+  const surfaces = surfacesForTechnicalTerm(term);
+  return sentenceSegments(text).filter((segment) =>
+    surfaces.some((surface) => containsTerm(segment, surface)),
+  );
+}
+
+function technicalTermHasPositiveAssertion(
+  text: string,
+  term: string,
+): boolean {
+  return technicalTermSegments(text, term).some(
+    (segment) => !NEGATED_REQUIREMENT.test(segment),
+  );
+}
+
+function technicalTermHasNegatedAssertion(text: string, term: string): boolean {
+  return technicalTermSegments(text, term).some((segment) =>
+    NEGATED_REQUIREMENT.test(segment),
+  );
+}
+
 function strengthFor(
   fragment: NormalizedListingFragment,
 ): RequirementStrength | null {
@@ -239,17 +283,34 @@ function alternativeGroups(text: string, terms: readonly string[]): string[][] {
   return [positioned.map((item) => item.term).sort()];
 }
 
+function hasMixedAndOrExpression(
+  text: string,
+  terms: readonly string[],
+): boolean {
+  if (terms.length < 3) return false;
+  const positions = terms
+    .map((term) => text.toLowerCase().indexOf(term))
+    .filter((index) => index >= 0)
+    .sort((left, right) => left - right);
+  if (positions.length < 3) return false;
+  const span = text.slice(positions[0], positions[positions.length - 1]! + 32);
+  return /\band\b/i.test(span) && /\bor\b/i.test(span);
+}
+
 function extractTechnical(
   fragment: NormalizedListingFragment,
   observationId: string,
 ): RequirementDraft[] {
   const strength = strengthFor(fragment);
-  if (!strength || NEGATED_REQUIREMENT.test(fragment.text)) return [];
-  const terms = technicalTerms(fragment.text);
+  if (!strength) return [];
+  const terms = technicalTerms(fragment.text).filter((term) =>
+    technicalTermHasPositiveAssertion(fragment.text, term),
+  );
   if (terms.length === 0) return [];
   const use = fitUse(strength);
   const groups = alternativeGroups(fragment.text, terms);
   if (groups.length > 0) {
+    const unresolvedBoolean = hasMixedAndOrExpression(fragment.text, terms);
     return groups.map((alternatives) => ({
       category: 'TECHNICAL_SKILL',
       normalizedKey: `technical:${alternatives.join('|')}`,
@@ -259,9 +320,14 @@ function extractTechnical(
         alternatives,
       },
       statement: fragment.text,
-      strength,
+      strength: unresolvedBoolean ? 'CONTEXTUAL' : strength,
       polarity: 'REQUIRES',
-      ...use,
+      ...(unresolvedBoolean
+        ? {
+            evaluationUse: 'CONTEXT_ONLY' as const,
+            actionability: 'REVIEW_ONLY' as const,
+          }
+        : use),
       fragment,
       observationId,
     }));
@@ -291,6 +357,9 @@ function extractExperience(
   if (!match || !/\bexperience\b/i.test(fragment.text)) return [];
   const minimumYears = Number.parseInt(match[1]!, 10);
   const focus = technicalTerms(fragment.text)[0];
+  const hasEquivalent = /\bor equivalent (?:practical )?experience\b/i.test(
+    fragment.text,
+  );
   return [
     {
       category: 'EXPERIENCE',
@@ -301,9 +370,14 @@ function extractExperience(
         ...(focus ? { focus } : {}),
       },
       statement: fragment.text,
-      strength,
+      strength: hasEquivalent ? 'CONTEXTUAL' : strength,
       polarity: 'REQUIRES',
-      ...fitUse(strength),
+      ...(hasEquivalent
+        ? {
+            evaluationUse: 'CONTEXT_ONLY' as const,
+            actionability: 'REVIEW_ONLY' as const,
+          }
+        : fitUse(strength)),
       fragment,
       observationId,
     },
@@ -370,8 +444,22 @@ function extractLocation(
       observationId,
     });
   }
-  const based =
-    /\bmust (?:be )?(?:based|live|reside|located) in\s+([^.;]+)/i.exec(text);
+  const residence = /\bmust (?:be )?(?:live|reside) in\s+([^.;]+)/i.exec(text);
+  if (residence) {
+    const scope = residence[1]!.trim();
+    drafts.push({
+      category: 'RESIDENCY',
+      normalizedKey: `residency:${normalizeKey(scope)}`,
+      value: { type: 'SCOPE', value: scope },
+      statement: text,
+      strength: 'REQUIRED',
+      polarity: 'REQUIRES',
+      ...consequentialUse({ strength: 'REQUIRED', explicit: true }),
+      fragment,
+      observationId,
+    });
+  }
+  const based = /\bmust (?:be )?(?:based|located) in\s+([^.;]+)/i.exec(text);
   if (based) {
     const scope = based[1]!.trim();
     drafts.push({
@@ -486,7 +574,10 @@ function extractEducationLanguageCertification(
     /\b(?:no degree required|degree (?:is )?not required)\b/i.exec(text);
   const degree =
     noDegree ??
-    /\b(bachelor(?:'s)?|master(?:'s)?|ph\.?d\.?|(?:college|university) degree|degree in [a-z][a-z &-]{1,50})\b/i.exec(
+    /\b(bachelor(?:'s)?|master(?:'s)?|ph\.?d\.?|(?:college|university) degree)\b/i.exec(
+      text,
+    ) ??
+    /\b(degree in [a-z][a-z &-]{1,50}?)(?=\s+or equivalent|[.,;]|$)/i.exec(
       text,
     );
   if (degree) {
@@ -546,19 +637,42 @@ function extractEducationLanguageCertification(
       observationId,
     });
   }
+  const certificationTerms = [
+    ...new Set(
+      [...text.matchAll(/\b(AWS Certified[^,.;]*|PMP|CISSP|CPA)\b/gi)].map(
+        (match) => match[1]!.trim(),
+      ),
+    ),
+  ];
+  const certificationAlternative =
+    certificationTerms.length > 1 && /\bor\b/i.test(text);
   const certification =
-    /\b(AWS Certified[^,.;]*|PMP|CISSP|CPA|[A-Za-z][A-Za-z -]+ certification)\b/i.exec(
+    certificationTerms[0] ??
+    /\b([A-Z][A-Za-z0-9+.-]*(?: [A-Z][A-Za-z0-9+.-]*){0,3} certification)\b/.exec(
       text,
-    );
-  if (certification && strength) {
+    )?.[1];
+  if (certification && strength && !NEGATED_REQUIREMENT.test(text)) {
+    const alternatives = certificationTerms
+      .map((item) => item.toLowerCase())
+      .sort();
+    const value = certificationAlternative
+      ? alternatives[0]!
+      : certification.trim();
     drafts.push({
       category: 'CERTIFICATION',
-      normalizedKey: `certification:${normalizeKey(certification[1]!)}`,
-      value: { type: 'TERM', value: certification[1]!.trim() },
+      normalizedKey: `certification:${certificationAlternative ? alternatives.map(normalizeKey).join('|') : normalizeKey(value)}`,
+      value: certificationAlternative
+        ? { type: 'TERM', value, alternatives }
+        : { type: 'TERM', value },
       statement: text,
-      strength,
+      strength: certificationAlternative ? 'CONTEXTUAL' : strength,
       polarity: 'REQUIRES',
-      ...consequentialUse({ strength, explicit: true }),
+      ...(certificationAlternative
+        ? {
+            evaluationUse: 'CONTEXT_ONLY' as const,
+            actionability: 'REVIEW_ONLY' as const,
+          }
+        : consequentialUse({ strength, explicit: true })),
       fragment,
       observationId,
     });
@@ -703,8 +817,37 @@ function draftsFor(
   ];
 }
 
+function contradictionSignalsFor(
+  fragment: NormalizedListingFragment,
+  observationId: string,
+): RequirementContradictionSignal[] {
+  const signals: RequirementContradictionSignal[] = technicalTerms(
+    fragment.text,
+  )
+    .filter((term) => technicalTermHasNegatedAssertion(fragment.text, term))
+    .map((term) => ({
+      category: 'TECHNICAL_SKILL' as const,
+      normalizedKey: `technical:${term}`,
+      fragment,
+      observationId,
+    }));
+  if (
+    /\b(?:may|might|could) sponsor\b|sponsorship may be available/i.test(
+      fragment.text,
+    )
+  ) {
+    signals.push({
+      category: 'SPONSORSHIP',
+      fragment,
+      observationId,
+    });
+  }
+  return signals;
+}
+
 function neutralizeContradictions(
   drafts: readonly RequirementDraft[],
+  signals: readonly RequirementContradictionSignal[],
 ): RequirementDraft[] {
   const contradictoryCategories = new Set<RequirementCategory>();
   for (const category of ['SPONSORSHIP', 'EDUCATION'] as const) {
@@ -715,16 +858,142 @@ function neutralizeContradictions(
     );
     if (polarities.size > 1) contradictoryCategories.add(category);
   }
-  return drafts.map((draft) =>
-    contradictoryCategories.has(draft.category)
+  const isContradictory = (draft: RequirementDraft) =>
+    (contradictoryCategories.has(draft.category) &&
+      draft.strength === 'REQUIRED') ||
+    signals.some(
+      (signal) =>
+        signal.category === draft.category &&
+        (!signal.normalizedKey || signal.normalizedKey === draft.normalizedKey),
+    );
+  const neutralized: RequirementDraft[] = drafts.map((draft) =>
+    isContradictory(draft)
       ? {
           ...draft,
           strength: 'CONTEXTUAL',
           evaluationUse: 'CONTEXT_ONLY',
-          actionability: 'REVIEW_ONLY',
+          actionability: 'REVIEW_ONLY' as const,
         }
       : draft,
   );
+  const contradictionProvenance = signals.flatMap((signal) => {
+    const matching = neutralized.find(
+      (draft) =>
+        draft.category === signal.category &&
+        (!signal.normalizedKey || draft.normalizedKey === signal.normalizedKey),
+    );
+    return matching
+      ? [
+          {
+            ...matching,
+            fragment: signal.fragment,
+            observationId: signal.observationId,
+          },
+        ]
+      : [];
+  });
+  return [...neutralized, ...contradictionProvenance];
+}
+
+const HARD_CONSTRAINT_CATEGORIES = new Set<RequirementCategory>([
+  'EDUCATION',
+  'LOCATION',
+  'RESIDENCY',
+  'TIMEZONE',
+  'WORK_AUTHORIZATION',
+  'SPONSORSHIP',
+  'LANGUAGE',
+  'CERTIFICATION',
+]);
+
+function hasUnresolvedHardConstraintExpression(
+  draft: RequirementDraft,
+): boolean {
+  if (/\bor equivalent (?:practical )?experience\b/i.test(draft.statement)) {
+    return true;
+  }
+  if (/\bor\b/i.test(draft.statement)) {
+    const representedLocationAlternative =
+      draft.category === 'LOCATION' &&
+      draft.value.type === 'TERM' &&
+      draft.value.alternatives &&
+      draft.value.alternatives.length > 1 &&
+      !/\band\b/i.test(draft.statement);
+    return !representedLocationAlternative;
+  }
+  return false;
+}
+
+function categoryAllowsHardConstraint(draft: RequirementDraft): boolean {
+  switch (draft.category) {
+    case 'LOCATION':
+      return (
+        /^location:/.test(draft.normalizedKey) &&
+        ['REQUIRES', 'EXCLUDES'].includes(draft.polarity)
+      );
+    case 'RESIDENCY':
+      return (
+        /^residency:/.test(draft.normalizedKey) &&
+        /\bmust (?:be )?(?:live|reside) in\b/i.test(draft.statement)
+      );
+    case 'TIMEZONE':
+      return /\b(?:UTC|GMT)[+-]\d{1,2}/i.test(draft.statement);
+    case 'WORK_AUTHORIZATION':
+      return /authorized|eligible|work authorization/i.test(draft.statement);
+    case 'SPONSORSHIP':
+      return (
+        draft.polarity === 'UNAVAILABLE' &&
+        /cannot|can't|unable to|no sponsorship|not available/i.test(
+          draft.statement,
+        )
+      );
+    case 'LANGUAGE':
+      return /^language:/.test(draft.normalizedKey);
+    case 'EDUCATION':
+      return (
+        /^education:/.test(draft.normalizedKey) &&
+        !NEGATED_REQUIREMENT.test(draft.statement)
+      );
+    case 'CERTIFICATION':
+      return (
+        /^certification:/.test(draft.normalizedKey) &&
+        !NEGATED_REQUIREMENT.test(draft.statement)
+      );
+    default:
+      return false;
+  }
+}
+
+function enforceHardConstraintSafety(
+  drafts: readonly RequirementDraft[],
+): RequirementDraft[] {
+  return drafts.map((draft) => {
+    if (draft.actionability !== 'HARD_CONSTRAINT_SAFE') return draft;
+    const assertionBasisIsExplicit = [
+      'STRUCTURED_VALUE',
+      'LIST_ITEM',
+      'PROSE',
+    ].includes(draft.fragment.structure);
+    const confidence = draft.strength === 'CONTEXTUAL' ? 'MODERATE' : 'HIGH';
+    const safe =
+      HARD_CONSTRAINT_CATEGORIES.has(draft.category) &&
+      draft.strength === 'REQUIRED' &&
+      draft.evaluationUse === 'ELIGIBILITY' &&
+      assertionBasisIsExplicit &&
+      confidence === 'HIGH' &&
+      Boolean(draft.observationId && draft.fragment.id) &&
+      !NEGATED_REQUIREMENT.test(draft.statement) &&
+      !hasUnresolvedHardConstraintExpression(draft) &&
+      categoryAllowsHardConstraint(draft);
+    return safe
+      ? draft
+      : {
+          ...draft,
+          strength: 'CONTEXTUAL',
+          evaluationUse: 'CONTEXT_ONLY',
+          actionability: 'REVIEW_ONLY',
+        };
+  });
 }
 
 function deduplicateDrafts(
@@ -764,6 +1033,7 @@ function canonicalRequirement(input: {
   readonly snapshotId: SnapshotId;
   readonly drafts: readonly RequirementDraft[];
   readonly createdAt: Date;
+  readonly extractorVersion: string;
 }): { requirement: CanonicalRequirement; provenance: RequirementProvenance[] } {
   const selected = strongest(input.drafts);
   const semantic = {
@@ -795,7 +1065,7 @@ function canonicalRequirement(input: {
     extractionConfidence:
       selected.strength === 'CONTEXTUAL' ? 'MODERATE' : 'HIGH',
     extractorId: 'deterministic-requirement-extractor',
-    extractorVersion: V2_2_DETERMINISTIC_EXTRACTOR_VERSION,
+    extractorVersion: input.extractorVersion,
     canonicalHash,
     createdAt: input.createdAt,
   };
@@ -848,7 +1118,7 @@ export function fingerprintV2RequirementInput(input: {
     pipelineVersion: input.pipelineVersion ?? V2_2_PIPELINE_VERSION,
     deterministicExtractorVersion:
       input.deterministicExtractorVersion ??
-      V2_2_DETERMINISTIC_EXTRACTOR_VERSION,
+      V2_3_1_DETERMINISTIC_EXTRACTOR_VERSION,
     locatorVersion: V2_2_LOCATOR_VERSION,
     observations: input.observations
       .map((observation) => ({
@@ -869,12 +1139,14 @@ export function buildV2RequirementSet(
   } = {},
 ): CompleteRequirementSet {
   if (observations.length === 0) {
-    throw new TypeError('V2.2 extraction requires a normalized observation');
+    throw new TypeError(
+      'Deterministic requirement extraction requires a normalized observation',
+    );
   }
   const pipelineVersion = options.pipelineVersion ?? V2_2_PIPELINE_VERSION;
   const deterministicExtractorVersion =
     options.deterministicExtractorVersion ??
-    V2_2_DETERMINISTIC_EXTRACTOR_VERSION;
+    V2_3_1_DETERMINISTIC_EXTRACTOR_VERSION;
   const createdAt = options.createdAt ?? new Date();
   const inputFingerprint = fingerprintV2RequirementInput({
     snapshotFingerprint: snapshot.fingerprint,
@@ -911,10 +1183,15 @@ export function buildV2RequirementSet(
         left.fragment.id.localeCompare(right.fragment.id),
     )
     .slice(0, MAX_EXTRACTION_FRAGMENTS);
-  const allDrafts = neutralizeContradictions(
-    retainedFragments.flatMap(({ fragment, observationId }) =>
-      draftsFor(fragment, observationId),
-    ),
+  const extractedDrafts = retainedFragments.flatMap(
+    ({ fragment, observationId }) => draftsFor(fragment, observationId),
+  );
+  const contradictionSignals = retainedFragments.flatMap(
+    ({ fragment, observationId }) =>
+      contradictionSignalsFor(fragment, observationId),
+  );
+  const allDrafts = enforceHardConstraintSafety(
+    neutralizeContradictions(extractedDrafts, contradictionSignals),
   );
   const draftGroups = deduplicateDrafts(allDrafts);
   const truncated =
@@ -936,6 +1213,7 @@ export function buildV2RequirementSet(
         snapshotId: snapshot.id as SnapshotId,
         drafts,
         createdAt,
+        extractorVersion: deterministicExtractorVersion,
       });
     });
   return {

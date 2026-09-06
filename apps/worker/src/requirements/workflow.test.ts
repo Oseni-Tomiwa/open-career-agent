@@ -41,7 +41,7 @@ function task(snapshot: string, candidate: string): BackgroundTask {
   };
 }
 
-describe('requirements.extract V2.2 workflow', () => {
+describe('requirements.extract V2.3.1 workflow', () => {
   let directory: string;
   let database: DatabaseHandle;
   let ledger: BackgroundTaskLedger;
@@ -132,6 +132,15 @@ describe('requirements.extract V2.2 workflow', () => {
     expect(
       database
         .sqlite!.prepare(
+          'select deterministic_extractor_version deterministicExtractorVersion from requirement_sets',
+        )
+        .get(),
+    ).toEqual({
+      deterministicExtractorVersion: 'requirements-deterministic-v2.3.1',
+    });
+    expect(
+      database
+        .sqlite!.prepare(
           `select r.normalized_key normalizedKey,
                   p.source_field_path sourceFieldPath,
                   p.normalized_fragment_id normalizedFragmentId
@@ -179,7 +188,7 @@ describe('requirements.extract V2.2 workflow', () => {
     await createRequirementHandlers({
       db: database,
       pipelineVersion: 'requirements-v2.2-rich-document-next',
-      deterministicExtractorVersion: 'requirements-deterministic-v2.2-next',
+      deterministicExtractorVersion: 'requirements-deterministic-v2.3.1-next',
     })['requirements.extract']!(task(snapshot, candidate));
     await runEvaluationChain();
 

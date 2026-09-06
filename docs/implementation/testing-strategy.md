@@ -35,7 +35,7 @@ Add regression scenarios whenever a real bug changes a conclusion, loses an unkn
 
 ### Requirement extraction evaluation corpus
 
-Discovery Intelligence V2.3 adds a synthetic, candidate-independent requirement extraction corpus at `packages/intelligence/src/requirements/evaluation`. It is an evaluation benchmark, not a collection of implementation fixtures: labelled ground truth states what must extract, must not extract, or may remain unresolved, while a separate JSON baseline records the current V2.2 extractor behavior.
+Discovery Intelligence V2.3 adds a synthetic, candidate-independent requirement extraction corpus at `packages/intelligence/src/requirements/evaluation`. It is an evaluation benchmark, not a collection of implementation fixtures: labelled ground truth states what must extract, must not extract, or may remain unresolved. Separate versioned JSON baselines retain historical V2.2 behavior and the current V2.3.1 safety-hardened behavior without rewriting ground truth.
 
 Run the reviewed regression gate and human-readable diagnostics with:
 

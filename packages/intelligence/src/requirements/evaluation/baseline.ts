@@ -1,4 +1,5 @@
 import recordedV22Baseline from './baseline-v2.2-v0.1.json' with { type: 'json' };
+import recordedV231Baseline from './baseline-v2.3.1-v0.1.json' with { type: 'json' };
 import type { RequirementEvaluationReport } from './types.js';
 
 export type RequirementEvaluationBaseline = Omit<
@@ -8,6 +9,8 @@ export type RequirementEvaluationBaseline = Omit<
 
 export const V2_2_REQUIREMENT_EVALUATION_BASELINE =
   recordedV22Baseline as RequirementEvaluationBaseline;
+export const V2_3_1_REQUIREMENT_EVALUATION_BASELINE =
+  recordedV231Baseline as RequirementEvaluationBaseline;
 
 export function baselineFromReport(
   report: RequirementEvaluationReport,
@@ -25,13 +28,13 @@ export function compareRequirementEvaluationBaseline(
 ): readonly string[] {
   const actual = JSON.stringify(baselineFromReport(report), null, 2);
   const expected = JSON.stringify(
-    V2_2_REQUIREMENT_EVALUATION_BASELINE,
+    V2_3_1_REQUIREMENT_EVALUATION_BASELINE,
     null,
     2,
   );
   return actual === expected
     ? []
     : [
-        'Current extraction evaluation differs from the reviewed V2.2 baseline. Review diagnostics and ground truth before updating the baseline.',
+        'Current extraction evaluation differs from the reviewed V2.3.1 baseline. Review diagnostics and ground truth before updating the baseline.',
       ];
 }

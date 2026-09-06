@@ -20,7 +20,7 @@ if (corpusErrors.length > 0) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {
     process.stdout.write(
-      `${formatRequirementEvaluationReport(report)}\n\n${formatRequirementEvaluationDiagnostics(report)}\n\nBaseline: ${baselineErrors.length === 0 ? 'matches reviewed V2.2 baseline' : 'DRIFT'}\n`,
+      `${formatRequirementEvaluationReport(report)}\n\n${formatRequirementEvaluationDiagnostics(report)}\n\nBaseline: ${baselineErrors.length === 0 ? 'matches reviewed V2.3.1 baseline' : 'DRIFT'}\n`,
     );
   }
   if (baselineErrors.length > 0) {

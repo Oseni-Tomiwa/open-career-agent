@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   baselineFromReport,
   compareRequirementEvaluationBaseline,
-  V2_2_REQUIREMENT_EVALUATION_BASELINE,
+  V2_3_1_REQUIREMENT_EVALUATION_BASELINE,
 } from './baseline.js';
 import { REQUIREMENT_EVALUATION_CORPUS } from './corpus-v0.1.js';
 import {
@@ -72,30 +72,34 @@ describe('requirement extraction evaluation corpus', () => {
     ).toBe(true);
   });
 
-  it('records the actual reviewed V2.2 baseline separately from ground truth', () => {
+  it('records the reviewed V2.3.1 safety baseline separately from ground truth', () => {
     const report = evaluateRequirementCorpus(REQUIREMENT_EVALUATION_CORPUS);
 
     expect(baselineFromReport(report)).toEqual(
-      V2_2_REQUIREMENT_EVALUATION_BASELINE,
+      V2_3_1_REQUIREMENT_EVALUATION_BASELINE,
     );
     expect(compareRequirementEvaluationBaseline(report)).toEqual([]);
-    expect(report.safety.unsafeHardConstraints).toBe(3);
-    expect(report.safety.falseConsequentialExtractions).toBe(4);
-    expect(report.failingCaseIds).toContain('residency-requirement');
+    expect(report.safety.unsafeHardConstraints).toBe(0);
+    expect(report.safety.falseConsequentialExtractions).toBe(0);
+    expect(report.failingCaseIds).toEqual([
+      'explicit-onsite-hybrid-requirements',
+      'greenhouse-metadata-field',
+      'seniority-mid',
+    ]);
   });
 
   it('reports per-category TP, FP, and FN without an aggregate score', () => {
     const report = evaluateRequirementCorpus(REQUIREMENT_EVALUATION_CORPUS);
 
     expect(report.categoryMetrics.TECHNICAL_SKILL).toMatchObject({
-      truePositive: 25,
-      falsePositive: 2,
-      falseNegative: 1,
+      truePositive: 26,
+      falsePositive: 0,
+      falseNegative: 0,
     });
     expect(report.categoryMetrics.RESIDENCY).toMatchObject({
-      truePositive: 0,
+      truePositive: 1,
       falsePositive: 0,
-      falseNegative: 1,
+      falseNegative: 0,
     });
     expect(report).not.toHaveProperty('accuracy');
     expect(report).not.toHaveProperty('score');
@@ -106,7 +110,7 @@ describe('requirement extraction evaluation corpus', () => {
 
     expect(report.provenanceFailures).toBe(0);
     expect(report.duplicateOutputViolations).toBe(0);
-    expect(report.alternativeHandlingFailures).toBe(2);
+    expect(report.alternativeHandlingFailures).toBe(0);
     expect(report.unresolvedBehavior.unknownPreservationFailures).toBe(0);
     expect(report.crossProviderEquivalenceFailures).toBe(0);
   });
@@ -120,9 +124,9 @@ describe('requirement extraction evaluation corpus', () => {
 
     expect(second).toEqual(first);
     expect(machineReport).toEqual(first);
-    expect(summary).toContain('TECHNICAL_SKILL: TP 25 · FP 2 · FN 1');
-    expect(summary).toContain('Unsafe hard constraints: 3');
-    expect(diagnostics).toContain('CASE alternative-certification');
+    expect(summary).toContain('TECHNICAL_SKILL: TP 26 · FP 0 · FN 0');
+    expect(summary).toContain('Unsafe hard constraints: 0');
+    expect(diagnostics).toContain('CASE seniority-mid');
     expect(diagnostics).toContain('EXPECTED:');
     expect(diagnostics).toContain('ACTUAL:');
     expect(diagnostics).toContain('SAFETY VIOLATION:');

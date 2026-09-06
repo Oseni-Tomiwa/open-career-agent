@@ -8,8 +8,8 @@ import {
 import { snapshotId } from '@oca/domain';
 import {
   buildV2RequirementSet,
-  V2_2_DETERMINISTIC_EXTRACTOR_VERSION,
   V2_2_PIPELINE_VERSION,
+  V2_3_1_DETERMINISTIC_EXTRACTOR_VERSION,
 } from '@oca/intelligence';
 import { getSourceNormalizer, type SourceOpportunity } from '@oca/sources';
 
@@ -25,7 +25,8 @@ export function createRequirementHandlers(deps: {
   const ledger = new BackgroundTaskLedger(deps.db);
   const pipelineVersion = deps.pipelineVersion ?? V2_2_PIPELINE_VERSION;
   const deterministicExtractorVersion =
-    deps.deterministicExtractorVersion ?? V2_2_DETERMINISTIC_EXTRACTOR_VERSION;
+    deps.deterministicExtractorVersion ??
+    V2_3_1_DETERMINISTIC_EXTRACTOR_VERSION;
 
   return {
     'requirements.extract': async (task: BackgroundTask) => {

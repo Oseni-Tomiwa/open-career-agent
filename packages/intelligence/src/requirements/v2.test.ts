@@ -49,7 +49,7 @@ function leverDocument(overrides: Record<string, unknown> = {}) {
   );
 }
 
-describe('V2.2 deterministic requirement extraction', () => {
+describe('V2.3.1 deterministic requirement extraction', () => {
   it('fixes the Metabase-like Lever structured-list failure with exact provenance', () => {
     const artifact = extract(
       leverDocument({
@@ -98,6 +98,21 @@ describe('V2.2 deterministic requirement extraction', () => {
         }),
       ]),
     );
+    expect(artifact.set.deterministicExtractorVersion).toBe(
+      'requirements-deterministic-v2.3.1',
+    );
+    expect(
+      artifact.requirements.every(
+        (item) =>
+          item.requirement.extractorVersion ===
+            artifact.set.deterministicExtractorVersion &&
+          item.provenance.every(
+            (provenance) =>
+              provenance.extractorVersion ===
+              artifact.set.deterministicExtractorVersion,
+          ),
+      ),
+    ).toBe(true);
     expect(
       artifact.requirements.some(
         (item) => item.requirement.normalizedKey === 'technical:kubernetes',
@@ -271,7 +286,234 @@ describe('V2.2 deterministic requirement extraction', () => {
         (item) => item.requirement.category === 'EDUCATION',
       )?.requirement,
     ).toMatchObject({
+      normalizedKey: 'education:bachelor',
       strength: 'CONTEXTUAL',
+      actionability: 'REVIEW_ONLY',
+    });
+  });
+
+  it('keeps years-or-equivalent experience review-only', () => {
+    const artifact = extract(
+      leverDocument({
+        lists: [
+          {
+            text: 'Requirements',
+            content:
+              '<ul><li>3 years experience or equivalent practical experience.</li></ul>',
+          },
+        ],
+      }),
+    );
+
+    expect(
+      artifact.requirements.find(
+        (item) => item.requirement.category === 'EXPERIENCE',
+      )?.requirement,
+    ).toMatchObject({
+      strength: 'CONTEXTUAL',
+      evaluationUse: 'CONTEXT_ONLY',
+      actionability: 'REVIEW_ONLY',
+    });
+  });
+
+  it('distinguishes residency from a hard location restriction', () => {
+    const artifact = extract(
+      leverDocument({
+        lists: [
+          {
+            text: 'Requirements',
+            content: '<ul><li>Candidates must reside in Germany.</li></ul>',
+          },
+        ],
+      }),
+    );
+
+    expect(
+      artifact.requirements.find(
+        (item) => item.requirement.category === 'RESIDENCY',
+      )?.requirement,
+    ).toMatchObject({
+      normalizedKey: 'residency:germany',
+      actionability: 'HARD_CONSTRAINT_SAFE',
+    });
+    expect(
+      artifact.requirements.some(
+        (item) => item.requirement.category === 'LOCATION',
+      ),
+    ).toBe(false);
+  });
+
+  it('keeps certification alternatives review-only instead of requiring one branch', () => {
+    const artifact = extract(
+      leverDocument({
+        lists: [
+          {
+            text: 'Requirements',
+            content: '<ul><li>PMP or CISSP certification required.</li></ul>',
+          },
+        ],
+      }),
+    );
+    const certification = artifact.requirements.find(
+      (item) => item.requirement.category === 'CERTIFICATION',
+    )?.requirement;
+
+    expect(certification).toMatchObject({
+      strength: 'CONTEXTUAL',
+      actionability: 'REVIEW_ONLY',
+      value: { alternatives: ['cissp', 'pmp'] },
+    });
+    expect(
+      artifact.requirements.some(
+        (item) =>
+          item.requirement.category === 'CERTIFICATION' &&
+          item.requirement.actionability === 'HARD_CONSTRAINT_SAFE',
+      ),
+    ).toBe(false);
+  });
+
+  it('does not extract a positive certification from negated language', () => {
+    const artifact = extract(
+      leverDocument({
+        lists: [
+          {
+            text: 'Requirements',
+            content: `<ul><li>We don't require CISSP certification.</li></ul>`,
+          },
+        ],
+      }),
+    );
+
+    expect(
+      artifact.requirements.some(
+        (item) => item.requirement.category === 'CERTIFICATION',
+      ),
+    ).toBe(false);
+  });
+
+  it('keeps mixed AND/OR technology wording review-only', () => {
+    const artifact = extract(
+      leverDocument({
+        lists: [
+          {
+            text: 'Requirements',
+            content: '<ul><li>React and Vue or Angular.</li></ul>',
+          },
+        ],
+      }),
+    );
+
+    expect(
+      artifact.requirements.find(
+        (item) => item.requirement.category === 'TECHNICAL_SKILL',
+      )?.requirement,
+    ).toMatchObject({
+      normalizedKey: 'technical:angular|react|vue',
+      strength: 'CONTEXTUAL',
+      actionability: 'REVIEW_ONLY',
+    });
+  });
+
+  it('neutralizes a required/not-required skill contradiction and retains both sources', () => {
+    const artifact = extract(
+      leverDocument({
+        lists: [
+          {
+            text: 'Requirements',
+            content:
+              '<ul><li>TypeScript is required.</li><li>TypeScript is not required.</li></ul>',
+          },
+        ],
+      }),
+    );
+    const typescript = artifact.requirements.find(
+      (item) => item.requirement.normalizedKey === 'technical:typescript',
+    );
+
+    expect(typescript?.requirement).toMatchObject({
+      strength: 'CONTEXTUAL',
+      actionability: 'REVIEW_ONLY',
+    });
+    expect(typescript?.provenance).toHaveLength(2);
+  });
+
+  it('does not neutralize unrelated preferred education during a degree contradiction', () => {
+    const artifact = extract(
+      leverDocument({
+        lists: [
+          {
+            text: 'Requirements',
+            content:
+              '<ul><li>Bachelor degree required.</li><li>No degree required.</li></ul>',
+          },
+          {
+            text: 'Preferred qualifications',
+            content: '<ul><li>Master degree preferred.</li></ul>',
+          },
+        ],
+      }),
+    );
+    const education = artifact.requirements.filter(
+      (item) => item.requirement.category === 'EDUCATION',
+    );
+
+    expect(
+      education.find(
+        (item) => item.requirement.normalizedKey === 'education:bachelor',
+      )?.requirement,
+    ).toMatchObject({ strength: 'CONTEXTUAL', actionability: 'REVIEW_ONLY' });
+    expect(
+      education.find(
+        (item) => item.requirement.normalizedKey === 'education:master',
+      )?.requirement,
+    ).toMatchObject({ strength: 'PREFERRED' });
+  });
+
+  it('scopes negation by sentence without suppressing a positive skill', () => {
+    const artifact = extract(
+      leverDocument({
+        lists: [
+          {
+            text: 'Requirements',
+            content:
+              '<ul><li>No Kubernetes experience is required. Strong TypeScript experience is required.</li></ul>',
+          },
+        ],
+      }),
+    );
+
+    expect(
+      artifact.requirements.find(
+        (item) => item.requirement.normalizedKey === 'technical:typescript',
+      )?.requirement,
+    ).toMatchObject({ strength: 'REQUIRED', actionability: 'FIT_SIGNAL_SAFE' });
+    expect(
+      artifact.requirements.some(
+        (item) => item.requirement.normalizedKey === 'technical:kubernetes',
+      ),
+    ).toBe(false);
+  });
+
+  it('uses the final safety boundary for unresolved location exclusions', () => {
+    const artifact = extract(
+      leverDocument({
+        lists: [
+          {
+            text: 'Requirements',
+            content:
+              '<ul><li>Remote anywhere except Germany or the Netherlands.</li></ul>',
+          },
+        ],
+      }),
+    );
+
+    expect(
+      artifact.requirements.find(
+        (item) => item.requirement.category === 'LOCATION',
+      )?.requirement,
+    ).toMatchObject({
+      strength: 'CONTEXTUAL',
+      evaluationUse: 'CONTEXT_ONLY',
       actionability: 'REVIEW_ONLY',
     });
   });
@@ -299,6 +541,30 @@ describe('V2.2 deterministic requirement extraction', () => {
           item.requirement.actionability === 'REVIEW_ONLY',
       ),
     ).toBe(true);
+  });
+
+  it('treats tentative sponsorship availability as a material contradiction', () => {
+    const artifact = extract(
+      leverDocument({
+        lists: [
+          {
+            text: 'Requirements',
+            content:
+              '<ul><li>We cannot sponsor visas.</li><li>We may sponsor in exceptional cases.</li></ul>',
+          },
+        ],
+      }),
+    );
+    const sponsorship = artifact.requirements.find(
+      (item) => item.requirement.category === 'SPONSORSHIP',
+    );
+
+    expect(sponsorship?.requirement).toMatchObject({
+      strength: 'CONTEXTUAL',
+      evaluationUse: 'CONTEXT_ONLY',
+      actionability: 'REVIEW_ONLY',
+    });
+    expect(sponsorship?.provenance).toHaveLength(2);
   });
 
   it('persists employment and compensation as context, not Fit or Eligibility', () => {
@@ -408,7 +674,7 @@ describe('V2.2 deterministic requirement extraction', () => {
   });
 });
 
-describe('V2.2 cross-provider consistency and deduplication', () => {
+describe('V2.3.1 cross-provider consistency and deduplication', () => {
   it('converges equivalent Ashby, Lever, and Greenhouse requirements', () => {
     const documents = [
       documentFor(

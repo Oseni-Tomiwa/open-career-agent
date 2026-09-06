@@ -19,7 +19,7 @@ import {
 
 import {
   buildV2RequirementSet,
-  V2_2_DETERMINISTIC_EXTRACTOR_VERSION,
+  V2_3_1_DETERMINISTIC_EXTRACTOR_VERSION,
 } from '../v2.js';
 import type {
   CorpusExpectation,
@@ -615,7 +615,7 @@ export function evaluateRequirementCorpus(
   return {
     reportVersion: 'requirement-evaluation-report-v1',
     corpusVersion: REQUIREMENT_EVALUATION_CORPUS_VERSION,
-    extractorVersion: V2_2_DETERMINISTIC_EXTRACTOR_VERSION,
+    extractorVersion: V2_3_1_DETERMINISTIC_EXTRACTOR_VERSION,
     documentVersion: NORMALIZED_LISTING_DOCUMENT_VERSION,
     totalCases: cases.length,
     categoryCounts: visibleCategoryCounts,

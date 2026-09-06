@@ -49,8 +49,8 @@ Provider mapping remains confined to `packages/sources`:
 | Lever | opening/body/additional variants, labelled structured lists, team/department, location/all-location/country fields, workplace type, commitment, and salary range; legacy description is retained only as a fallback when richer body fields are absent |
 | Greenhouse | structured title/location/department/office/metadata plus headings, prose, and list items from the public content body |
 
-The `requirements-v2.2-rich-document` pipeline uses
-`requirements-deterministic-v2.2`. It extracts only from these provider-neutral
+The `requirements-v2.2-rich-document` pipeline now uses
+`requirements-deterministic-v2.3.1`. It extracts only from these provider-neutral
 fragments, merges semantically identical requirements while preserving independent
 provenance, treats structural preferred/required headings as modality evidence,
 keeps alternatives disjunctive, and rejects positive extraction from common
@@ -424,7 +424,15 @@ Safety is independent of general extraction metrics. `UNSAFE_HARD_CONSTRAINT` va
 
 To add a case, use only synthetic listing content, label the canonical semantic expectation and provenance path, explain the label, add the relevant coverage tags, and mark every consequential case with `safety`. Corpus meta-tests validate IDs, semantics, normalized provider shape, contradiction labelling, duplicate expectations, requested coverage, three-provider equivalence groups, and private-marker exclusion.
 
-`baseline-v2.2-v0.1.json` is the reviewed current-output baseline, not ground truth and not a production target. After an intentional extractor change, review case diagnostics against ground truth first. Change a label only if the label itself is wrong; then update the baseline separately after semantic review. A blanket snapshot update is never sufficient approval.
+Versioned baseline JSON files record reviewed extractor output, not ground truth or production targets. The V2.2 baseline remains historical; V2.3.1 is current. After an intentional extractor change, review case diagnostics against ground truth first. Change a label only if the label itself is wrong; then add or update the corresponding versioned baseline after semantic review. A blanket snapshot update is never sufficient approval.
+
+### V2.3.1 — deterministic extraction safety hardening
+
+V2.3.1 keeps `requirements-corpus-v0.1` unchanged and records a separate `requirements-deterministic-v2.3.1` baseline. The previous V2.2 baseline remains historical evidence rather than being overwritten.
+
+The deterministic extractor now distinguishes explicit residence from generic work location; treats unrepresentable equivalence, certification alternatives, and mixed boolean technology expressions as review-only; scopes technical negation by sentence; and neutralizes contradictions at the affected semantic requirement instead of every requirement in a category. Negated contradiction evidence remains linked as provenance when a positive and negative assertion conflict.
+
+Before any draft retains `HARD_CONSTRAINT_SAFE`, a final defense-in-depth boundary verifies that the category permits hard actionability, strength and evaluation use are consistent, source assertion/provenance inputs exist, confidence is high, polarity passes category rules, and no negation or unresolved alternative/equivalence remains. Rejected hard actionability is downgraded to contextual review rather than silently becoming a blocker.
 
 ### V2.4 — optional provider-neutral assisted proposal boundary
 

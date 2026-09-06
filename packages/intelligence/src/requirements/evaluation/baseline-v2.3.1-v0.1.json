@@ -1,0 +1,152 @@
+{
+  "reportVersion": "requirement-evaluation-report-v1",
+  "corpusVersion": "requirements-corpus-v0.1",
+  "extractorVersion": "requirements-deterministic-v2.3.1",
+  "documentVersion": "listing-document-v2.2",
+  "totalCases": 50,
+  "categoryCounts": {
+    "TECHNICAL_SKILL": { "expected": 26, "actual": 28 },
+    "EXPERIENCE": { "expected": 7, "actual": 8 },
+    "SENIORITY": { "expected": 4, "actual": 3 },
+    "EDUCATION": { "expected": 3, "actual": 4 },
+    "LOCATION": { "expected": 5, "actual": 5 },
+    "RESIDENCY": { "expected": 1, "actual": 1 },
+    "TIMEZONE": { "expected": 1, "actual": 1 },
+    "WORK_MODEL": { "expected": 5, "actual": 5 },
+    "WORK_AUTHORIZATION": { "expected": 1, "actual": 1 },
+    "SPONSORSHIP": { "expected": 6, "actual": 6 },
+    "LANGUAGE": { "expected": 5, "actual": 5 },
+    "EMPLOYMENT_TYPE": { "expected": 6, "actual": 5 },
+    "COMPENSATION": { "expected": 2, "actual": 2 },
+    "DOMAIN_EXPERIENCE": { "expected": 2, "actual": 2 },
+    "CERTIFICATION": { "expected": 2, "actual": 3 }
+  },
+  "categoryMetrics": {
+    "TECHNICAL_SKILL": {
+      "truePositive": 26,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "EXPERIENCE": {
+      "truePositive": 7,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "SENIORITY": {
+      "truePositive": 3,
+      "falsePositive": 0,
+      "falseNegative": 1,
+      "precision": 1,
+      "recall": 0.75
+    },
+    "EDUCATION": {
+      "truePositive": 3,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "LOCATION": {
+      "truePositive": 5,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "RESIDENCY": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "TIMEZONE": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "WORK_MODEL": {
+      "truePositive": 3,
+      "falsePositive": 0,
+      "falseNegative": 2,
+      "precision": 1,
+      "recall": 0.6
+    },
+    "WORK_AUTHORIZATION": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "SPONSORSHIP": {
+      "truePositive": 6,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "LANGUAGE": {
+      "truePositive": 5,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "EMPLOYMENT_TYPE": {
+      "truePositive": 5,
+      "falsePositive": 0,
+      "falseNegative": 1,
+      "precision": 1,
+      "recall": 0.8333333333333334
+    },
+    "COMPENSATION": {
+      "truePositive": 2,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "DOMAIN_EXPERIENCE": {
+      "truePositive": 2,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "CERTIFICATION": {
+      "truePositive": 2,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    }
+  },
+  "mismatches": {
+    "strength": 0,
+    "polarity": 0,
+    "evaluationUse": 0,
+    "actionability": 0,
+    "structuredValue": 0
+  },
+  "provenanceFailures": 0,
+  "duplicateOutputViolations": 0,
+  "alternativeHandlingFailures": 0,
+  "safety": { "unsafeHardConstraints": 0, "falseConsequentialExtractions": 0 },
+  "unresolvedBehavior": {
+    "expectedUnresolvedViolations": 0,
+    "unknownPreservationFailures": 0
+  },
+  "crossProviderEquivalenceFailures": 0,
+  "failingCaseIds": [
+    "explicit-onsite-hybrid-requirements",
+    "greenhouse-metadata-field",
+    "seniority-mid"
+  ]
+}
