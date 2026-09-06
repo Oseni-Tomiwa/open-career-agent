@@ -1,0 +1,160 @@
+{
+  "reportVersion": "requirement-evaluation-report-v1",
+  "corpusVersion": "requirements-corpus-v0.1",
+  "extractorVersion": "requirements-deterministic-v2.2",
+  "documentVersion": "listing-document-v2.2",
+  "totalCases": 50,
+  "categoryCounts": {
+    "TECHNICAL_SKILL": { "expected": 26, "actual": 27 },
+    "EXPERIENCE": { "expected": 7, "actual": 8 },
+    "SENIORITY": { "expected": 4, "actual": 3 },
+    "EDUCATION": { "expected": 3, "actual": 4 },
+    "LOCATION": { "expected": 5, "actual": 6 },
+    "RESIDENCY": { "expected": 1, "actual": 0 },
+    "TIMEZONE": { "expected": 1, "actual": 1 },
+    "WORK_MODEL": { "expected": 5, "actual": 5 },
+    "WORK_AUTHORIZATION": { "expected": 1, "actual": 1 },
+    "SPONSORSHIP": { "expected": 6, "actual": 6 },
+    "LANGUAGE": { "expected": 5, "actual": 5 },
+    "EMPLOYMENT_TYPE": { "expected": 6, "actual": 5 },
+    "COMPENSATION": { "expected": 2, "actual": 2 },
+    "DOMAIN_EXPERIENCE": { "expected": 2, "actual": 2 },
+    "CERTIFICATION": { "expected": 2, "actual": 4 }
+  },
+  "categoryMetrics": {
+    "TECHNICAL_SKILL": {
+      "truePositive": 25,
+      "falsePositive": 2,
+      "falseNegative": 1,
+      "precision": 0.9259259259259259,
+      "recall": 0.9615384615384616
+    },
+    "EXPERIENCE": {
+      "truePositive": 7,
+      "falsePositive": 1,
+      "falseNegative": 0,
+      "precision": 0.875,
+      "recall": 1
+    },
+    "SENIORITY": {
+      "truePositive": 3,
+      "falsePositive": 0,
+      "falseNegative": 1,
+      "precision": 1,
+      "recall": 0.75
+    },
+    "EDUCATION": {
+      "truePositive": 2,
+      "falsePositive": 1,
+      "falseNegative": 1,
+      "precision": 0.6666666666666666,
+      "recall": 0.6666666666666666
+    },
+    "LOCATION": {
+      "truePositive": 5,
+      "falsePositive": 1,
+      "falseNegative": 0,
+      "precision": 0.8333333333333334,
+      "recall": 1
+    },
+    "RESIDENCY": {
+      "truePositive": 0,
+      "falsePositive": 0,
+      "falseNegative": 1,
+      "precision": null,
+      "recall": 0
+    },
+    "TIMEZONE": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "WORK_MODEL": {
+      "truePositive": 3,
+      "falsePositive": 0,
+      "falseNegative": 2,
+      "precision": 1,
+      "recall": 0.6
+    },
+    "WORK_AUTHORIZATION": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "SPONSORSHIP": {
+      "truePositive": 6,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "LANGUAGE": {
+      "truePositive": 5,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "EMPLOYMENT_TYPE": {
+      "truePositive": 5,
+      "falsePositive": 0,
+      "falseNegative": 1,
+      "precision": 1,
+      "recall": 0.8333333333333334
+    },
+    "COMPENSATION": {
+      "truePositive": 2,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "DOMAIN_EXPERIENCE": {
+      "truePositive": 2,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "CERTIFICATION": {
+      "truePositive": 2,
+      "falsePositive": 2,
+      "falseNegative": 0,
+      "precision": 0.5,
+      "recall": 1
+    }
+  },
+  "mismatches": {
+    "strength": 1,
+    "polarity": 0,
+    "evaluationUse": 0,
+    "actionability": 0,
+    "structuredValue": 0
+  },
+  "provenanceFailures": 0,
+  "duplicateOutputViolations": 0,
+  "alternativeHandlingFailures": 2,
+  "safety": { "unsafeHardConstraints": 3, "falseConsequentialExtractions": 4 },
+  "unresolvedBehavior": {
+    "expectedUnresolvedViolations": 4,
+    "unknownPreservationFailures": 0
+  },
+  "crossProviderEquivalenceFailures": 0,
+  "failingCaseIds": [
+    "alternative-certification",
+    "degree-equivalent-field",
+    "education-coverage",
+    "experience-equivalent",
+    "explicit-onsite-hybrid-requirements",
+    "greenhouse-metadata-field",
+    "negation-coverage",
+    "residency-requirement",
+    "seniority-mid",
+    "technical-alternatives",
+    "technical-requirement-contradiction"
+  ]
+}

@@ -14,6 +14,7 @@
     "build": "tsc -b",
     "clean": "rm -rf dist",
     "lint": "eslint src/",
+    "requirements:evaluate": "node --import tsx src/requirements/evaluation/cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

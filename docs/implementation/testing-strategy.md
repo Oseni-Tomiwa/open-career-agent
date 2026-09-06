@@ -33,6 +33,35 @@ Translate each scenario into versioned fixtures with Candidate facts/Evidence, O
 
 Add regression scenarios whenever a real bug changes a conclusion, loses an unknown, merges distinct opportunities, or breaks provenance. Keep model-assisted tests at the validated proposal boundary; core behavior must be testable without a provider or network call.
 
+### Requirement extraction evaluation corpus
+
+Discovery Intelligence V2.3 adds a synthetic, candidate-independent requirement extraction corpus at `packages/intelligence/src/requirements/evaluation`. It is an evaluation benchmark, not a collection of implementation fixtures: labelled ground truth states what must extract, must not extract, or may remain unresolved, while a separate JSON baseline records the current V2.2 extractor behavior.
+
+Run the reviewed regression gate and human-readable diagnostics with:
+
+```sh
+pnpm requirements:evaluate
+```
+
+Generate the complete machine-readable report without creating a repository artifact with:
+
+```sh
+pnpm requirements:evaluate -- --json
+```
+
+Standard `pnpm test` also runs the lightweight corpus quality and baseline gate. The report exposes category TP/FP/FN, semantic mismatches, provenance failures, duplicate outputs, unsafe hard constraints, false consequential extractions, unknown-preservation failures, cross-provider equivalence failures, and case-level expected/actual diagnostics. It intentionally has no aggregate accuracy score.
+
+To add a case, extend the versioned corpus with synthetic listing text, provider or normalized input, explicit ground truth, rationale, coverage tags, and the safety tag for every consequential case. Corpus meta-tests enforce unique IDs, semantic shape, fixture normalization, coverage, equivalence groups, contradiction labelling, and private-marker exclusion.
+
+When an extractor changes intentionally:
+
+1. review every changed case diagnostic against the unchanged ground truth;
+2. correct ground truth only when the label itself was demonstrably wrong, never merely because output changed;
+3. update the separate baseline JSON only after that semantic review; and
+4. run the full validation suite.
+
+Blind snapshot updates are not approval. The committed baseline is a regression reference and may record known misses or safety failures; it is not a production-readiness target.
+
 ## Source Adapter and normalization tests
 
 - Maintain small, licensed-or-fictional fixtures representing each supported source and notable schema variants.

@@ -401,10 +401,30 @@ Likely modules: `packages/sources/src/core`, all three provider normalizers/test
 
 ### V2.3 — corpus and evaluation harness
 
-- Add synthetic provider fixtures, labelled canonical requirement expectations, evaluator scenarios, and machine-readable diagnostic reports.
-- Establish per-category precision/error accounting and provenance checks before assisted extraction.
+- **Implemented as `requirements-corpus-v0.1`.** The versioned synthetic corpus contains provider-specific and provider-neutral inputs with independently labelled `MUST_EXTRACT`, `MUST_NOT_EXTRACT`, and `MAY_REMAIN_UNRESOLVED` ground truth.
+- The deterministic harness reports per-category TP/FP/FN, semantic mismatch dimensions, provenance and duplication failures, consequential safety failures, unknown-preservation failures, and Ashby/Lever/Greenhouse semantic equivalence.
+- A separate reviewed `requirements-deterministic-v2.2` baseline records known misses and unsafe outputs without changing ground truth or production extraction.
+- `pnpm requirements:evaluate` emits maintainable case diagnostics; `pnpm requirements:evaluate -- --json` emits the full machine-readable report. The standard intelligence test suite gates corpus validity and baseline drift.
 
-Likely modules: `packages/sources/test-fixtures`, `packages/intelligence/src/requirements/*.test.ts`, `apps/worker/src/requirements/*.test.ts`, and `docs/implementation/testing-strategy.md`.
+Implemented modules: `packages/intelligence/src/requirements/evaluation`, the intelligence package developer command, and `docs/implementation/testing-strategy.md`.
+
+#### V2.3 contributor guide
+
+`corpus-v0.1.ts` is the human-reviewable and machine-readable synthetic corpus. Its version is independent of both `listing-document-v2.2` and `requirements-deterministic-v2.2`. A case has a stable ID, synthetic provider payload or normalized document, labelled expectations, provenance constraints, coverage tags, rationale, a consequential flag, and optional equivalence/truncation expectations.
+
+Ground truth has three dispositions:
+
+- `MUST_EXTRACT` means sufficient deterministic source evidence exists and defines the full expected canonical semantic value.
+- `MUST_NOT_EXTRACT` marks a false or unsafe extraction; selected cases explicitly assert Unknown preservation.
+- `MAY_REMAIN_UNRESOLVED` marks ambiguity, contradiction, or meaning the deterministic representation cannot preserve safely. Review-only output is permitted, but actionable output is a failure.
+
+Run `pnpm requirements:evaluate` for a concise category summary followed by failing-case expected/actual diagnostics. Run `pnpm requirements:evaluate -- --json` for the complete JSON report. The report derives precision and recall only from explicit per-category TP/FP/FN counts and intentionally omits an aggregate accuracy score.
+
+Safety is independent of general extraction metrics. `UNSAFE_HARD_CONSTRAINT` validates the explicit, required, non-contradictory, provenance-backed category policy. `FALSE_CONSEQUENTIAL_EXTRACTION` identifies unmatched output in consequential categories. Unknown-preservation and unresolved-actionability failures are reported separately.
+
+To add a case, use only synthetic listing content, label the canonical semantic expectation and provenance path, explain the label, add the relevant coverage tags, and mark every consequential case with `safety`. Corpus meta-tests validate IDs, semantics, normalized provider shape, contradiction labelling, duplicate expectations, requested coverage, three-provider equivalence groups, and private-marker exclusion.
+
+`baseline-v2.2-v0.1.json` is the reviewed current-output baseline, not ground truth and not a production target. After an intentional extractor change, review case diagnostics against ground truth first. Change a label only if the label itself is wrong; then update the baseline separately after semantic review. A blanket snapshot update is never sufficient approval.
 
 ### V2.4 — optional provider-neutral assisted proposal boundary
 

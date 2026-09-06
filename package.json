@@ -20,6 +20,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
+    "requirements:evaluate": "pnpm --filter @oca/intelligence requirements:evaluate",
     "test": "pnpm -r --if-present test",
     "test:e2e": "pnpm build:packages && pnpm --filter @oca/web build && playwright test",
     "typecheck": "pnpm -r --if-present typecheck"
