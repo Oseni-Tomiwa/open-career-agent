@@ -55,6 +55,9 @@ export function createDecisionHandlers(
     const fitFindings = await evaluationRepository.getFitFindings(evalId);
     const qualityFindings =
       await evaluationRepository.getQualityFindings(evalId);
+    const fitAssessmentStatus =
+      evaluation.fitAssessmentStatus ??
+      (evaluation.fitLevel ? ('ASSESSED' as const) : null);
 
     const inputFingerprint = fingerprintDecisionInputs({
       engineVersion: DECISION_ENGINE_VERSION,
@@ -66,6 +69,7 @@ export function createDecisionHandlers(
         summary: f.summary,
       })),
       fitLevel: evaluation.fitLevel,
+      fitAssessmentStatus,
       fitInputFingerprint: evaluation.fitInputFingerprint,
       qualityLevel: evaluation.qualityLevel,
       qualityFreshnessBucket: evaluation.qualityFreshnessBucket,
@@ -76,7 +80,7 @@ export function createDecisionHandlers(
       !evaluation.eligibilityInputFingerprint ||
       !evaluation.fitInputFingerprint ||
       !evaluation.qualityInputFingerprint ||
-      !evaluation.fitLevel ||
+      !fitAssessmentStatus ||
       !evaluation.qualityLevel
     ) {
       return;
@@ -99,8 +103,9 @@ export function createDecisionHandlers(
             })),
           }
         : null,
-      fit: evaluation.fitLevel
+      fit: fitAssessmentStatus
         ? {
+            assessmentStatus: fitAssessmentStatus,
             level: evaluation.fitLevel,
             engineVersion: evaluation.fitEngineVersion,
             inputFingerprint: evaluation.fitInputFingerprint,

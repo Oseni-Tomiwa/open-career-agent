@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, or } from 'drizzle-orm';
 import type { DatabaseHandle } from '../client.js';
 import { getTables } from '../schema-helper.js';
 import type {
@@ -11,6 +11,7 @@ import type {
   EvidenceId,
   OpportunityId,
   RequirementSetId,
+  RequirementId,
 } from '@oca/domain';
 
 export class EvaluationRepository {
@@ -23,10 +24,16 @@ export class EvaluationRepository {
       snapshotId: SnapshotId;
       requirementSetId?: RequirementSetId | null;
       requirementInputFingerprint?: string | null;
+      requirementInputMode?: 'CANONICAL' | 'FALLBACK_TRANSIENT_V1' | null;
       eligibilityState: 'eligible' | 'ineligible' | 'investigate' | 'unknown';
       eligibilityEngineVersion?: string | null;
       eligibilityInputFingerprint?: string | null;
       fitLevel?: 'strong' | 'moderate' | 'weak' | null;
+      fitAssessmentStatus?:
+        | 'ASSESSED'
+        | 'INSUFFICIENT_LISTING_REQUIREMENTS'
+        | 'INSUFFICIENT_CANDIDATE_EVIDENCE'
+        | null;
       fitEngineVersion?: string | null;
       fitInputFingerprint?: string | null;
       fitSummary?: string | null;
@@ -50,11 +57,13 @@ export class EvaluationRepository {
       requirementSetId: evaluation.requirementSetId ?? null,
       requirementInputFingerprint:
         evaluation.requirementInputFingerprint ?? null,
+      requirementInputMode: evaluation.requirementInputMode ?? null,
       eligibilityState: evaluation.eligibilityState,
       eligibilityEngineVersion: evaluation.eligibilityEngineVersion ?? null,
       eligibilityInputFingerprint:
         evaluation.eligibilityInputFingerprint ?? null,
       fitLevel: evaluation.fitLevel ?? null,
+      fitAssessmentStatus: evaluation.fitAssessmentStatus ?? null,
       fitEngineVersion: evaluation.fitEngineVersion ?? null,
       fitInputFingerprint: evaluation.fitInputFingerprint ?? null,
       fitSummary: evaluation.fitSummary ?? null,
@@ -103,6 +112,7 @@ export class EvaluationRepository {
           ? source.eligibilityInputFingerprint
           : null,
         fitLevel: copyFit ? source.fitLevel : null,
+        fitAssessmentStatus: copyFit ? source.fitAssessmentStatus : null,
         fitEngineVersion: copyFit ? source.fitEngineVersion : null,
         fitInputFingerprint: copyFit ? source.fitInputFingerprint : null,
         fitSummary: copyFit ? source.fitSummary : null,
@@ -182,11 +192,13 @@ export class EvaluationRepository {
       if (!source || !target) return false;
 
       if (input.category === 'fit') {
-        if (!source.fitLevel || target.fitLevel) return false;
+        if (!source.fitAssessmentStatus || target.fitAssessmentStatus)
+          return false;
         await transaction
           .update(evaluations)
           .set({
             fitLevel: source.fitLevel,
+            fitAssessmentStatus: source.fitAssessmentStatus,
             fitEngineVersion: source.fitEngineVersion,
             fitInputFingerprint: source.fitInputFingerprint,
             fitSummary: source.fitSummary,
@@ -290,6 +302,7 @@ export class EvaluationRepository {
     modality?: string;
     requirementText?: string;
     explanation?: string;
+    canonicalRequirementId?: RequirementId;
   }): Promise<void> {
     const { evaluationFindings } = getTables(this.db);
     const db = this.db.db as any;
@@ -306,6 +319,7 @@ export class EvaluationRepository {
       modality: finding.modality,
       requirementText: finding.requirementText,
       explanation: finding.explanation,
+      canonicalRequirementId: finding.canonicalRequirementId,
     });
   }
 
@@ -348,7 +362,11 @@ export class EvaluationRepository {
   public async persistFitResult(input: {
     evaluationId: EvaluationId;
     fit: {
-      level: 'strong' | 'moderate' | 'weak';
+      assessmentStatus?:
+        | 'ASSESSED'
+        | 'INSUFFICIENT_LISTING_REQUIREMENTS'
+        | 'INSUFFICIENT_CANDIDATE_EVIDENCE';
+      level: 'strong' | 'moderate' | 'weak' | null;
       engineVersion: string;
       inputFingerprint: string;
       summary: string;
@@ -363,14 +381,30 @@ export class EvaluationRepository {
       modality: string;
       requirementText: string;
       explanation: string;
-      opportunityEvidence: {
-        id: EvidenceId;
-        evidenceType: string;
-        sourceReference: string;
-        excerpt: string;
-        state:
-          'source-verified' | 'candidate-confirmed' | 'unreviewed' | 'disputed';
-      };
+      canonicalRequirementId?: RequirementId;
+      opportunityEvidence:
+        | {
+            id: EvidenceId;
+            evidenceType: string;
+            sourceReference: string;
+            excerpt: string;
+            state:
+              | 'source-verified'
+              | 'candidate-confirmed'
+              | 'unreviewed'
+              | 'disputed';
+          }
+        | readonly {
+            id: EvidenceId;
+            evidenceType: string;
+            sourceReference: string;
+            excerpt: string;
+            state:
+              | 'source-verified'
+              | 'candidate-confirmed'
+              | 'unreviewed'
+              | 'disputed';
+          }[];
       candidateEvidenceIds: readonly EvidenceId[];
     }[];
   }): Promise<boolean> {
@@ -387,6 +421,7 @@ export class EvaluationRepository {
         .update(evaluations)
         .set({
           fitLevel: input.fit.level,
+          fitAssessmentStatus: input.fit.assessmentStatus ?? 'ASSESSED',
           fitEngineVersion: input.fit.engineVersion,
           fitInputFingerprint: input.fit.inputFingerprint,
           fitSummary: input.fit.summary,
@@ -394,7 +429,7 @@ export class EvaluationRepository {
         .where(
           and(
             eq(evaluations.id, input.evaluationId),
-            isNull(evaluations.fitLevel),
+            isNull(evaluations.fitAssessmentStatus),
             isNull(evaluations.fitEngineVersion),
             isNull(evaluations.fitInputFingerprint),
             isNull(evaluations.fitSummary),
@@ -417,17 +452,25 @@ export class EvaluationRepository {
           modality: finding.modality,
           requirementText: finding.requirementText,
           explanation: finding.explanation,
+          canonicalRequirementId: finding.canonicalRequirementId,
         });
 
-        await transaction.insert(evidence).values({
-          ...finding.opportunityEvidence,
-          createdAt: new Date(),
-        });
+        const opportunityEvidenceItems = Array.isArray(
+          finding.opportunityEvidence,
+        )
+          ? finding.opportunityEvidence
+          : [finding.opportunityEvidence];
+        for (const opportunityEvidence of opportunityEvidenceItems) {
+          await transaction.insert(evidence).values({
+            ...opportunityEvidence,
+            createdAt: new Date(),
+          });
 
-        await transaction.insert(evaluationFindingEvidence).values({
-          findingId: finding.id,
-          evidenceId: finding.opportunityEvidence.id,
-        });
+          await transaction.insert(evaluationFindingEvidence).values({
+            findingId: finding.id,
+            evidenceId: opportunityEvidence.id,
+          });
+        }
 
         for (const evidenceId of finding.candidateEvidenceIds) {
           await transaction.insert(evaluationFindingEvidence).values({
@@ -476,7 +519,10 @@ export class EvaluationRepository {
       .where(
         and(
           eq(evaluations.snapshotId, snapshotId),
-          isNotNull(evaluations.fitLevel),
+          or(
+            isNotNull(evaluations.fitAssessmentStatus),
+            isNotNull(evaluations.fitLevel),
+          ),
         ),
       )
       .orderBy(desc(evaluations.createdAt));

@@ -1,4 +1,4 @@
-export const DECISION_ENGINE_VERSION = 'decision-v1';
+export const DECISION_ENGINE_VERSION = 'decision-v2.5';
 
 export type DecisionState =
   'high-priority' | 'consider' | 'investigate' | 'low-priority' | 'blocked';
@@ -14,6 +14,8 @@ export type DecisionReasonCode =
   | 'STRONG_REQUIRED_FIT'
   | 'MODERATE_FIT'
   | 'MATERIAL_FIT_GAPS'
+  | 'FIT_REQUIREMENTS_INSUFFICIENT'
+  | 'FIT_CANDIDATE_EVIDENCE_INSUFFICIENT'
   | 'QUALITY_RISK'
   | 'QUALITY_UNCERTAINTY'
   | 'ACTIONABLE_LISTING';
@@ -50,7 +52,11 @@ export interface DecisionFitFindingInput {
 }
 
 export interface DecisionFitInput {
-  readonly level: 'strong' | 'moderate' | 'weak';
+  readonly assessmentStatus?:
+    | 'ASSESSED'
+    | 'INSUFFICIENT_LISTING_REQUIREMENTS'
+    | 'INSUFFICIENT_CANDIDATE_EVIDENCE';
+  readonly level: 'strong' | 'moderate' | 'weak' | null;
   readonly engineVersion?: string | null | undefined;
   readonly inputFingerprint?: string | null | undefined;
   readonly summary?: string | null | undefined;
@@ -242,6 +248,32 @@ export class DecisionEngine {
         reasonCodes: ['MODERATE_FIT'],
         explanation:
           'Candidate fit evaluation is not yet available; cannot determine recommendation priority.',
+        decisiveFindings: [],
+        evaluatedAt: evaluatedAtIso,
+      };
+    }
+
+    if (fit.assessmentStatus === 'INSUFFICIENT_LISTING_REQUIREMENTS') {
+      return {
+        version: DECISION_ENGINE_VERSION,
+        state: 'investigate',
+        action: 'review',
+        reasonCodes: ['FIT_REQUIREMENTS_INSUFFICIENT'],
+        explanation:
+          'Investigate before prioritizing: the listing does not contain enough safely evaluable requirements to assess candidate fit.',
+        decisiveFindings: [],
+        evaluatedAt: evaluatedAtIso,
+      };
+    }
+
+    if (fit.assessmentStatus === 'INSUFFICIENT_CANDIDATE_EVIDENCE') {
+      return {
+        version: DECISION_ENGINE_VERSION,
+        state: 'investigate',
+        action: 'review',
+        reasonCodes: ['FIT_CANDIDATE_EVIDENCE_INSUFFICIENT'],
+        explanation:
+          'Investigate before prioritizing: listing requirements were found, but candidate evidence is insufficient to assess fit. Missing evidence is not treated as a mismatch.',
         decisiveFindings: [],
         evaluatedAt: evaluatedAtIso,
       };

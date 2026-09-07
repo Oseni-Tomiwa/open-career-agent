@@ -449,12 +449,14 @@ Known limitations: there is no real vendor adapter, semantic embedding, arbitrar
 
 ### V2.5 — grounding, validation, and safe engine integration
 
-- Extend the V2.4 conservative grounding rules only where reviewed semantics require it.
-- Add an explicit human/deterministic promotion workflow, create new immutable sets, and trigger reevaluation.
-- Introduce Fit assessment status separately from Fit level, with API/web compatibility migration.
-- Expose requirement provenance through API; make only necessary semantic UI changes.
+- **Implemented as the canonical evaluator integration boundary.** New Eligibility and Fit evaluations consume the immutable persisted Canonical Requirements linked to the Evaluation. Requirement Candidates remain excluded from every evaluator and cannot affect Eligibility, Fit, Quality, or Decision.
+- Eligibility admits only provenance-backed, high-confidence, required `HARD_CONSTRAINT_SAFE` canonical requirements in supported hard-gate categories. Fit admits only provenance-backed, high/moderate-confidence, required or preferred `FIT_SIGNAL_SAFE` canonical requirements in meaningful Fit categories. Context-only, review-only, unsupported, low-confidence, negated, and candidate-only observations remain non-consequential.
+- Evaluation and finding rows retain the exact Requirement Set ID/fingerprint, an explicit canonical-versus-historical-fallback input mode, and canonical-requirement lineage. Requirement provenance is exposed as public listing evidence without exposing internal-only data.
+- `FitAssessmentStatus` separates an assessed qualitative Fit level from `INSUFFICIENT_LISTING_REQUIREMENTS` and `INSUFFICIENT_CANDIDATE_EVIDENCE`. Insufficient states have no Fit level and cannot silently appear as Weak. Decision maps unresolved Fit assessment to Investigate/Review while preserving Eligibility precedence.
+- New evaluations use `eligibility-v2.5`, `fit-v2.5`, `decision-v2.5`, and a versioned canonical requirement evaluation policy in their fingerprints. Candidate-profile changes reuse the current Requirement Set and rerun candidate-dependent evaluation; extractor/input changes append a new immutable set. Historical snapshots without a linked set use an explicit, observable transient V1 fallback and are never rewritten.
+- API and focused web opportunity projections expose assessment status and render truthful insufficiency copy without a structural UI redesign. No model provider, promotion workflow, or real-source rollout is introduced here.
 
-Likely modules: `packages/intelligence`, database repositories/schema, Eligibility/Fit/Decision workflows and fingerprints, `packages/schemas/src/opportunity.ts`, `apps/api/src/app.ts`, and focused web opportunity projections.
+Known limitations: V2.5 does not promote Requirement Candidates into Canonical Requirements, add arbitrary requirement categories, or enable assisted output as evaluator input. Controlled public-source re-extraction and rollout remain V2.6 work.
 
 ### V2.6 — controlled real-source acceptance
 

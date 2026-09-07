@@ -6,6 +6,7 @@ import {
   EvaluationRepository,
   EvidenceRepository,
   OpportunityRepository,
+  RequirementSetRepository,
   type BackgroundTask,
   type DatabaseHandle,
 } from '@oca/database';
@@ -16,8 +17,16 @@ import type {
   EvidenceId,
   FindingId,
   SnapshotId,
+  RequirementId,
 } from '@oca/domain';
-import { FitEngine } from '@oca/intelligence';
+import {
+  CANONICAL_FIT_ENGINE_VERSION,
+  canonicalFitRequirements,
+  evaluateFitRequirements,
+  FitEngine,
+  REQUIREMENT_EVALUATION_POLICY_VERSION,
+} from '@oca/intelligence';
+import { requirementSetId } from '@oca/domain';
 
 import type { BackgroundTaskHandler } from '../worker.js';
 
@@ -43,6 +52,9 @@ export function fingerprintFitInputs(input: {
   engineVersion: string;
   snapshotFingerprint: string;
   claims: readonly FitFingerprintClaim[];
+  requirementInputMode?: string;
+  requirementInputFingerprint?: string;
+  policyVersion?: string;
 }): string {
   const canonical = input.claims
     .map((claim) => {
@@ -72,6 +84,9 @@ export function fingerprintFitInputs(input: {
     .update(
       JSON.stringify({
         engineVersion: input.engineVersion,
+        requirementInputMode: input.requirementInputMode ?? null,
+        requirementInputFingerprint: input.requirementInputFingerprint ?? null,
+        policyVersion: input.policyVersion ?? null,
         snapshotFingerprint: input.snapshotFingerprint,
         claims: canonical,
       }),
@@ -88,6 +103,7 @@ export function createFitHandlers(deps: {
   const evidenceRepository = new EvidenceRepository(deps.db);
   const taskLedger = new BackgroundTaskLedger(deps.db);
   const engine = new FitEngine();
+  const requirementSets = new RequirementSetRepository(deps.db);
 
   return {
     'fit.evaluate': async (task: BackgroundTask) => {
@@ -124,6 +140,22 @@ export function createFitHandlers(deps: {
       if (!snapshot)
         throw new Error(`Snapshot not found: ${payload.snapshotId}`);
       const claims = await candidateRepository.getClaims(candidateId);
+      const linkedSet = evaluation.requirementSetId
+        ? await requirementSets.getById(
+            requirementSetId(evaluation.requirementSetId),
+          )
+        : null;
+      if (evaluation.requirementSetId && !linkedSet) {
+        throw new Error('Fit Evaluation Requirement Set lineage is invalid');
+      }
+      if (
+        linkedSet &&
+        (linkedSet.set.snapshotId !== snapshotId ||
+          linkedSet.set.inputFingerprint !==
+            evaluation.requirementInputFingerprint)
+      ) {
+        throw new Error('Fit Evaluation Requirement Set lineage is invalid');
+      }
       const claimsWithEvidence = await Promise.all(
         claims.map(async (claim: any) => {
           const evList = await evidenceRepository.getClaimEvidence(
@@ -149,16 +181,24 @@ export function createFitHandlers(deps: {
         }),
       );
 
+      const engineVersion = linkedSet
+        ? CANONICAL_FIT_ENGINE_VERSION
+        : engine.version;
       const inputFingerprint = fingerprintFitInputs({
-        engineVersion: engine.version,
+        engineVersion,
         snapshotFingerprint: snapshot.fingerprint,
         claims: claimsWithEvidence,
+        requirementInputMode: linkedSet ? 'CANONICAL' : 'FALLBACK_TRANSIENT_V1',
+        ...(linkedSet
+          ? { requirementInputFingerprint: linkedSet.set.inputFingerprint }
+          : {}),
+        policyVersion: REQUIREMENT_EVALUATION_POLICY_VERSION,
       });
 
       const existing = await evaluationRepository.findFitEvaluation({
         candidateId,
         snapshotId,
-        engineVersion: engine.version,
+        engineVersion,
         inputFingerprint,
       });
       if (existing) {
@@ -184,11 +224,21 @@ export function createFitHandlers(deps: {
         return;
       }
 
-      const result = engine.evaluate(snapshot, claims);
+      const canonicalRequirements = linkedSet
+        ? canonicalFitRequirements(linkedSet)
+        : [];
+      const result = linkedSet
+        ? evaluateFitRequirements(
+            canonicalRequirements,
+            claimsWithEvidence,
+            CANONICAL_FIT_ENGINE_VERSION,
+          )
+        : engine.evaluate(snapshot, claimsWithEvidence);
 
       await evaluationRepository.persistFitResult({
         evaluationId,
         fit: {
+          assessmentStatus: result.assessmentStatus,
           level: result.overallLevel,
           engineVersion: result.version,
           inputFingerprint,
@@ -204,13 +254,32 @@ export function createFitHandlers(deps: {
           modality: item.modality,
           requirementText: item.requirement,
           explanation: item.explanation,
-          opportunityEvidence: {
-            id: randomUUID() as EvidenceId,
-            evidenceType: 'opportunity-requirement',
-            sourceReference: item.opportunityEvidenceReference,
-            excerpt: item.requirement,
-            state: 'source-verified' as const,
-          },
+          ...(linkedSet
+            ? {
+                canonicalRequirementId: item.requirementId as RequirementId,
+              }
+            : {}),
+          opportunityEvidence: linkedSet
+            ? (
+                canonicalRequirements.find(
+                  (requirement) => requirement.id === item.requirementId,
+                )?.provenance ?? []
+              ).map((provenance) => ({
+                id: randomUUID() as EvidenceId,
+                evidenceType: 'canonical-requirement-provenance',
+                sourceReference: `Listing requirement · ${provenance.sourceFieldPath ?? provenance.normalizedSection ?? 'listing content'}`,
+                excerpt: provenance.excerpt,
+                state: 'source-verified' as const,
+              }))
+            : [
+                {
+                  id: randomUUID() as EvidenceId,
+                  evidenceType: 'opportunity-requirement',
+                  sourceReference: item.opportunityEvidenceReference,
+                  excerpt: item.requirement,
+                  state: 'source-verified' as const,
+                },
+              ],
           candidateEvidenceIds: item.candidateEvidenceReferences.flatMap(
             (reference) => {
               if (!reference.startsWith('claim:')) return [];

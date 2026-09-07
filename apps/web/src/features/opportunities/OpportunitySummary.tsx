@@ -6,6 +6,7 @@ import { CompanyMark } from '../../components/CompanyMark.js';
 import { Icon } from '../../components/Icon.js';
 import { DecisionBadge, EligibilityStatus } from '../../components/Status.js';
 import type { Decision, Opportunity } from '../../data/types.js';
+import { fitPresentation } from '../../data/fitPresentation.js';
 
 export function OpportunitySummary({
   opportunity,
@@ -75,7 +76,7 @@ export function OpportunitySummary({
         <div>
           <dt>Fit</dt>
           <dd className="evaluation-value">
-            <strong>{opportunity.fit ?? 'Not evaluated'}</strong>
+            <strong>{fitPresentation(opportunity)}</strong>
             {opportunity.fitScore !== null && (
               <small>{opportunity.fitScore} / 100</small>
             )}

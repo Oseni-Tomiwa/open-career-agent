@@ -6,6 +6,7 @@ import { CompanyMark } from '../../components/CompanyMark.js';
 import { Icon } from '../../components/Icon.js';
 import { PageHeader } from '../../components/PageHeader.js';
 import { DecisionBadge, EligibilityStatus } from '../../components/Status.js';
+import { fitPresentation } from '../../data/fitPresentation.js';
 import { WorkspaceSectionHeader } from '../../components/WorkspaceSection.js';
 import type { Opportunity } from '../../data/types.js';
 
@@ -173,7 +174,7 @@ export default function MatchesPage() {
               <div>
                 <dt>Fit</dt>
                 <dd>
-                  <strong>{selected.fit ?? 'Not evaluated'}</strong>
+                  <strong>{fitPresentation(selected)}</strong>
                   {selected.fitScore !== null && (
                     <small>{selected.fitScore} / 100</small>
                   )}

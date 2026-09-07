@@ -99,4 +99,28 @@ describe('Matches', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Finding evidence')).toBeInTheDocument();
   });
+
+  it('presents insufficient listing requirements without labelling Fit weak', async () => {
+    const repository = new SeedProductRepository();
+    const detailed = {
+      ...(await repository.getSnapshot()).opportunities[0]!,
+      fit: null,
+      fitAssessmentStatus: 'INSUFFICIENT_LISTING_REQUIREMENTS' as const,
+      fitSignals: [],
+      decision: 'investigate' as const,
+      decisionLabel: 'Investigate',
+    };
+    vi.spyOn(repository, 'getSnapshot').mockResolvedValue({
+      ...(await repository.getSnapshot()),
+      opportunities: [detailed],
+    });
+    vi.spyOn(repository, 'getOpportunity').mockResolvedValue(detailed);
+
+    renderProduct(<MatchesPage />, ['/matches'], repository);
+
+    expect(
+      await screen.findByText('Not enough listing requirements to assess fit'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^Weak$/)).not.toBeInTheDocument();
+  });
 });

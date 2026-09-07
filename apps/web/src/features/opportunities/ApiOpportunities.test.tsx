@@ -209,10 +209,10 @@ describe('API-mode Opportunities UI', () => {
       eligibilitySignals: [],
       eligibilityExplanation:
         'No hard eligibility constraints were extracted. Eligibility remains unresolved because it could not be established deterministically.',
-      fit: 'weak',
+      fit: null,
+      fitAssessmentStatus: 'INSUFFICIENT_LISTING_REQUIREMENTS',
       fitSignals: [],
-      fitExplanation:
-        'No deterministic Fit requirements were extracted; Fit remains weak because evidence is insufficient.',
+      fitExplanation: 'Not enough listing requirements to assess fit.',
     });
     renderProduct(
       <Routes>
@@ -234,9 +234,10 @@ describe('API-mode Opportunities UI', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Fit' }));
     expect(
-      screen.getAllByText(/No deterministic Fit requirements were extracted/i)
+      screen.getAllByText(/Not enough listing requirements to assess fit/i)
         .length,
     ).toBeGreaterThan(0);
+    expect(screen.queryByText(/^Weak$/)).not.toBeInTheDocument();
     expect(screen.queryByText('Not evaluated.')).not.toBeInTheDocument();
   });
 

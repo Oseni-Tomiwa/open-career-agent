@@ -216,6 +216,7 @@ describe('API application', () => {
       snapshots: [
         {
           fit: {
+            status: 'ASSESSED',
             level: 'strong',
             engineVersion: 'fit-v1',
             findings: [
@@ -240,10 +241,82 @@ describe('API application', () => {
         {
           id: opportunity,
           eligibilityState: 'investigate',
+          fitAssessmentStatus: 'ASSESSED',
           fitLevel: 'strong',
         },
       ],
     });
+  });
+
+  it('projects insufficient listing requirements without a synthetic Weak Fit level', async () => {
+    const candidate = candidateId('candidate-api-fit-insufficient');
+    new CandidateRepository(database).createCandidate(candidate);
+    const opportunity = opportunityId('opportunity-api-fit-insufficient');
+    const snapshot = snapshotId('snapshot-api-fit-insufficient');
+    const opportunityRepository = new OpportunityRepository(database);
+    await opportunityRepository.createOpportunity(opportunity);
+    await recordTestDiscoveryMatch(candidate, opportunity, 'fit-insufficient');
+    await opportunityRepository.appendSnapshot({
+      id: snapshot,
+      opportunityId: opportunity,
+      title: 'Backend Engineer',
+      organization: 'Example',
+      content: 'Join our engineering team.',
+      fingerprint: 'api-fit-insufficient-hash',
+    });
+    const evaluation = evaluationId('evaluation-api-fit-insufficient');
+    const evaluationRepository = new EvaluationRepository(database);
+    await evaluationRepository.persistEvaluation({
+      id: evaluation,
+      candidateId: candidate,
+      snapshotId: snapshot,
+      eligibilityState: 'investigate',
+    });
+    await evaluationRepository.persistFitResult({
+      evaluationId: evaluation,
+      fit: {
+        assessmentStatus: 'INSUFFICIENT_LISTING_REQUIREMENTS',
+        level: null,
+        engineVersion: 'fit-v2.5',
+        inputFingerprint: 'input-hash-insufficient',
+        summary: 'Not enough listing requirements to assess fit.',
+      },
+      findings: [],
+    });
+
+    const detailResponse = await app.inject({
+      method: 'GET',
+      url: `/opportunities/${opportunity}?candidateId=${candidate}`,
+    });
+    expect(detailResponse.statusCode).toBe(200);
+    expect(detailResponse.json()).toMatchObject({
+      snapshots: [
+        {
+          fit: {
+            status: 'INSUFFICIENT_LISTING_REQUIREMENTS',
+            level: null,
+            findings: [],
+          },
+        },
+      ],
+    });
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: `/opportunities?candidateId=${candidate}`,
+    });
+    const listBody = listResponse.json<{
+      data: Array<Record<string, unknown>>;
+    }>();
+    expect(listBody).toMatchObject({
+      data: [
+        {
+          id: opportunity,
+          fitAssessmentStatus: 'INSUFFICIENT_LISTING_REQUIREMENTS',
+        },
+      ],
+    });
+    expect(listBody.data[0]).not.toHaveProperty('fitLevel');
   });
 
   it('exposes additive Quality summary and structured findings with freshness and evidence', async () => {

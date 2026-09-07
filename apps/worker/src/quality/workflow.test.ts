@@ -464,7 +464,10 @@ describe('quality.evaluate durable workflow', () => {
     const finalEval = await repository.getEvaluation(evaluationId(evalId));
 
     expect(finalEval?.eligibilityState).toBe('investigate');
-    expect(finalEval?.fitLevel).toBe('weak');
+    expect(finalEval).toMatchObject({
+      fitAssessmentStatus: 'INSUFFICIENT_CANDIDATE_EVIDENCE',
+      fitLevel: null,
+    });
     expect(finalEval?.qualityLevel).toBe('strong');
   });
 

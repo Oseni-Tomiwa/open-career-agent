@@ -1376,6 +1376,11 @@ export async function createApiApp(
               ? { eligibilityState: evaluation.eligibilityState }
               : {}),
             ...(evaluation?.fitLevel ? { fitLevel: evaluation.fitLevel } : {}),
+            ...(evaluation?.fitAssessmentStatus
+              ? { fitAssessmentStatus: evaluation.fitAssessmentStatus }
+              : evaluation?.fitLevel
+                ? { fitAssessmentStatus: 'ASSESSED' as const }
+                : {}),
             ...(evaluation?.qualityLevel
               ? { qualityLevel: evaluation.qualityLevel }
               : {}),
@@ -1474,6 +1479,11 @@ export async function createApiApp(
                 );
                 return {
                   id: item.id,
+                  ...(item.canonicalRequirementId
+                    ? {
+                        canonicalRequirementId: item.canonicalRequirementId,
+                      }
+                    : {}),
                   dimension: item.dimensionKey,
                   state: item.state,
                   summary: item.summary,
@@ -1496,7 +1506,11 @@ export async function createApiApp(
             };
           }
 
-          if (fit?.fitLevel && fit.fitEngineVersion && fit.fitSummary) {
+          if (
+            (fit?.fitAssessmentStatus || fit?.fitLevel) &&
+            fit.fitEngineVersion &&
+            fit.fitSummary
+          ) {
             const rawFitFindings = await evaluationRepository.getFitFindings(
               evaluationId(fit.id),
             );
@@ -1507,6 +1521,11 @@ export async function createApiApp(
                 );
                 return {
                   id: item.id,
+                  ...(item.canonicalRequirementId
+                    ? {
+                        canonicalRequirementId: item.canonicalRequirementId,
+                      }
+                    : {}),
                   dimension:
                     item.dimensionKey.split(':')[0] ?? item.dimensionKey,
                   label: item.label ?? item.dimensionKey,
@@ -1527,6 +1546,7 @@ export async function createApiApp(
             );
 
             fitResult = {
+              status: fit.fitAssessmentStatus ?? ('ASSESSED' as const),
               level: fit.fitLevel,
               summary: fit.fitSummary,
               engineVersion: fit.fitEngineVersion,

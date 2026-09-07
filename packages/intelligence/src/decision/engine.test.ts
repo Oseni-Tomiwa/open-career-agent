@@ -9,6 +9,46 @@ describe('DecisionEngine V1', () => {
   const engine = new DecisionEngine();
   const fixedNow = new Date('2026-08-30T12:00:00.000Z');
 
+  it('treats insufficient listing requirements as Investigate rather than Weak Fit', () => {
+    const result = engine.evaluate({
+      eligibility: { state: 'eligible' },
+      fit: {
+        assessmentStatus: 'INSUFFICIENT_LISTING_REQUIREMENTS',
+        level: null,
+        findings: [],
+      },
+      quality: { level: 'strong' },
+      evaluatedAt: fixedNow,
+    });
+
+    expect(result).toMatchObject({
+      state: 'investigate',
+      action: 'review',
+      reasonCodes: ['FIT_REQUIREMENTS_INSUFFICIENT'],
+    });
+    expect(result.explanation).toContain('not contain enough');
+  });
+
+  it('treats insufficient candidate evidence as Investigate rather than a mismatch', () => {
+    const result = engine.evaluate({
+      eligibility: { state: 'eligible' },
+      fit: {
+        assessmentStatus: 'INSUFFICIENT_CANDIDATE_EVIDENCE',
+        level: null,
+        findings: [],
+      },
+      quality: { level: 'strong' },
+      evaluatedAt: fixedNow,
+    });
+
+    expect(result).toMatchObject({
+      state: 'investigate',
+      action: 'review',
+      reasonCodes: ['FIT_CANDIDATE_EVIDENCE_INSUFFICIENT'],
+    });
+    expect(result.explanation).toContain('not treated as a mismatch');
+  });
+
   describe('Eligibility Blocker Invariant (Precedence 1)', () => {
     it('returns blocked / do_not_apply when Eligibility has a confirmed Hard Blocker, regardless of Strong Fit and Strong Quality', () => {
       const input: DecisionEvaluationInput = {

@@ -6,6 +6,12 @@ export const FitLevelSchema = Type.Union([
   Type.Literal('weak'),
 ]);
 
+export const FitAssessmentStatusSchema = Type.Union([
+  Type.Literal('ASSESSED'),
+  Type.Literal('INSUFFICIENT_LISTING_REQUIREMENTS'),
+  Type.Literal('INSUFFICIENT_CANDIDATE_EVIDENCE'),
+]);
+
 export const FitFindingStateSchema = Type.Union([
   Type.Literal('STRONG_MATCH'),
   Type.Literal('MATCH'),
@@ -26,6 +32,7 @@ export const FitFindingEvidenceSchema = Type.Object({
 
 export const FitFindingSchema = Type.Object({
   id: Type.String(),
+  canonicalRequirementId: Type.Optional(Type.String()),
   dimension: Type.String(),
   label: Type.String(),
   state: FitFindingStateSchema,
@@ -45,7 +52,8 @@ export const FitFindingSchema = Type.Object({
 });
 
 export const FitEvaluationSchema = Type.Object({
-  level: FitLevelSchema,
+  status: FitAssessmentStatusSchema,
+  level: Type.Union([FitLevelSchema, Type.Null()]),
   summary: Type.String(),
   engineVersion: Type.String(),
   findings: Type.Array(FitFindingSchema),
@@ -113,6 +121,7 @@ export const EligibilityEvaluationSchema = Type.Object({
   findings: Type.Array(
     Type.Object({
       id: Type.String(),
+      canonicalRequirementId: Type.Optional(Type.String()),
       dimension: Type.String(),
       state: Type.String(),
       summary: Type.String(),
@@ -145,6 +154,8 @@ export const DecisionReasonCodeSchema = Type.Union([
   Type.Literal('STRONG_REQUIRED_FIT'),
   Type.Literal('MODERATE_FIT'),
   Type.Literal('MATERIAL_FIT_GAPS'),
+  Type.Literal('FIT_REQUIREMENTS_INSUFFICIENT'),
+  Type.Literal('FIT_CANDIDATE_EVIDENCE_INSUFFICIENT'),
   Type.Literal('QUALITY_RISK'),
   Type.Literal('QUALITY_UNCERTAINTY'),
   Type.Literal('ACTIONABLE_LISTING'),
@@ -195,6 +206,7 @@ export const OpportunitySummarySchema = Type.Object(
       ]),
     ),
     fitLevel: Type.Optional(FitLevelSchema),
+    fitAssessmentStatus: Type.Optional(FitAssessmentStatusSchema),
     qualityLevel: Type.Optional(QualityLevelSchema),
     decisionState: Type.Optional(DecisionStateSchema),
   },

@@ -17,6 +17,7 @@ import type {
   Opportunity,
   QualitySignal,
 } from '../../data/types.js';
+import { fitPresentation } from '../../data/fitPresentation.js';
 import { NotFoundPage } from '../NotFoundPage.js';
 
 type DetailTab =
@@ -266,7 +267,7 @@ export function OpportunityDetailPage() {
                 <Icon name="arrow-right" size={16} />
               </button>
               <button
-                aria-label={`Inspect Fit: ${opportunity.fit ?? 'not evaluated'}`}
+                aria-label={`Inspect Fit: ${fitPresentation(opportunity)}`}
                 className="intelligence-stage"
                 onClick={() => setActiveTab('fit')}
                 type="button"
@@ -277,7 +278,7 @@ export function OpportunityDetailPage() {
                   <small>Candidate evidence alignment</small>
                 </span>
                 <strong className="stage-value">
-                  <span>{opportunity.fit ?? 'Not evaluated'}</span>
+                  <span>{fitPresentation(opportunity)}</span>
                   {opportunity.fitScore !== null && (
                     <small>{opportunity.fitScore} / 100</small>
                   )}

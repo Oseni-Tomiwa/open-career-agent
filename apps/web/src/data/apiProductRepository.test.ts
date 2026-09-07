@@ -77,6 +77,7 @@ function detailBody(options: { readonly evaluated?: boolean } = {}) {
                 ],
               },
               fit: {
+                status: 'ASSESSED',
                 level: 'strong',
                 summary: 'Required capabilities are supported.',
                 engineVersion: 'fit-v1',
@@ -253,9 +254,9 @@ describe('ApiProductRepository', () => {
         findings: [],
       },
       fit: {
-        level: 'weak',
-        summary:
-          'No deterministic Fit requirements were extracted; Fit remains weak because evidence is insufficient.',
+        status: 'INSUFFICIENT_LISTING_REQUIREMENTS',
+        level: null,
+        summary: 'Not enough listing requirements to assess fit.',
         engineVersion: 'fit-v1',
         findings: [],
       },
@@ -271,10 +272,10 @@ describe('ApiProductRepository', () => {
       eligibilitySignals: [],
       eligibilityExplanation:
         'No hard eligibility constraints were extracted. Eligibility remains unresolved because it could not be established deterministically.',
-      fit: 'weak',
+      fit: null,
+      fitAssessmentStatus: 'INSUFFICIENT_LISTING_REQUIREMENTS',
       fitSignals: [],
-      fitExplanation:
-        'No deterministic Fit requirements were extracted; Fit remains weak because evidence is insufficient.',
+      fitExplanation: 'Not enough listing requirements to assess fit.',
     });
 
     const explicitUnknown = detailBody();

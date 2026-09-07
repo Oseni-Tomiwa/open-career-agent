@@ -484,6 +484,9 @@ function mapSummary(summary: Summary): Opportunity {
     eligibility: summary.eligibilityState ?? null,
     eligibilityLabel: summary.eligibilityState ?? 'Not evaluated',
     fit: summary.fitLevel ?? null,
+    fitAssessmentStatus:
+      summary.fitAssessmentStatus ??
+      (summary.fitLevel ? 'ASSESSED' : null),
     fitScore: null,
     quality: summary.qualityLevel ?? null,
     qualityScore: null,
@@ -555,6 +558,7 @@ function mapDetail(response: DetailResponse, summary?: Summary): Opportunity {
       : 'Not evaluated',
     eligibilityExplanation: eligibilityExplanation(latest),
     fit: latest.fit?.level ?? null,
+    fitAssessmentStatus: latest.fit?.status ?? null,
     fitScore: null,
     fitExplanation:
       latest.fit?.summary ?? 'Fit has not been evaluated for this snapshot.',
@@ -618,7 +622,11 @@ function mapDetail(response: DetailResponse, summary?: Summary): Opportunity {
       latest.fit?.findings.map((finding) => finding.label) ?? [],
     ),
     tags: unique([
-      ...(latest.fit ? [`Fit: ${latest.fit.level}`] : []),
+      ...(latest.fit?.status === 'INSUFFICIENT_LISTING_REQUIREMENTS'
+        ? ['Fit: Not enough listing requirements']
+        : latest.fit?.level
+          ? [`Fit: ${latest.fit.level}`]
+          : []),
       ...(latest.quality ? [`Quality: ${latest.quality.level}`] : []),
     ]),
   };

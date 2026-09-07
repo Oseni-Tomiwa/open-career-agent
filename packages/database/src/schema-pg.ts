@@ -787,10 +787,12 @@ export const evaluationsPg = pgTable(
       { onDelete: 'restrict' },
     ),
     requirementInputFingerprint: text('requirement_input_fingerprint'),
+    requirementInputMode: text('requirement_input_mode'),
     eligibilityState: text('eligibility_state').notNull(),
     eligibilityEngineVersion: text('eligibility_engine_version'),
     eligibilityInputFingerprint: text('eligibility_input_fingerprint'),
     fitLevel: text('fit_level'),
+    fitAssessmentStatus: text('fit_assessment_status'),
     fitEngineVersion: text('fit_engine_version'),
     fitInputFingerprint: text('fit_input_fingerprint'),
     fitSummary: text('fit_summary'),
@@ -819,6 +821,14 @@ export const evaluationsPg = pgTable(
       table.snapshotId,
     ),
     index('pg_evaluations_requirement_set_idx').on(table.requirementSetId),
+    check(
+      'pg_evaluations_requirement_input_mode_check',
+      sql`${table.requirementInputMode} is null or ${table.requirementInputMode} in ('CANONICAL', 'FALLBACK_TRANSIENT_V1')`,
+    ),
+    check(
+      'pg_evaluations_fit_assessment_check',
+      sql`${table.fitAssessmentStatus} is null or (${table.fitAssessmentStatus} = 'ASSESSED' and ${table.fitLevel} is not null) or (${table.fitAssessmentStatus} in ('INSUFFICIENT_LISTING_REQUIREMENTS', 'INSUFFICIENT_CANDIDATE_EVIDENCE') and ${table.fitLevel} is null)`,
+    ),
   ],
 );
 
@@ -829,6 +839,10 @@ export const evaluationFindingsPg = pgTable(
     evaluationId: text('evaluation_id')
       .notNull()
       .references(() => evaluationsPg.id, { onDelete: 'cascade' }),
+    canonicalRequirementId: text('canonical_requirement_id').references(
+      () => canonicalRequirementsPg.id,
+      { onDelete: 'restrict' },
+    ),
     category: text('category').notNull(),
     dimensionKey: text('dimension_key').notNull(),
     label: text('label'),

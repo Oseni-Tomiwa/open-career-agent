@@ -10,6 +10,7 @@ export interface DecisionFingerprintInput {
     readonly summary: string;
   }[];
   readonly fitLevel?: string | null;
+  readonly fitAssessmentStatus?: string | null;
   readonly fitInputFingerprint?: string | null;
   readonly qualityLevel?: string | null;
   readonly qualityFreshnessBucket?: string | null;
@@ -35,6 +36,7 @@ export function fingerprintDecisionInputs(
         eligibilityInputFingerprint: input.eligibilityInputFingerprint ?? null,
         eligibilityFindings: canonicalEligibilityFindings,
         fitLevel: input.fitLevel ?? null,
+        fitAssessmentStatus: input.fitAssessmentStatus ?? null,
         fitInputFingerprint: input.fitInputFingerprint ?? null,
         qualityLevel: input.qualityLevel ?? null,
         qualityFreshnessBucket: input.qualityFreshnessBucket ?? null,

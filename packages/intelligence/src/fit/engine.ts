@@ -7,6 +7,12 @@ import {
 } from './extractor.js';
 
 export const FIT_ENGINE_VERSION = 'fit-v1.3';
+export const CANONICAL_FIT_ENGINE_VERSION = 'fit-v2.5';
+
+export type FitAssessmentStatus =
+  | 'ASSESSED'
+  | 'INSUFFICIENT_LISTING_REQUIREMENTS'
+  | 'INSUFFICIENT_CANDIDATE_EVIDENCE';
 
 export type FitFindingState =
   | 'STRONG_MATCH'
@@ -42,13 +48,26 @@ export interface FitFinding {
   readonly candidateEvidenceReferences: readonly string[];
 }
 
-export interface FitEvaluationResult {
-  readonly version: typeof FIT_ENGINE_VERSION;
-  readonly overallLevel: FitLevel;
+interface FitEvaluationResultBase {
+  readonly version: string;
   readonly summary: string;
   readonly requirements: readonly FitRequirement[];
   readonly findings: readonly FitFinding[];
 }
+
+export type FitEvaluationResult =
+  | (FitEvaluationResultBase & {
+      readonly assessmentStatus: 'ASSESSED';
+      readonly overallLevel: FitLevel;
+    })
+  | (FitEvaluationResultBase & {
+      readonly assessmentStatus: 'INSUFFICIENT_LISTING_REQUIREMENTS';
+      readonly overallLevel: null;
+    })
+  | (FitEvaluationResultBase & {
+      readonly assessmentStatus: 'INSUFFICIENT_CANDIDATE_EVIDENCE';
+      readonly overallLevel: null;
+    });
 
 // Directional, explicit, and intentionally small. A mapping never becomes an exact match.
 const TRANSFERABILITY: Readonly<Record<string, readonly string[]>> = {
@@ -395,6 +414,64 @@ export function aggregateFit(findings: readonly FitFinding[]): FitLevel {
   return 'moderate';
 }
 
+export function evaluateFitRequirements(
+  requirements: readonly FitRequirement[],
+  candidateClaims: readonly FitCandidateClaim[],
+  version: string,
+): FitEvaluationResult {
+  if (requirements.length === 0) {
+    return {
+      version,
+      assessmentStatus: 'INSUFFICIENT_LISTING_REQUIREMENTS',
+      overallLevel: null,
+      summary: 'Not enough listing requirements to assess fit.',
+      requirements,
+      findings: [],
+    };
+  }
+
+  const findings = requirements.map((requirement) =>
+    evaluateRequirement(requirement, candidateClaims),
+  );
+  if (
+    findings.every(
+      (finding) =>
+        finding.state === 'NO_EVIDENCE' || finding.state === 'UNKNOWN',
+    )
+  ) {
+    return {
+      version,
+      assessmentStatus: 'INSUFFICIENT_CANDIDATE_EVIDENCE',
+      overallLevel: null,
+      summary:
+        'Listing requirements were found, but candidate evidence is insufficient to assess fit. Missing evidence is not treated as a mismatch.',
+      requirements,
+      findings,
+    };
+  }
+  const overallLevel = aggregateFit(findings);
+  const matched = findings.filter(
+    (item) => item.state === 'STRONG_MATCH' || item.state === 'MATCH',
+  ).length;
+  const transferable = findings.filter(
+    (item) => item.state === 'TRANSFERABLE',
+  ).length;
+  const partial = findings.filter((item) => item.state === 'PARTIAL').length;
+  const gaps = findings.filter((item) => item.state === 'GAP').length;
+  const uncertain = findings.filter(
+    (item) => item.state === 'NO_EVIDENCE' || item.state === 'UNKNOWN',
+  ).length;
+
+  return {
+    version,
+    assessmentStatus: 'ASSESSED',
+    overallLevel,
+    summary: `${matched} of ${findings.length} extracted requirements directly match; ${transferable} are transferable, ${partial} partial, ${gaps} evidenced gaps, and ${uncertain} lack usable evidence or remain uncertain.`,
+    requirements,
+    findings,
+  };
+}
+
 export class FitEngine {
   public readonly version = FIT_ENGINE_VERSION;
   private readonly extractor = new FitRequirementExtractor();
@@ -404,31 +481,6 @@ export class FitEngine {
     candidateClaims: readonly FitCandidateClaim[],
   ): FitEvaluationResult {
     const requirements = this.extractor.extract(snapshot);
-    const findings = requirements.map((requirement) =>
-      evaluateRequirement(requirement, candidateClaims),
-    );
-    const overallLevel = aggregateFit(findings);
-    const matched = findings.filter(
-      (item) => item.state === 'STRONG_MATCH' || item.state === 'MATCH',
-    ).length;
-    const transferable = findings.filter(
-      (item) => item.state === 'TRANSFERABLE',
-    ).length;
-    const partial = findings.filter((item) => item.state === 'PARTIAL').length;
-    const gaps = findings.filter((item) => item.state === 'GAP').length;
-    const uncertain = findings.filter(
-      (item) => item.state === 'NO_EVIDENCE' || item.state === 'UNKNOWN',
-    ).length;
-
-    return {
-      version: this.version,
-      overallLevel,
-      summary:
-        findings.length === 0
-          ? 'No deterministic Fit requirements were extracted; Fit remains weak because evidence is insufficient.'
-          : `${matched} of ${findings.length} extracted requirements directly match; ${transferable} are transferable, ${partial} partial, ${gaps} evidenced gaps, and ${uncertain} lack usable evidence or remain uncertain.`,
-      requirements,
-      findings,
-    };
+    return evaluateFitRequirements(requirements, candidateClaims, this.version);
   }
 }

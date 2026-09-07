@@ -4,6 +4,7 @@ import {
   CandidateRepository,
   EvaluationRepository,
   BackgroundTaskLedger,
+  EvidenceRepository,
   RequirementSetRepository,
 } from '@oca/database';
 import type { BackgroundTaskHandler } from '../worker.js';
@@ -13,11 +14,16 @@ import type {
   CandidateId,
   EvaluationId,
   FindingId,
+  EvidenceId,
+  RequirementId,
 } from '@oca/domain';
 import { requirementSetId } from '@oca/domain';
 import {
   EligibilityEngine,
-  V2_2_DETERMINISTIC_EXTRACTOR_VERSION,
+  CANONICAL_ELIGIBILITY_ENGINE_VERSION,
+  canonicalEligibilityConstraints,
+  REQUIREMENT_EVALUATION_POLICY_VERSION,
+  V2_3_1_DETERMINISTIC_EXTRACTOR_VERSION,
   V2_2_PIPELINE_VERSION,
 } from '@oca/intelligence';
 import { createHash, randomUUID } from 'node:crypto';
@@ -32,11 +38,13 @@ function fingerprintEligibilityInputs(input: {
   }[];
   engineVersion: string;
   requirementInputFingerprint?: string;
+  policyVersion?: string;
 }): string {
   return createHash('sha256')
     .update(
       JSON.stringify({
         engineVersion: input.engineVersion,
+        policyVersion: input.policyVersion ?? null,
         ...(input.requirementInputFingerprint
           ? { requirementInputFingerprint: input.requirementInputFingerprint }
           : {}),
@@ -58,6 +66,7 @@ export function createEligibilityHandlers(deps: {
   const engine = new EligibilityEngine();
   const ledger = new BackgroundTaskLedger(deps.db);
   const requirementSets = new RequirementSetRepository(deps.db);
+  const evidenceRepo = new EvidenceRepository(deps.db);
 
   return {
     'eligibility.evaluate': async (task: BackgroundTask) => {
@@ -89,7 +98,8 @@ export function createEligibilityHandlers(deps: {
         : await requirementSets.getLatestCompatible({
             snapshotId: snapId as SnapshotId,
             extractorPipelineVersion: V2_2_PIPELINE_VERSION,
-            deterministicExtractorVersion: V2_2_DETERMINISTIC_EXTRACTOR_VERSION,
+            deterministicExtractorVersion:
+              V2_3_1_DETERMINISTIC_EXTRACTOR_VERSION,
           });
       if (
         payload.requirementSetId &&
@@ -104,20 +114,28 @@ export function createEligibilityHandlers(deps: {
         candId as unknown as CandidateId,
       );
 
-      const result = engine.evaluate(
-        snapshot,
-        claims.map((claim) => ({
-          ...claim,
-          state:
-            claim.state === 'CONFLICTING'
-              ? 'conflict'
-              : claim.state.toLowerCase(),
-        })),
-      );
+      const normalizedClaims = claims.map((claim) => ({
+        ...claim,
+        state:
+          claim.state === 'CONFLICTING'
+            ? 'conflict'
+            : claim.state.toLowerCase(),
+      }));
+      const canonicalConstraints = linkedSet
+        ? canonicalEligibilityConstraints(linkedSet)
+        : [];
+      const result = linkedSet
+        ? engine.evaluateConstraints(
+            canonicalConstraints,
+            normalizedClaims,
+            CANONICAL_ELIGIBILITY_ENGINE_VERSION,
+          )
+        : engine.evaluate(snapshot, normalizedClaims);
 
       const evalId = randomUUID();
       const inputFingerprint = fingerprintEligibilityInputs({
         engineVersion: result.version,
+        policyVersion: REQUIREMENT_EVALUATION_POLICY_VERSION,
         ...(linkedSet
           ? { requirementInputFingerprint: linkedSet.set.inputFingerprint }
           : {}),
@@ -144,23 +162,44 @@ export function createEligibilityHandlers(deps: {
             ? {
                 requirementSetId: linkedSet.set.id,
                 requirementInputFingerprint: linkedSet.set.inputFingerprint,
+                requirementInputMode: 'CANONICAL' as const,
               }
-            : {}),
+            : { requirementInputMode: 'FALLBACK_TRANSIENT_V1' as const }),
           eligibilityState: result.overallState,
           eligibilityEngineVersion: result.version,
           eligibilityInputFingerprint: inputFingerprint,
         });
 
         for (const finding of result.findings) {
+          const findingId = randomUUID() as unknown as FindingId;
           await evalRepo.persistFinding({
-            id: randomUUID() as unknown as FindingId,
+            id: findingId,
             evaluationId: evalId as unknown as EvaluationId,
             category: 'eligibility',
             dimensionKey: finding.dimension,
             state: finding.state,
             summary: finding.summary,
             confidence: finding.confidence,
+            ...(finding.canonicalRequirementId
+              ? {
+                  canonicalRequirementId:
+                    finding.canonicalRequirementId as RequirementId,
+                }
+              : {}),
           });
+          const constraint = canonicalConstraints.find(
+            (item) =>
+              item.canonicalRequirementId === finding.canonicalRequirementId,
+          );
+          for (const provenance of constraint?.provenance ?? []) {
+            await evidenceRepo.attachToFinding(findingId, {
+              id: randomUUID() as EvidenceId,
+              evidenceType: 'canonical-requirement-provenance',
+              sourceReference: `Listing requirement · ${provenance.sourceFieldPath ?? provenance.normalizedSection ?? 'listing content'}`,
+              excerpt: provenance.excerpt,
+              state: 'source-verified',
+            });
+          }
         }
       });
 

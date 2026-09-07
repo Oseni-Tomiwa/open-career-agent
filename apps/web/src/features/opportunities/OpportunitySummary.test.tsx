@@ -51,4 +51,20 @@ describe('opportunity summary actions and evaluation values', () => {
     expect(screen.getByText('Evidence coverage')).toBeInTheDocument();
     expect(screen.queryByText('complete')).not.toBeInTheDocument();
   });
+
+  it('shows insufficient listing requirements without presenting Weak Fit', async () => {
+    const opportunity = {
+      ...initialSeedSnapshot.opportunities[0]!,
+      fit: null,
+      fitAssessmentStatus: 'INSUFFICIENT_LISTING_REQUIREMENTS' as const,
+    };
+    renderProduct(<OpportunitySummary opportunity={opportunity} />, [
+      '/discover',
+    ]);
+
+    expect(
+      await screen.findByText('Not enough listing requirements to assess fit'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^Weak$/)).not.toBeInTheDocument();
+  });
 });

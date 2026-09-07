@@ -29,11 +29,26 @@ function claim(
 
 function fingerprint(
   claims: readonly FitFingerprintClaim[],
-  overrides: { engineVersion?: string; snapshotFingerprint?: string } = {},
+  overrides: {
+    engineVersion?: string;
+    snapshotFingerprint?: string;
+    requirementInputMode?: string;
+    requirementInputFingerprint?: string;
+    policyVersion?: string;
+  } = {},
 ) {
   return fingerprintFitInputs({
     engineVersion: overrides.engineVersion ?? 'fit-v1',
     snapshotFingerprint: overrides.snapshotFingerprint ?? 'snapshot-one',
+    ...(overrides.requirementInputMode
+      ? { requirementInputMode: overrides.requirementInputMode }
+      : {}),
+    ...(overrides.requirementInputFingerprint
+      ? { requirementInputFingerprint: overrides.requirementInputFingerprint }
+      : {}),
+    ...(overrides.policyVersion
+      ? { policyVersion: overrides.policyVersion }
+      : {}),
     claims,
   });
 }
@@ -91,5 +106,35 @@ describe('Fit input fingerprint semantics', () => {
     expect(fingerprint([claim()], { engineVersion: 'fit-v2' })).not.toBe(
       original,
     );
+  });
+
+  it('changes when canonical Requirement Set identity or evaluation policy changes', () => {
+    const original = fingerprint([claim()], {
+      requirementInputMode: 'CANONICAL',
+      requirementInputFingerprint: 'requirements-one',
+      policyVersion: 'policy-one',
+    });
+
+    expect(
+      fingerprint([claim()], {
+        requirementInputMode: 'CANONICAL',
+        requirementInputFingerprint: 'requirements-two',
+        policyVersion: 'policy-one',
+      }),
+    ).not.toBe(original);
+    expect(
+      fingerprint([claim()], {
+        requirementInputMode: 'CANONICAL',
+        requirementInputFingerprint: 'requirements-one',
+        policyVersion: 'policy-two',
+      }),
+    ).not.toBe(original);
+    expect(
+      fingerprint([claim()], {
+        requirementInputMode: 'FALLBACK_TRANSIENT_V1',
+        requirementInputFingerprint: 'requirements-one',
+        policyVersion: 'policy-one',
+      }),
+    ).not.toBe(original);
   });
 });

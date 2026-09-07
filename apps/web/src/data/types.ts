@@ -5,6 +5,10 @@ export type EligibilityState =
   | 'unknown';
 
 export type FitLevel = 'strong' | 'moderate' | 'weak';
+export type FitAssessmentStatus =
+  | 'ASSESSED'
+  | 'INSUFFICIENT_LISTING_REQUIREMENTS'
+  | 'INSUFFICIENT_CANDIDATE_EVIDENCE';
 export type QualityLevel = 'strong' | 'moderate' | 'weak' | 'risk';
 export type Decision =
   | 'high-priority'
@@ -96,6 +100,7 @@ export interface Opportunity {
   readonly eligibilityLabel: string;
   readonly eligibilityExplanation?: string;
   readonly fit: FitLevel | null;
+  readonly fitAssessmentStatus?: FitAssessmentStatus | null;
   readonly fitScore: number | null;
   readonly fitExplanation?: string;
   readonly quality: QualityLevel | null;

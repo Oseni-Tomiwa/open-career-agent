@@ -721,6 +721,15 @@ export const ELIGIBILITY_STATES = [
 ] as const;
 
 export const FIT_LEVELS = ['strong', 'moderate', 'weak'] as const;
+export const FIT_ASSESSMENT_STATUSES = [
+  'ASSESSED',
+  'INSUFFICIENT_LISTING_REQUIREMENTS',
+  'INSUFFICIENT_CANDIDATE_EVIDENCE',
+] as const;
+export const REQUIREMENT_INPUT_MODES = [
+  'CANONICAL',
+  'FALLBACK_TRANSIENT_V1',
+] as const;
 export const QUALITY_LEVELS = ['strong', 'moderate', 'weak', 'risk'] as const;
 
 export const evaluations = sqliteTable(
@@ -738,12 +747,18 @@ export const evaluations = sqliteTable(
       { onDelete: 'restrict' },
     ),
     requirementInputFingerprint: text('requirement_input_fingerprint'),
+    requirementInputMode: text('requirement_input_mode', {
+      enum: REQUIREMENT_INPUT_MODES,
+    }),
     eligibilityState: text('eligibility_state', {
       enum: ELIGIBILITY_STATES,
     }).notNull(),
     eligibilityEngineVersion: text('eligibility_engine_version'),
     eligibilityInputFingerprint: text('eligibility_input_fingerprint'),
     fitLevel: text('fit_level', { enum: FIT_LEVELS }),
+    fitAssessmentStatus: text('fit_assessment_status', {
+      enum: FIT_ASSESSMENT_STATUSES,
+    }),
     fitEngineVersion: text('fit_engine_version'),
     fitInputFingerprint: text('fit_input_fingerprint'),
     fitSummary: text('fit_summary'),
@@ -765,6 +780,14 @@ export const evaluations = sqliteTable(
       table.snapshotId,
     ),
     index('evaluations_requirement_set_idx').on(table.requirementSetId),
+    check(
+      'evaluations_requirement_input_mode_check',
+      sql`${table.requirementInputMode} is null or ${table.requirementInputMode} in ('CANONICAL', 'FALLBACK_TRANSIENT_V1')`,
+    ),
+    check(
+      'evaluations_fit_assessment_check',
+      sql`${table.fitAssessmentStatus} is null or (${table.fitAssessmentStatus} = 'ASSESSED' and ${table.fitLevel} is not null) or (${table.fitAssessmentStatus} in ('INSUFFICIENT_LISTING_REQUIREMENTS', 'INSUFFICIENT_CANDIDATE_EVIDENCE') and ${table.fitLevel} is null)`,
+    ),
   ],
 );
 
@@ -777,6 +800,10 @@ export const evaluationFindings = sqliteTable(
     evaluationId: text('evaluation_id')
       .notNull()
       .references(() => evaluations.id, { onDelete: 'cascade' }), // finding deletes if evaluation deletes
+    canonicalRequirementId: text('canonical_requirement_id').references(
+      () => canonicalRequirements.id,
+      { onDelete: 'restrict' },
+    ),
     category: text('category', { enum: EVALUATION_CATEGORY }).notNull(),
     dimensionKey: text('dimension_key').notNull(),
     label: text('label'),

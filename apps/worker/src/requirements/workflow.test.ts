@@ -21,6 +21,7 @@ import {
   snapshotId,
 } from '@oca/domain';
 import {
+  CANONICAL_FIT_ENGINE_VERSION,
   REQUIREMENT_PROPOSAL_SCHEMA_VERSION,
   type RequirementProposalProvider,
 } from '@oca/intelligence';
@@ -181,6 +182,27 @@ describe('requirements.extract V2.3.1 workflow', () => {
     ).getCurrentEvaluation(candidate, snapshot);
     expect(evaluation?.requirementSetId).toBeTruthy();
     expect(evaluation?.requirementInputFingerprint).toBeTruthy();
+    expect(evaluation).toMatchObject({
+      requirementInputMode: 'CANONICAL',
+      eligibilityEngineVersion: 'eligibility-v2.5',
+      fitAssessmentStatus: 'INSUFFICIENT_CANDIDATE_EVIDENCE',
+      fitLevel: null,
+      fitEngineVersion: CANONICAL_FIT_ENGINE_VERSION,
+    });
+    const fitFindings = await new EvaluationRepository(database).getFitFindings(
+      evaluation!.id,
+    );
+    expect(fitFindings[0]?.canonicalRequirementId).toBeTruthy();
+    expect(
+      await new EvaluationRepository(database).getFindings(evaluation!.id),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: 'fit',
+          canonicalRequirementId: expect.stringMatching(/^req_/),
+        }),
+      ]),
+    );
     expect(
       database.sqlite!.prepare('select count(*) count from evaluations').get(),
     ).toEqual({ count: 1 });
@@ -231,6 +253,50 @@ describe('requirements.extract V2.3.1 workflow', () => {
       firstEvaluation!.requirementSetId,
     );
     expect(firstSet).not.toBeNull();
+  });
+
+  it('reuses the compatible Requirement Set when candidate knowledge changes', async () => {
+    await createRequirementHandlers({ db: database })['requirements.extract']!(
+      task(snapshot, candidate),
+    );
+    await runEvaluationChain();
+    const repository = new EvaluationRepository(database);
+    const first = await repository.getCurrentEvaluation(candidate, snapshot);
+
+    await new CandidateRepository(database).addClaim({
+      id: 'claim-profile-change' as never,
+      candidateId: candidate,
+      kind: 'skill',
+      value: 'TypeScript',
+      state: 'SUPPORTED',
+    });
+    const handlers = {
+      ...createEligibilityHandlers({ db: database }),
+      ...createFitHandlers({ db: database }),
+      ...createQualityHandlers({ db: database }),
+      ...createDecisionHandlers(database),
+    };
+    for (let index = 0; index < 4; index += 1) {
+      const next = await ledger.claimNext({
+        leaseOwner: 'profile-change-chain',
+        leaseDurationMs: 30_000,
+      });
+      expect(next).not.toBeNull();
+      await handlers[next!.taskType]!(next!);
+      await ledger.markSucceeded(next!.id, 'profile-change-chain');
+    }
+
+    const second = await repository.getCurrentEvaluation(candidate, snapshot);
+    expect(second?.requirementSetId).toBe(first?.requirementSetId);
+    expect(second?.requirementInputFingerprint).toBe(
+      first?.requirementInputFingerprint,
+    );
+    expect(second?.fitInputFingerprint).not.toBe(first?.fitInputFingerprint);
+    expect(
+      database
+        .sqlite!.prepare('select count(*) count from requirement_sets')
+        .get(),
+    ).toEqual({ count: 1 });
   });
 
   it('persists grounded model proposals as candidates without changing canonical requirements', async () => {
@@ -313,5 +379,18 @@ describe('requirements.extract V2.3.1 workflow', () => {
       actionabilityCeiling: 'FIT_SIGNAL_SAFE',
     });
     expect(persisted?.requirements).toHaveLength(1);
+
+    await runEvaluationChain();
+    const evaluation = await new EvaluationRepository(
+      database,
+    ).getCurrentEvaluation(candidate, snapshot);
+    expect(evaluation).toMatchObject({
+      requirementInputMode: 'CANONICAL',
+      fitAssessmentStatus: 'INSUFFICIENT_CANDIDATE_EVIDENCE',
+      fitLevel: null,
+    });
+    expect(
+      await new EvaluationRepository(database).getFitFindings(evaluation!.id),
+    ).toHaveLength(1);
   });
 });

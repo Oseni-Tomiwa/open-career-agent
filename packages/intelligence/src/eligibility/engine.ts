@@ -12,6 +12,7 @@ export interface EligibilityFinding {
   summary: string;
   confidence: 'high' | 'medium' | 'low';
   evidenceReferences: string[]; // references to constraint or candidate claims
+  canonicalRequirementId?: string;
 }
 
 export interface EligibilityEvaluationResult {
@@ -38,6 +39,21 @@ export class EligibilityEngine {
     }>,
   ): EligibilityEvaluationResult {
     const constraints = this.extractor.extract(snapshot);
+    return this.evaluateConstraints(constraints, candidateClaims);
+  }
+
+  public evaluateConstraints(
+    constraints: readonly (EligibilityConstraint & {
+      readonly canonicalRequirementId?: string;
+    })[],
+    candidateClaims: Array<{
+      kind: string;
+      value?: string;
+      state: string;
+      scope?: string | null;
+    }>,
+    version = this.version,
+  ): EligibilityEvaluationResult {
     const findings: EligibilityFinding[] = [];
 
     // Group constraints by dimension
@@ -56,7 +72,17 @@ export class EligibilityEngine {
         dimensionConstraints,
         dimensionClaims,
       );
-      findings.push(finding);
+      if (finding) {
+        findings.push({
+          ...finding,
+          ...(dimensionConstraints[0]?.canonicalRequirementId
+            ? {
+                canonicalRequirementId:
+                  dimensionConstraints[0].canonicalRequirementId,
+              }
+            : {}),
+        });
+      }
     }
 
     // Check if any requirements in claims are unmet but no constraints exist (e.g. sponsorship)
@@ -87,7 +113,7 @@ export class EligibilityEngine {
     }
 
     return {
-      version: this.version,
+      version,
       overallState,
       findings,
     };
@@ -237,6 +263,18 @@ export class EligibilityEngine {
             summary: isStrictLocation
               ? 'Candidate location directly conflicts with strict geographic requirement.'
               : 'Location required does not match known candidate location.',
+            confidence: 'high',
+            evidenceReferences: [],
+          };
+        }
+        if (
+          candLoc &&
+          (candLoc.value === req.scope || candLoc.scope === req.scope)
+        ) {
+          return {
+            dimension,
+            state: 'eligible',
+            summary: 'Candidate location meets the explicit requirement.',
             confidence: 'high',
             evidenceReferences: [],
           };

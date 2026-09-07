@@ -31,6 +31,7 @@ import {
   snapshotId,
 } from '@oca/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { DECISION_ENGINE_VERSION } from '@oca/intelligence';
 
 import { createDecisionHandlers } from './workflow.js';
 import { createQualityHandlers } from '../quality/workflow.js';
@@ -181,7 +182,7 @@ describe('decision.evaluate durable workflow', () => {
     expect(decision).not.toBeNull();
     expect(decision?.priority).toBe('high-priority');
     expect(decision?.action).toBe('apply');
-    expect(decision?.engineVersion).toBe('decision-v1');
+    expect(decision?.engineVersion).toBe(DECISION_ENGINE_VERSION);
     expect(JSON.parse(decision?.reasonCodes ?? '[]')).toContain(
       'ACTIONABLE_LISTING',
     );
@@ -672,7 +673,7 @@ describe('decision.evaluate durable workflow', () => {
     const latestDecision =
       await repository.getLatestDecisionForSnapshot(snapshot);
     expect(latestDecision).not.toBeNull();
-    expect(latestDecision?.engineVersion).toBe('decision-v1');
+    expect(latestDecision?.engineVersion).toBe(DECISION_ENGINE_VERSION);
     expect(latestDecision?.priority).toBe('investigate');
     expect(latestDecision?.action).toBe('investigate');
   });

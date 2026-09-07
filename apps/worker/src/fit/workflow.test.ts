@@ -133,6 +133,7 @@ describe('fit.evaluate durable workflow', () => {
       eligibilityState: 'ineligible',
       eligibilityEngineVersion: 'eligibility-v1',
       fitLevel: 'strong',
+      fitAssessmentStatus: 'ASSESSED',
       fitEngineVersion: FIT_ENGINE_VERSION,
       qualityLevel: null,
     });
@@ -286,5 +287,11 @@ describe('fit.evaluate durable workflow', () => {
       taskType: 'fit.evaluate',
       payload: { snapshotId: snapshot, candidateId: candidate },
     });
+    expect(
+      await new EvaluationRepository(database).getCurrentEvaluation(
+        candidate,
+        snapshot,
+      ),
+    ).toMatchObject({ requirementInputMode: 'FALLBACK_TRANSIENT_V1' });
   });
 });

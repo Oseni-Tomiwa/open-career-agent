@@ -273,7 +273,10 @@ describe('FitEngine technical and evidence semantics', () => {
     );
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0]?.state).toBe('NO_EVIDENCE');
-    expect(result.overallLevel).toBe('weak');
+    expect(result).toMatchObject({
+      assessmentStatus: 'INSUFFICIENT_CANDIDATE_EVIDENCE',
+      overallLevel: null,
+    });
   });
 
   it('keeps an unsatisfied preferred alternative group lower impact', () => {
