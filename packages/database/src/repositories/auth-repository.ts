@@ -19,6 +19,30 @@ export function normalizeEmail(email: string): string {
   return email.trim().normalize('NFKC').toLocaleLowerCase('en-US');
 }
 
+function isOAuthFirstLoginUniqueViolation(error: unknown): boolean {
+  const visited = new Set<unknown>();
+  let current: unknown = error;
+
+  while (current && typeof current === 'object' && !visited.has(current)) {
+    visited.add(current);
+    const record = current as {
+      readonly code?: unknown;
+      readonly constraint?: unknown;
+      readonly cause?: unknown;
+    };
+    if (
+      record.code === '23505' &&
+      (record.constraint === 'pg_user_identities_provider_subject_unique' ||
+        record.constraint === 'pg_users_normalized_email_unique')
+    ) {
+      return true;
+    }
+    current = record.cause;
+  }
+
+  return false;
+}
+
 export class AuthRepository {
   private sqliteWriteTail: Promise<void> = Promise.resolve();
 
@@ -475,6 +499,33 @@ export class AuthRepository {
   }
 
   public async authenticateOAuthIdentity(input: {
+    readonly provider: 'google' | 'apple';
+    readonly providerSubject: string;
+    readonly providerEmail?: string;
+    readonly providerEmailVerified: boolean;
+    readonly passwordHash: string;
+    readonly session: { readonly tokenHash: string; readonly expiresAt: Date };
+    readonly now?: Date;
+  }): Promise<{ userId: string; candidateId: string; sessionId: string }> {
+    try {
+      return await this.authenticateOAuthIdentityOnce(input);
+    } catch (error) {
+      if (
+        this.handle.engine !== 'postgres' ||
+        !isOAuthFirstLoginUniqueViolation(error)
+      ) {
+        throw error;
+      }
+
+      // The unique provider identity is the concurrency arbiter. PostgreSQL
+      // rolls back the losing first-login transaction before surfacing 23505,
+      // so retry once to load the winning identity and create this request's
+      // session without leaving a second user or Candidate behind.
+      return await this.authenticateOAuthIdentityOnce(input);
+    }
+  }
+
+  private async authenticateOAuthIdentityOnce(input: {
     readonly provider: 'google' | 'apple';
     readonly providerSubject: string;
     readonly providerEmail?: string;

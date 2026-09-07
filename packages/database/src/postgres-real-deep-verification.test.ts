@@ -99,17 +99,20 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
     handle = openDatabase({ engine: 'postgres', databaseUrl: POSTGRES_URL! });
     if (handle.pgPool) {
       await handle.pgPool.query(
-        'DROP SCHEMA public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public;',
+        'DROP SCHEMA IF EXISTS public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public;',
       );
-      await handle.pgPool.query(postgresBaselineSql);
-      await handle.pgPool.query(postgresCanonicalIdentitySql);
-      await handle.pgPool.query(postgresCareerProfileLifecycleSql);
-      await handle.pgPool.query(postgresPublicIdentityRecoverySql);
+      await applyMigrations(handle);
     }
   });
 
   afterEach(async () => {
-    await handle.close();
+    try {
+      await handle.pgPool?.query(
+        'DROP SCHEMA IF EXISTS public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public;',
+      );
+    } finally {
+      await handle.close();
+    }
   });
 
   // ==================================================
@@ -234,16 +237,22 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
   // 2. FRESH POSTGRES MIGRATION
   // ==================================================
   it('Section 2: migrates a completely fresh PostgreSQL database cleanly and verifies constraints', async () => {
+    const adminUrl = new URL(POSTGRES_URL!);
+    adminUrl.pathname = '/postgres';
     const adminPool = new pg.Pool({
-      connectionString: 'postgres://postgres:postgres@127.0.0.1:5432/postgres',
+      connectionString: adminUrl.toString(),
     });
-    const freshDbName = `rolevia_fresh_${Date.now()}`;
-    await adminPool.query(`CREATE DATABASE ${freshDbName}`);
+    const freshDbName = `rolevia_test_fresh_${process.pid}`;
+    await adminPool.query(
+      `DROP DATABASE IF EXISTS "${freshDbName}" WITH (FORCE)`,
+    );
+    await adminPool.query(`CREATE DATABASE "${freshDbName}"`);
 
-    const freshUrl = `postgres://postgres:postgres@127.0.0.1:5432/${freshDbName}`;
+    const freshUrl = new URL(POSTGRES_URL!);
+    freshUrl.pathname = `/${freshDbName}`;
     const freshHandle = openDatabase({
       engine: 'postgres',
-      databaseUrl: freshUrl,
+      databaseUrl: freshUrl.toString(),
     });
 
     try {
@@ -301,7 +310,7 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
       expect(indexNames).toContain('pg_oauth_attempts_state_hash_unique');
     } finally {
       await freshHandle.close();
-      await adminPool.query(`DROP DATABASE ${freshDbName}`);
+      await adminPool.query(`DROP DATABASE "${freshDbName}" WITH (FORCE)`);
       await adminPool.end();
     }
   });
@@ -1158,8 +1167,10 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
 
   it('Section 17: converges concurrent OAuth first-login requests atomically on PostgreSQL', async () => {
     const authRepo = new AuthRepository(handle);
-    const providerSubject = `apple-concurrent-${Date.now()}`;
-    const providerEmail = `relay-${Date.now()}@privaterelay.appleid.com`;
+    const providerSubject = 'apple-concurrent-first-login';
+    const providerEmail = 'concurrent@privaterelay.appleid.com';
+    const now = new Date('2026-09-07T12:00:00.000Z');
+    const expiresAt = new Date('2026-09-07T13:00:00.000Z');
 
     const [first, second] = await Promise.all([
       authRepo.authenticateOAuthIdentity({
@@ -1169,9 +1180,10 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
         providerEmailVerified: true,
         passwordHash: 'social-only$v=1',
         session: {
-          tokenHash: `ses_hash_1_${Date.now()}`,
-          expiresAt: new Date(Date.now() + 3600 * 1000),
+          tokenHash: 'apple-concurrent-session-1',
+          expiresAt,
         },
+        now,
       }),
       authRepo.authenticateOAuthIdentity({
         provider: 'apple',
@@ -1180,9 +1192,10 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
         providerEmailVerified: true,
         passwordHash: 'social-only$v=1',
         session: {
-          tokenHash: `ses_hash_2_${Date.now()}`,
-          expiresAt: new Date(Date.now() + 3600 * 1000),
+          tokenHash: 'apple-concurrent-session-2',
+          expiresAt,
         },
+        now,
       }),
     ]);
 
@@ -1196,6 +1209,83 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
       ['apple', providerSubject],
     );
     expect(identCount.rows[0]?.count).toBe(1);
+
+    const ownershipCounts = await pool.query(`
+      SELECT
+        (SELECT count(*)::int FROM users) AS users,
+        (SELECT count(*)::int FROM candidates) AS candidates,
+        (SELECT count(*)::int FROM user_candidates) AS grants,
+        (SELECT count(*)::int FROM sessions) AS sessions
+    `);
+    expect(ownershipCounts.rows[0]).toEqual({
+      users: 1,
+      candidates: 1,
+      grants: 1,
+      sessions: 2,
+    });
+  });
+
+  it('Section 17: recovers an exact provider-subject race when concurrent OAuth requests link an existing user', async () => {
+    const authRepo = new AuthRepository(handle);
+    const account = await authRepo.createAccount({
+      email: 'existing-concurrent@example.com',
+      passwordHash: 'existing-password-hash',
+    });
+    const providerSubject = 'apple-existing-user-concurrent-login';
+    const now = new Date('2026-09-07T14:00:00.000Z');
+    const expiresAt = new Date('2026-09-07T15:00:00.000Z');
+
+    const results = await Promise.all([
+      authRepo.authenticateOAuthIdentity({
+        provider: 'apple',
+        providerSubject,
+        providerEmail: 'existing-concurrent@example.com',
+        providerEmailVerified: true,
+        passwordHash: 'unused-social-password-hash',
+        session: {
+          tokenHash: 'apple-existing-user-session-1',
+          expiresAt,
+        },
+        now,
+      }),
+      authRepo.authenticateOAuthIdentity({
+        provider: 'apple',
+        providerSubject,
+        providerEmail: 'existing-concurrent@example.com',
+        providerEmailVerified: true,
+        passwordHash: 'unused-social-password-hash',
+        session: {
+          tokenHash: 'apple-existing-user-session-2',
+          expiresAt,
+        },
+        now,
+      }),
+    ]);
+
+    expect(results.map((result) => result.userId)).toEqual([
+      account.userId,
+      account.userId,
+    ]);
+    expect(results.map((result) => result.candidateId)).toEqual([
+      account.candidateId,
+      account.candidateId,
+    ]);
+
+    const counts = await handle.pgPool!.query(
+      `SELECT
+         (SELECT count(*)::int FROM user_identities
+            WHERE provider = 'apple' AND provider_subject = $1) AS identities,
+         (SELECT count(*)::int FROM users) AS users,
+         (SELECT count(*)::int FROM candidates) AS candidates,
+         (SELECT count(*)::int FROM sessions) AS sessions`,
+      [providerSubject],
+    );
+    expect(counts.rows[0]).toEqual({
+      identities: 1,
+      users: 1,
+      candidates: 1,
+      sessions: 2,
+    });
   });
 
   it('Section 17: enforces Candidate ownership and strict two-user isolation on PostgreSQL', async () => {
