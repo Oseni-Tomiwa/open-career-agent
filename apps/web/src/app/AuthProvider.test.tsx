@@ -240,3 +240,64 @@ async function signIn(email: string) {
   });
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 }
+
+describe('local personal identity', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+  });
+  it('ignores a stale demo session and resolves deep links from the server', async () => {
+    vi.resetModules();
+    vi.stubEnv('VITE_PRODUCT_DATA_SOURCE', 'api');
+    vi.stubEnv('VITE_DEPLOYMENT_MODE', 'development');
+    vi.stubEnv('VITE_DEVELOPMENT_CANDIDATE_ID', '');
+    window.history.replaceState({}, '', '/overview');
+    sessionStorage.setItem(
+      'rolevia_session',
+      JSON.stringify({
+        user: { id: 'demo', email: 'fiction@example.test' },
+        candidateIds: ['fake'],
+        primaryCandidateId: 'fake',
+      }),
+    );
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            mode: 'local',
+            state: 'READY',
+            candidate: {
+              id: 'personal',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+    vi.stubGlobal('fetch', fetcher);
+    const { AuthProvider } = await import('./AuthProvider.js');
+    const { useAuth } = await import('./authContext.js');
+    function Shell() {
+      const auth = useAuth();
+      return (
+        <p>
+          {auth.candidateId}:{auth.session === null ? 'null' : 'present'}
+        </p>
+      );
+    }
+    render(
+      <AuthProvider>
+        <Shell />
+      </AuthProvider>,
+    );
+    expect(await screen.findByText('personal:null')).toBeVisible();
+    expect(
+      fetcher.mock.calls.every(
+        ([url]) => typeof url === 'string' && url.endsWith('/local-workspace'),
+      ),
+    ).toBe(true);
+  });
+});

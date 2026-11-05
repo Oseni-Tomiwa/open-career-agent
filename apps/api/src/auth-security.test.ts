@@ -65,6 +65,7 @@ describe('Cloud authentication adversarial security', () => {
         port: 3000,
         webOrigin: 'https://app.rolevia.test',
         identityMode: 'cloud',
+        localWorkspaceSetupEnabled: true,
         sessionTtlHours: 24,
       },
       database,
@@ -133,6 +134,30 @@ describe('Cloud authentication adversarial security', () => {
       .get() as { count: number };
     return result.count;
   }
+
+  it('never exposes local setup to authenticated or anonymous cloud requests even with opt-in', async () => {
+    const account = await registerBearer('local-setup-boundary@example.com');
+    for (const authorization of [undefined, `Bearer ${account.token}`]) {
+      for (const method of ['GET', 'POST'] as const) {
+        const result = await app.inject({
+          method,
+          url: '/local-workspace',
+          headers: {
+            host: '127.0.0.1:3000',
+            origin: 'https://app.rolevia.test',
+            ...(authorization ? { authorization } : {}),
+          },
+          ...(method === 'POST' ? { payload: {} } : {}),
+        });
+        expect(result.statusCode).toBe(404);
+      }
+    }
+    expect(
+      database
+        .sqlite!.prepare('select count(*) as total from candidates')
+        .get()!.total,
+    ).toBe(1);
+  });
 
   it('rolls back User, Candidate, grant, and session when any registration step fails', async () => {
     for (const [table, label] of [

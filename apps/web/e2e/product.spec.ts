@@ -458,3 +458,20 @@ test('auth split-panel provides password visibility toggle and dynamic requireme
   await passwordInput.fill('sufficiently-long-secure-password');
   await expect(reqIndicator).toHaveClass(/met/);
 });
+
+test('demo-to-personal guidance keeps the fictional demo active until a configured relaunch', async ({
+  page,
+}) => {
+  await page.goto('/overview');
+  await expect(page.getByText('Fictional development dataset')).toBeVisible();
+  await page
+    .getByText('Demo mode · use personal workspace', { exact: true })
+    .click();
+  await expect(
+    page.getByText(/This requires a separate configured relaunch/),
+  ).toBeVisible();
+  await expect(page.getByText('Fictional development dataset')).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Create my workspace' }),
+  ).toHaveCount(0);
+});

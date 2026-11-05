@@ -48,7 +48,7 @@ export function parseBrowserConfig(input: {
   }
   if (
     productDataSource === 'api' &&
-    deploymentMode !== 'cloud' &&
+    deploymentMode === 'self-hosted' &&
     !environment.VITE_DEVELOPMENT_CANDIDATE_ID
   ) {
     throw new Error(

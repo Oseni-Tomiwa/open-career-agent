@@ -1,4 +1,8 @@
 import {
+  LocalWorkspaceStatusSchema,
+  LocalWorkspaceReadySchema,
+  type LocalWorkspaceReady,
+  type LocalWorkspaceStatus,
   AddApplicationEventInputSchema,
   ApplicationDetailResponseSchema,
   ApplicationListResponseSchema,
@@ -89,6 +93,51 @@ export class RoleviaApiClient {
     };
     this.credentialProvider =
       options.credentialProvider ?? (() => ({ credentials: 'same-origin' }));
+  }
+
+  public async getLocalWorkspace(
+    options?: RequestOptions,
+  ): Promise<LocalWorkspaceStatus> {
+    const result = await this.request(
+      '/local-workspace',
+      LocalWorkspaceStatusSchema,
+      'GET',
+      undefined,
+      options,
+      true,
+      'local',
+    );
+    if (result.state === 'READY') this.validateWorkspaceDates(result);
+    return result;
+  }
+
+  public async initializeLocalWorkspace(
+    options?: RequestOptions,
+  ): Promise<LocalWorkspaceReady> {
+    const result = await this.request(
+      '/local-workspace',
+      LocalWorkspaceReadySchema,
+      'POST',
+      {},
+      options,
+      true,
+      'local',
+    );
+    this.validateWorkspaceDates(result);
+    return result;
+  }
+
+  private validateWorkspaceDates(result: LocalWorkspaceReady): void {
+    for (const value of [
+      result.candidate.createdAt,
+      result.candidate.updatedAt,
+    ]) {
+      const date = new Date(value);
+      if (!Number.isFinite(date.getTime()) || date.toISOString() !== value)
+        throw new ValidationError(
+          'Workspace response contains an invalid timestamp.',
+        );
+    }
   }
 
   public async register(
@@ -640,14 +689,20 @@ export class RoleviaApiClient {
     body?: unknown,
     options?: RequestOptions,
     sensitiveResponse = false,
+    transport: 'default' | 'local' = 'default',
   ): Promise<Static<TSchemaType>> {
     const url = `${this.baseUrl}${path}`;
-    const credentials = await this.resolveCredentials();
+    const credentials =
+      transport === 'local'
+        ? { credentials: 'omit' as const }
+        : await this.resolveCredentials();
     const headers: Record<string, string> = {
-      ...this.defaultHeaders,
-      ...credentials.headers,
+      ...(transport === 'local'
+        ? { accept: 'application/json' }
+        : this.defaultHeaders),
+      ...(transport === 'default' ? credentials.headers : {}),
       ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-      ...options?.headers,
+      ...(transport === 'default' ? options?.headers : {}),
     };
 
     let response: Response;
@@ -655,6 +710,7 @@ export class RoleviaApiClient {
       response = await this.fetcher(url, {
         method,
         headers,
+        ...(transport === 'local' ? { redirect: 'error' as const } : {}),
         ...(credentials.credentials
           ? { credentials: credentials.credentials }
           : {}),

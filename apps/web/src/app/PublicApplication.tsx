@@ -16,6 +16,7 @@ interface PublicApplicationProps {
   readonly client: RoleviaApiClient;
   readonly unavailable?: boolean;
   readonly onAuthenticated: (session: AuthSession) => void;
+  readonly onEnterLocalWorkspace?: () => void;
 }
 
 export function PublicApplication(props: PublicApplicationProps) {
@@ -1182,6 +1183,7 @@ function AuthPage({
   mode,
   client,
   onAuthenticated,
+  onEnterLocalWorkspace,
   unavailable,
 }: PublicApplicationProps & { readonly mode: 'sign-in' | 'create-account' }) {
   const creating = mode === 'create-account';
@@ -1407,16 +1409,25 @@ function AuthPage({
       {!creating && browserConfig.deploymentMode === 'development' && (
         <div className="dev-auth-card">
           <div className="dev-badge-row">
-            <span className="dev-badge">[DEV ONLY] Development profile</span>
+            <span className="dev-badge">
+              {onEnterLocalWorkspace
+                ? 'Personal · local API'
+                : 'Demo · fictional data'}
+            </span>
           </div>
           <p>
-            Bypass external authentication to inspect the local candidate
-            workspace.
+            {onEnterLocalWorkspace
+              ? 'Open your personal workspace using the identity configured on your local API.'
+              : 'Explore a temporary workspace with fictional development records.'}
           </p>
           <button
             className="dev-auth-btn"
             type="button"
             onClick={() => {
+              if (onEnterLocalWorkspace) {
+                onEnterLocalWorkspace();
+                return;
+              }
               onAuthenticated({
                 user: { id: 'usr_dev', email: 'developer@rolevia.test' },
                 candidateIds: [
@@ -1428,7 +1439,9 @@ function AuthPage({
               });
             }}
           >
-            Continue with development profile
+            {onEnterLocalWorkspace
+              ? 'Open personal workspace'
+              : 'Continue with development profile'}
           </button>
         </div>
       )}

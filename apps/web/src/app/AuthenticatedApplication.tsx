@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { RouterProvider } from 'react-router-dom';
 
 import { browserConfig } from '../config.js';
@@ -10,18 +11,24 @@ const cookieCredentials = () => ({ credentials: 'include' as const });
 
 export function AuthenticatedApplication() {
   const auth = useAuth();
-  const repository =
-    auth.cloud && auth.candidateId
-      ? new ApiProductRepository(
-          browserConfig.apiBaseUrl,
-          auth.candidateId,
-          (...args) => fetch(...args),
-          cookieCredentials,
-        )
-      : undefined;
+  const repository = useMemo(
+    () =>
+      browserConfig.productDataSource === 'api' && auth.candidateId
+        ? new ApiProductRepository(
+            browserConfig.apiBaseUrl,
+            auth.candidateId,
+            (...args) => fetch(...args),
+            auth.cloud ? cookieCredentials : undefined,
+          )
+        : undefined,
+    [auth.candidateId, auth.cloud],
+  );
 
   return (
-    <ProductDataProvider {...(repository ? { repository } : {})}>
+    <ProductDataProvider
+      key={`${browserConfig.productDataSource}:${browserConfig.deploymentMode}:${auth.candidateId ?? 'demo'}`}
+      {...(repository ? { repository } : {})}
+    >
       <RouterProvider router={router} />
     </ProductDataProvider>
   );

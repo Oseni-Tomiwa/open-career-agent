@@ -32,6 +32,7 @@ import { createTaskHandlers } from '../ingestion/workflow.js';
 import { createRequirementHandlers } from '../requirements/workflow.js';
 
 const DAY_MS = 86_400_000;
+const REFERENCE_TIME = new Date('2026-08-30T10:00:00.000Z');
 
 function task(
   taskType: string,
@@ -65,6 +66,10 @@ describe('quality.evaluate durable workflow', () => {
   const observationId = 'so_greenhouse_123';
 
   beforeEach(async () => {
+    // Fixture observations and explicit evaluation dates share one calendar.
+    // Leave scheduling/IO timers real; only Date is controlled.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(REFERENCE_TIME);
     directory = mkdtempSync(join(tmpdir(), 'oca-qual-worker-'));
     database = openDatabase(join(directory, 'qual.sqlite'));
     await applyMigrations(database);
@@ -130,9 +135,13 @@ describe('quality.evaluate durable workflow', () => {
   });
 
   afterEach(async () => {
-    await database.close();
-    rmSync(directory, { recursive: true, force: true });
-    vi.restoreAllMocks();
+    try {
+      await database.close();
+      rmSync(directory, { recursive: true, force: true });
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
   });
 
   async function createEvaluation(id: string) {
@@ -268,7 +277,7 @@ describe('quality.evaluate durable workflow', () => {
     const evaluation = await createEvaluation('eval-freshness-schedule');
     const handlers = createQualityHandlers({ db: database });
 
-    const baseTime = new Date('2026-08-30T10:00:00Z');
+    const baseTime = new Date(REFERENCE_TIME);
     await handlers['quality.evaluate']!(
       task('quality.evaluate', {
         evaluationId: evaluation,

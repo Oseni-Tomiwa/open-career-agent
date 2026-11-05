@@ -360,7 +360,7 @@ describe('Rolevia public application', () => {
     render(<PublicApplication client={client} onAuthenticated={onAuth} />);
 
     // Dev profile card
-    expect(screen.getByText('[DEV ONLY] Development profile')).toBeVisible();
+    expect(screen.getByText('Demo · fictional data')).toBeVisible();
     fireEvent.click(
       screen.getByRole('button', { name: 'Continue with development profile' }),
     );

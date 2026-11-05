@@ -19,7 +19,6 @@ corepack enable
 corepack prepare pnpm@11.17.0 --activate
 cp .env.example .env
 pnpm install --frozen-lockfile
-pnpm db:migrate
 pnpm dev
 ```
 
@@ -38,6 +37,7 @@ See the [development setup guide](docs/development/setup.md) for service endpoin
 - [Architecture decision records](docs/adrs/README.md)
 - [Implementation stack and repository strategy](docs/implementation/stack-evaluation.md)
 - [Development setup](docs/development/setup.md)
+- [Personal tracker milestone status](docs/product/project-status.md)
 
 ## License
 

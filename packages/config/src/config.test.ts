@@ -97,10 +97,17 @@ describe('configuration', () => {
     });
   });
 
-  it('requires a development candidate in API mode', () => {
+  it('resolves development identity on the server but preserves self-hosted configuration', () => {
     expect(() =>
-      parseBrowserConfig({ VITE_PRODUCT_DATA_SOURCE: 'api' }),
+      parseBrowserConfig({
+        VITE_PRODUCT_DATA_SOURCE: 'api',
+        VITE_DEPLOYMENT_MODE: 'self-hosted',
+      }),
     ).toThrow('VITE_DEVELOPMENT_CANDIDATE_ID');
+    expect(
+      parseBrowserConfig({ VITE_PRODUCT_DATA_SOURCE: 'api' })
+        .developmentCandidateId,
+    ).toBeUndefined();
     expect(
       parseBrowserConfig({
         VITE_PRODUCT_DATA_SOURCE: 'api',

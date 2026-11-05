@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   candidateId,
+  claimId,
   evaluationId,
   opportunityId,
   snapshotId,
@@ -15,6 +16,7 @@ import {
 } from '@oca/domain';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import pg from 'pg';
+import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
 
 import { applyMigrations } from './migrate.js';
 import { openDatabase, type DatabaseHandle } from './client.js';
@@ -118,6 +120,160 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
   // ==================================================
   // 1. PROVE REAL POSTGRES EXECUTION
   // ==================================================
+  it('initializes one durable candidate from independent sessions released by a start barrier', async () => {
+    const clients: pg.PoolClient[] = [];
+    let requests: ReturnType<CandidateRepository['ensureCandidate']>[] = [];
+    const id = candidateId('workspace-personal');
+    try {
+      // Hold each connection until all requests finish so repository operations
+      // cannot silently share or switch backend sessions through the pool.
+      for (let i = 0; i < 8; i++) clients.push(await handle.pgPool!.connect());
+      const workers = await Promise.all(
+        clients.map(async (client, index) => {
+          const session = await client.query<{ pid: number }>(
+            'SELECT pg_backend_pid() AS pid',
+          );
+          const independentHandle: DatabaseHandle = {
+            engine: 'postgres',
+            db: drizzlePg({ client }),
+            close: () => undefined,
+          };
+          return {
+            pid: session.rows[0]!.pid,
+            repository: new CandidateRepository(independentHandle),
+            timestamp: 1000 + index,
+          };
+        }),
+      );
+      expect(new Set(workers.map((worker) => worker.pid)).size).toBe(8);
+
+      // Readiness is established above for every pinned session. No INSERT
+      // starts until the shared barrier is explicitly released below.
+      let releaseStart!: () => void;
+      const start = new Promise<void>((resolve) => {
+        releaseStart = resolve;
+      });
+      requests = workers.map(async (worker) => {
+        await start;
+        return worker.repository.ensureCandidate(id, worker.timestamp);
+      });
+      releaseStart();
+      const rows = await Promise.all(requests);
+      expect(rows).toHaveLength(8);
+      expect(rows[0]!.id).toBe('workspace-personal');
+      expect(rows[0]!.createdAt.getTime()).toBeGreaterThanOrEqual(1000);
+      expect(rows[0]!.createdAt.getTime()).toBeLessThanOrEqual(1007);
+      expect(rows[0]!.updatedAt).toEqual(rows[0]!.createdAt);
+      for (const row of rows) expect(row).toEqual(rows[0]);
+      expect(
+        await new CandidateRepository(handle).ensureCandidate(id, 9000),
+      ).toEqual(rows[0]);
+      const reopened = openDatabase({
+        engine: 'postgres',
+        databaseUrl: POSTGRES_URL!,
+      });
+      try {
+        expect(
+          await new CandidateRepository(reopened).ensureCandidate(id, 12000),
+        ).toEqual(rows[0]);
+      } finally {
+        await reopened.close();
+      }
+      expect(
+        (
+          await handle.pgPool!.query<{ total: string }>(
+            'select count(*) as total from candidates',
+          )
+        ).rows[0]!.total,
+      ).toBe('1');
+    } finally {
+      await Promise.allSettled(requests);
+      for (const client of clients) client.release();
+    }
+  });
+
+  it('preserves populated and unrelated candidate records on initialization replay and database reopen', async () => {
+    const repository = new CandidateRepository(handle);
+    const personal = candidateId('workspace-populated');
+    const unrelated = candidateId('workspace-unrelated');
+    await repository.createCandidate(personal, 1000);
+    await repository.createCandidate(unrelated, 2000);
+    // Populate both owners before replaying setup. An accidental replacement,
+    // cascade, ownership rewrite or timestamp update must change this snapshot.
+    for (const [owner, suffix] of [
+      [personal, 'personal'],
+      [unrelated, 'unrelated'],
+    ] as const) {
+      await repository.addClaim({
+        id: claimId(`workspace-claim-${suffix}`),
+        candidateId: owner,
+        kind: 'skill',
+        value: `Retained ${suffix} skill`,
+        state: 'UNKNOWN',
+      });
+      const opportunity = opportunityId(`workspace-opportunity-${suffix}`);
+      const opportunities = new OpportunityRepository(handle);
+      await opportunities.createOpportunity(opportunity);
+      await opportunities.appendSnapshot({
+        id: snapshotId(`workspace-snapshot-${suffix}`),
+        opportunityId: opportunity,
+        title: `Retained ${suffix} role`,
+        organization: 'Fixture organization',
+        content: 'Existing retained record',
+        fingerprint: `workspace-fingerprint-${suffix}`,
+      });
+      await new ApplicationRepository(handle).createApplication({
+        id: applicationId(`workspace-application-${suffix}`),
+        candidateId: owner,
+        opportunityId: opportunity,
+        status: 'Saved',
+        note: `Retained ${suffix} note`,
+      });
+    }
+    const tables = [
+      'candidates',
+      'candidate_claims',
+      'opportunities',
+      'opportunity_snapshots',
+      'applications',
+      'application_events',
+      'background_tasks',
+    ] as const;
+    async function capture(database: DatabaseHandle) {
+      return Promise.all(
+        tables.map(async (table) => ({
+          table,
+          rows: (
+            await database.pgPool!.query<Record<string, unknown>>(
+              `SELECT * FROM ${table} ORDER BY id`,
+            )
+          ).rows,
+        })),
+      );
+    }
+    const before = await capture(handle);
+    for (const table of tables.filter(
+      (table) => table !== 'background_tasks',
+    )) {
+      expect(
+        before.find((record) => record.table === table)!.rows,
+      ).toHaveLength(table === 'application_events' ? 4 : 2);
+    }
+    const expected = {
+      id: 'workspace-populated',
+      createdAt: new Date(1000),
+      updatedAt: new Date(1000),
+    };
+    expect(await repository.ensureCandidate(personal, 9000)).toEqual(expected);
+    expect(await capture(handle)).toEqual(before);
+    await handle.close();
+    handle = openDatabase({ engine: 'postgres', databaseUrl: POSTGRES_URL! });
+    expect(
+      await new CandidateRepository(handle).ensureCandidate(personal, 12000),
+    ).toEqual(expected);
+    expect(await capture(handle)).toEqual(before);
+  });
+
   it('Section 1: proves real PostgreSQL execution, driver type, and version query', async () => {
     expect(handle.engine).toBe('postgres');
     expect(handle.pgPool).toBeDefined();

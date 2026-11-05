@@ -112,7 +112,12 @@ export function AppShell() {
             </span>
             <span>
               <strong>{snapshot.profile.name}</strong>
-              <small>{auth.session?.user.email ?? 'Development profile'}</small>
+              <small>
+                {auth.session?.user.email ??
+                  (dataSource === 'seed'
+                    ? 'Demo profile'
+                    : 'Personal workspace')}
+              </small>
             </span>
           </div>
           <button
@@ -135,6 +140,19 @@ export function AppShell() {
                 ? 'Local real-candidate data'
                 : 'API-backed candidate workspace'}
           </span>
+          {dataSource === 'seed' ? (
+            <details className="demo-transition">
+              <summary>Demo mode · use personal workspace</summary>
+              <p>
+                Demo records are fictional and temporary. To use personal data,
+                stop this demo and relaunch with API mode and the configured
+                local API. This requires a separate configured relaunch; no demo
+                records are imported.
+              </p>
+            </details>
+          ) : (
+            <span>Personal mode</span>
+          )}
           {apiState === 'unavailable' && (
             <span className="api-unavailable">
               API unavailable · API-mode opportunity data could not be refreshed

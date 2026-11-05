@@ -64,6 +64,7 @@ import {
 } from '@oca/schemas';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 
+import { registerLocalWorkspace } from './local-workspace.js';
 import { registerAuthBoundary, type AuthBoundaryServices } from './auth.js';
 
 const SERVICE = { name: 'api', version: '0.0.0' } as const;
@@ -237,6 +238,8 @@ export async function createApiApp(
     options.database,
     options.authServices,
   );
+
+  registerLocalWorkspace(app, options.config, options.database);
 
   const profileParams = Type.Object({ candidateId: Type.String() });
   const claimParams = Type.Object({

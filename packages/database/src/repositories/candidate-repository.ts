@@ -20,6 +20,32 @@ export class CandidateRepository {
     });
   }
 
+  /** One atomic insert; a failed subsequent read can safely be retried. */
+  public async ensureCandidate(
+    id: CandidateId,
+    timestamp: number = Date.now(),
+  ): Promise<{ id: string; createdAt: Date; updatedAt: Date }> {
+    if (!id.trim() || !Number.isFinite(timestamp))
+      throw new TypeError('Invalid candidate initialization');
+    const { candidates } = getTables(this.db);
+    const db = this.db.db as any;
+    await db
+      .insert(candidates)
+      .values({
+        id,
+        createdAt: new Date(timestamp),
+        updatedAt: new Date(timestamp),
+      })
+      .onConflictDoNothing({ target: candidates.id });
+    const row = await this.getCandidate(id);
+    if (!row) throw new Error('Initialized candidate could not be read');
+    return {
+      id: String(row.id),
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
+    };
+  }
+
   public async getCandidate(id: CandidateId): Promise<any | null> {
     const { candidates } = getTables(this.db);
     const db = this.db.db as any;

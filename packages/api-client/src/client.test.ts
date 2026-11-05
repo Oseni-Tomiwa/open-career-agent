@@ -341,3 +341,107 @@ describe('RoleviaApiClient', () => {
     );
   });
 });
+
+describe('local workspace transport', () => {
+  const ready = {
+    mode: 'local',
+    state: 'READY',
+    candidate: {
+      id: 'personal',
+      createdAt: '2026-11-03T00:00:00.000Z',
+      updatedAt: '2026-11-03T00:00:00.000Z',
+    },
+  };
+  it('omits all credentials and redirects without invoking the credential provider', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(ready), { status: 200 }));
+    const credentials = vi.fn(() => {
+      throw new Error('credential provider must not run');
+    });
+    const client = new RoleviaApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetcher,
+      credentialProvider: credentials,
+      defaultHeaders: { authorization: 'private' },
+    });
+    const controller = new AbortController();
+    expect(
+      await client.initializeLocalWorkspace({
+        signal: controller.signal,
+        headers: { Authorization: 'also private' },
+      }),
+    ).toEqual(ready);
+    expect(credentials).not.toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://localhost:3000/local-workspace',
+      {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: '{}',
+        signal: controller.signal,
+        credentials: 'omit',
+        redirect: 'error',
+      },
+    );
+  });
+  it('reads missing state without inventing an identity and validates calendar dates', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ mode: 'local', state: 'SETUP_REQUIRED' }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ...ready,
+            candidate: {
+              ...ready.candidate,
+              createdAt: '2026-02-31T00:00:00.000Z',
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+    const client = new RoleviaApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetcher,
+    });
+    expect(await client.getLocalWorkspace()).toEqual({
+      mode: 'local',
+      state: 'SETUP_REQUIRED',
+    });
+    await expect(client.getLocalWorkspace()).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+  });
+  it.each([400, 403, 404, 503])(
+    'preserves setup failure status %s instead of returning missing state',
+    async (status) => {
+      const client = new RoleviaApiClient({
+        baseUrl: 'http://localhost:3000',
+        fetcher: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: 'LOCAL_WORKSPACE_FORBIDDEN',
+                message: 'Setup unavailable',
+                requestId: 'r1',
+              },
+            }),
+            { status },
+          ),
+        ),
+      });
+      await expect(client.getLocalWorkspace()).rejects.toMatchObject({
+        statusCode: status,
+      });
+    },
+  );
+});

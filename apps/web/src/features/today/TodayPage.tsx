@@ -37,11 +37,12 @@ function decisionState(value: string | null): Decision | null {
 }
 
 export function TodayPage() {
-  const { getTodayDashboard, snapshot } = useProductData();
+  const { getTodayDashboard, snapshot, dataSource } = useProductData();
   const [dashboard, setDashboard] = useState<TodayDashboardResponse | null>(
     null,
   );
   const [loading, setLoading] = useState(true);
+  const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -68,7 +69,7 @@ export function TodayPage() {
       active = false;
       controller.abort();
     };
-  }, [getTodayDashboard]);
+  }, [getTodayDashboard, attempt]);
 
   if (loading) {
     return (
@@ -82,13 +83,91 @@ export function TodayPage() {
   if (error || !dashboard) {
     return (
       <div className="page today-page">
-        <EmptyState
-          description={error ?? 'Overview dashboard is currently unavailable.'}
-          title="Error loading dashboard"
-        />
+        <div role="alert">
+          <EmptyState
+            description={
+              error ?? 'Overview dashboard is currently unavailable.'
+            }
+            title="Error loading dashboard"
+          />
+        </div>
+        <button
+          className="button button-secondary"
+          type="button"
+          onClick={() => {
+            setLoading(true);
+            setError(null);
+            setAttempt((value) => value + 1);
+          }}
+        >
+          Retry overview
+        </button>
       </div>
     );
   }
+
+  const emptyPersonal =
+    dataSource === 'api' &&
+    snapshot.opportunities.length === 0 &&
+    snapshot.applications.length === 0 &&
+    [
+      dashboard.priorityOpportunities,
+      dashboard.needsAttention,
+      dashboard.recentChanges,
+      dashboard.discoveryActivity,
+      dashboard.applicationActivity,
+      dashboard.careerMemoryAttention,
+    ].every((items) => items.length === 0);
+  if (emptyPersonal)
+    return (
+      <div className="page today-page">
+        <header className="workspace-page-header">
+          <div>
+            <p className="eyebrow">Personal workspace</p>
+            <h1 className="workspace-page-title">
+              Your personal workspace is ready
+            </h1>
+            <p className="workspace-page-summary">
+              A real starting point. No demo records have been added.
+            </p>
+          </div>
+        </header>
+        <section
+          className="workspace-empty-personal"
+          aria-label="Empty personal workspace"
+        >
+          <dl className="workspace-facts">
+            <div>
+              <dt>Opportunities</dt>
+              <dd>0 opportunities</dd>
+            </div>
+            <div>
+              <dt>Applications</dt>
+              <dd>0 applications</dd>
+            </div>
+          </dl>
+          <h2>Start with your foundations</h2>
+          <p>
+            Review your Career Profile and Search Preferences. There are no
+            priorities, follow-ups, or activity to show yet.
+          </p>
+          <div className="workspace-empty-actions">
+            <Link className="button button-primary" to="/settings">
+              Career Profile
+            </Link>
+            <Link
+              className="button button-secondary"
+              to="/discover?tab=preferences"
+            >
+              Search Preferences
+            </Link>
+          </div>
+          <p className="workspace-setup-note">
+            Manual opportunity capture is planned for a later milestone.
+          </p>
+        </section>
+      </div>
+    );
 
   const dateFormatted = new Date(dashboard.generatedAt).toLocaleDateString(
     'en-US',

@@ -10,6 +10,7 @@ import {
 import { browserConfig } from '../config.js';
 import { AppLoading } from './AppLoading.js';
 import { AuthContext, type AuthSession } from './authContext.js';
+import { LocalWorkspaceGate } from './LocalWorkspaceGate.js';
 import { PublicApplication } from './PublicApplication.js';
 
 const cookieCredentials = () => ({ credentials: 'include' as const });
@@ -65,6 +66,9 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
   const cloud =
     browserConfig.productDataSource === 'api' &&
     browserConfig.deploymentMode === 'cloud';
+  const local =
+    browserConfig.productDataSource === 'api' &&
+    browserConfig.deploymentMode === 'development';
   const client = useMemo(
     () =>
       new RoleviaApiClient({
@@ -74,7 +78,7 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     [],
   );
   const [session, setSessionState] = useState<AuthSession | null>(() =>
-    getPersistedSession(),
+    local ? null : getPersistedSession(),
   );
 
   const setSession = useCallback((next: AuthSession | null) => {
@@ -135,6 +139,15 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
   if (status === 'anonymous' || status === 'unavailable') {
     return (
       <PublicApplication
+        {...(local
+          ? {
+              onEnterLocalWorkspace: () => {
+                enterAuthenticatedApplication();
+                setSession(null);
+                setStatus('authenticated');
+              },
+            }
+          : {})}
         onAuthenticated={(current) => {
           enterAuthenticatedApplication();
           setSession(current);
@@ -152,14 +165,14 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
         session,
         cloud,
         signOut,
-        ...(session?.primaryCandidateId
+        ...(!local && session?.primaryCandidateId
           ? { candidateId: session.primaryCandidateId }
-          : browserConfig.developmentCandidateId
+          : !local && browserConfig.developmentCandidateId
             ? { candidateId: browserConfig.developmentCandidateId }
             : {}),
       }}
     >
-      {children}
+      {local ? <LocalWorkspaceGate>{children}</LocalWorkspaceGate> : children}
     </AuthContext>
   );
 }

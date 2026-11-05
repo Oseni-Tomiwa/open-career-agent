@@ -32,6 +32,9 @@ const ServerEnvironmentSchema = Type.Object(
   {
     APP_ENV: Type.Optional(AppEnvironmentSchema),
     IDENTITY_MODE: Type.Optional(IdentityModeSchema),
+    LOCAL_WORKSPACE_SETUP_ENABLED: Type.Optional(
+      Type.Union([Type.Literal('true'), Type.Literal('false')]),
+    ),
     TRUSTED_CANDIDATE_ID: Type.Optional(Type.String({ minLength: 1 })),
     DATABASE_ENGINE: Type.Optional(DatabaseEngineSchema),
     DATABASE_URL: Type.Optional(Type.String({ minLength: 1 })),
@@ -76,6 +79,7 @@ export interface ApiConfig extends SharedServerConfig {
   readonly webOrigin: string;
   readonly identityMode: IdentityMode;
   readonly trustedCandidateId?: string;
+  readonly localWorkspaceSetupEnabled?: boolean;
   readonly sessionTtlHours: number;
   readonly oauthCallbackBaseUrl?: string;
   readonly googleOAuth?: OAuthProviderConfig;
@@ -98,6 +102,7 @@ function selectEnvironment(input: NodeJS.ProcessEnv) {
     APP_ENV: input.APP_ENV,
     IDENTITY_MODE: input.IDENTITY_MODE,
     TRUSTED_CANDIDATE_ID: input.TRUSTED_CANDIDATE_ID,
+    LOCAL_WORKSPACE_SETUP_ENABLED: input.LOCAL_WORKSPACE_SETUP_ENABLED,
     DATABASE_ENGINE: input.DATABASE_ENGINE,
     DATABASE_URL: input.DATABASE_URL,
     MIGRATION_MODE: input.MIGRATION_MODE,
@@ -230,6 +235,8 @@ export function parseApiConfig(input: NodeJS.ProcessEnv): ApiConfig {
     migrationMode:
       environment.MIGRATION_MODE ??
       (identityMode === 'cloud' ? 'manual' : 'auto'),
+    localWorkspaceSetupEnabled:
+      environment.LOCAL_WORKSPACE_SETUP_ENABLED === 'true',
     sessionTtlHours: parsePositiveInteger(
       'SESSION_TTL_HOURS',
       environment.SESSION_TTL_HOURS ?? '168',

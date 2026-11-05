@@ -65,3 +65,6 @@ jobs:
 
       - name: Browser smoke test
         run: pnpm test:e2e
+
+      - name: Personal workspace acceptance
+        run: pnpm test:e2e:workspace

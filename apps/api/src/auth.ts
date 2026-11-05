@@ -30,6 +30,8 @@ import {
 import { Type } from '@sinclair/typebox';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
+import { guardLocalWorkspace } from './local-workspace.js';
+
 import { createAuthRateLimiter } from './rate-limit.js';
 import { DevelopmentEmailService, type EmailService } from './email-service.js';
 import {
@@ -302,6 +304,10 @@ export function registerAuthBoundary(
 
   app.addHook('onRequest', async (request, reply) => {
     const route = request.routeOptions.url;
+    if (route === '/local-workspace') {
+      await guardLocalWorkspace(request, reply, config);
+      return;
+    }
     if (route && PUBLIC_ROUTES.has(route)) return;
 
     if (config.identityMode !== 'cloud' && route?.startsWith('/auth/')) {
