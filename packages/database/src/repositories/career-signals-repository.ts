@@ -1,3 +1,8 @@
+import {
+  publicOpportunity,
+  providerListing,
+  discoveryLineage,
+} from '../public-opportunity-scope.js';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { CandidateId } from '@oca/domain';
 import type {
@@ -44,7 +49,12 @@ export class CareerSignalsRepository {
         searchTargetId: discoveryMatches.searchTargetId,
       })
       .from(discoveryMatches)
-      .where(eq(discoveryMatches.candidateId, cId));
+      .where(
+        and(
+          eq(discoveryMatches.candidateId, cId),
+          discoveryLineage(discoveryMatches),
+        ),
+      );
 
     // 2. Collect unique canonical opportunity IDs to prevent double-counting
     const uniqueOppIds = Array.from(
@@ -83,7 +93,12 @@ export class CareerSignalsRepository {
       const snapshots = await db
         .select()
         .from(opportunitySnapshots)
-        .where(eq(opportunitySnapshots.opportunityId, oppIdStr));
+        .where(
+          and(
+            eq(opportunitySnapshots.opportunityId, oppIdStr),
+            publicOpportunity(opportunitySnapshots.opportunityId),
+          ),
+        );
 
       if (snapshots.length === 0) continue;
       const latestSnapshot = snapshots[snapshots.length - 1];
@@ -130,7 +145,12 @@ export class CareerSignalsRepository {
       const listings = await db
         .select()
         .from(sourceListings)
-        .where(eq(sourceListings.opportunityId, oppIdStr));
+        .where(
+          and(
+            eq(sourceListings.opportunityId, oppIdStr),
+            providerListing(sourceListings.id),
+          ),
+        );
 
       const sourceSystem = listings[0]?.sourceSystem ?? 'unknown';
 

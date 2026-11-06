@@ -1,3 +1,4 @@
+import { publicSnapshot } from '../public-opportunity-scope.js';
 import { and, desc, eq } from 'drizzle-orm';
 import type {
   CanonicalRequirement,
@@ -255,12 +256,21 @@ export class RequirementSetRepository {
 
   public async getById(
     id: RequirementSetId,
+    expectedSnapshot?: SnapshotId,
   ): Promise<CompleteRequirementSet | null> {
     const { requirementSets } = getTables(this.handle);
     const rows = await (this.handle.db as any)
       .select()
       .from(requirementSets)
-      .where(eq(requirementSets.id, id));
+      .where(
+        and(
+          eq(requirementSets.id, id),
+          publicSnapshot(requirementSets.snapshotId),
+          expectedSnapshot
+            ? eq(requirementSets.snapshotId, expectedSnapshot)
+            : undefined,
+        ),
+      );
     return rows[0] ? this.load(rows[0]) : null;
   }
 
@@ -276,6 +286,7 @@ export class RequirementSetRepository {
       .where(
         and(
           eq(requirementSets.snapshotId, input.snapshotId),
+          publicSnapshot(requirementSets.snapshotId),
           eq(
             requirementSets.extractorPipelineVersion,
             input.extractorPipelineVersion,
@@ -298,6 +309,7 @@ export class RequirementSetRepository {
       .where(
         and(
           eq(requirementSets.snapshotId, input.snapshotId),
+          publicSnapshot(requirementSets.snapshotId),
           eq(
             requirementSets.extractorPipelineVersion,
             input.extractorPipelineVersion,

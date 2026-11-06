@@ -1,7 +1,9 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  date,
   check,
+  foreignKey,
   index,
   integer,
   pgTable,
@@ -335,13 +337,33 @@ export const careerProfileReevaluationsPg = pgTable(
   ],
 );
 
-export const opportunitiesPg = pgTable('opportunities', {
-  id: text('id').primaryKey(),
-  createdAt: timestamp('created_at', {
-    withTimezone: true,
-    mode: 'date',
-  }).notNull(),
-});
+export const opportunitiesPg = pgTable(
+  'opportunities',
+  {
+    id: text('id').primaryKey(),
+    visibility: text('visibility', { enum: ['PUBLIC', 'CANDIDATE_PRIVATE'] })
+      .notNull()
+      .default('PUBLIC'),
+    ownerCandidateId: text('owner_candidate_id').references(
+      () => candidatesPg.id,
+      { onDelete: 'restrict' },
+    ),
+    createdAt: timestamp('created_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('r012_opportunity_owner_key').on(
+      table.id,
+      table.ownerCandidateId,
+    ),
+    check(
+      'r012_opportunity_scope',
+      sql`(${table.visibility} = 'PUBLIC' AND ${table.ownerCandidateId} IS NULL) OR (${table.visibility} = 'CANDIDATE_PRIVATE' AND ${table.ownerCandidateId} IS NOT NULL)`,
+    ),
+  ],
+);
 
 export const opportunitySnapshotsPg = pgTable(
   'opportunity_snapshots',
@@ -354,6 +376,23 @@ export const opportunitySnapshotsPg = pgTable(
       withTimezone: true,
       mode: 'date',
     }).notNull(),
+    category: text('category', {
+      enum: [
+        'JOB',
+        'INTERNSHIP',
+        'FREELANCE_CONTRACT',
+        'FELLOWSHIP',
+        'GRANT',
+        'COMPETITION',
+        'HACKATHON',
+      ],
+    })
+      .notNull()
+      .default('JOB'),
+    deadlineDate: date('deadline_date', { mode: 'string' }),
+    manualSourceUrl: text('manual_source_url'),
+    manualSourceContext: text('manual_source_context'),
+    manualRevision: integer('manual_revision'),
     title: text('title').notNull(),
     organization: text('organization').notNull(),
     location: text('location'),
@@ -368,10 +407,82 @@ export const opportunitySnapshotsPg = pgTable(
     }).notNull(),
   },
   (table) => [
+    uniqueIndex('r012_snapshot_revision_key').on(
+      table.opportunityId,
+      table.manualRevision,
+    ),
+    check(
+      'r012_snapshot_category',
+      sql`${table.category} IN ('JOB','INTERNSHIP','FREELANCE_CONTRACT','FELLOWSHIP','GRANT','COMPETITION','HACKATHON')`,
+    ),
+    check(
+      'r012_snapshot_deadline',
+      sql`${table.deadlineDate} IS NULL OR (${table.deadlineDate} BETWEEN DATE '0001-01-01' AND DATE '9999-12-31')`,
+    ),
+    check(
+      'r012_snapshot_revision',
+      sql`${table.manualRevision} IS NULL OR (${table.manualRevision} >= 1 AND (NULLIF(trim(${table.manualSourceUrl}), '') IS NOT NULL OR NULLIF(trim(${table.manualSourceContext}), '') IS NOT NULL))`,
+    ),
     index('pg_opportunity_snapshots_opp_time_idx').on(
       table.opportunityId,
       table.observedAt,
     ),
+  ],
+);
+
+// Ownership trigger and deferred revision FK timing are installed by the reviewed SQL.
+export const manualOpportunityCapturesPg = pgTable(
+  'manual_opportunity_captures',
+  {
+    opportunityId: text('opportunity_id').notNull().primaryKey(),
+    candidateId: text('candidate_id').notNull(),
+    version: integer('version').notNull(),
+    normalizedUrl: text('normalized_url'),
+    matchKey: text('match_key').notNull(),
+    duplicateFingerprint: text('duplicate_fingerprint').notNull(),
+    duplicateSlot: text('duplicate_slot').notNull().default('default'),
+    createIdempotencyKey: text('create_idempotency_key').notNull(),
+    createRequestHash: text('create_request_hash').notNull(),
+    createdAt: timestamp('created_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+    updatedAt: timestamp('updated_at', {
+      withTimezone: true,
+      mode: 'date',
+    }).notNull(),
+  },
+  (table) => [
+    check('r012_capture_version', sql`${table.version} >= 1`),
+    foreignKey({
+      name: 'r012_capture_owner',
+      columns: [table.opportunityId, table.candidateId],
+      foreignColumns: [opportunitiesPg.id, opportunitiesPg.ownerCandidateId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'r012_capture_revision',
+      columns: [table.opportunityId, table.version],
+      foreignColumns: [
+        opportunitySnapshotsPg.opportunityId,
+        opportunitySnapshotsPg.manualRevision,
+      ],
+    }),
+    uniqueIndex('r012_capture_create_key').on(
+      table.candidateId,
+      table.createIdempotencyKey,
+    ),
+    uniqueIndex('r012_capture_duplicate_slot').on(
+      table.candidateId,
+      table.duplicateFingerprint,
+      table.duplicateSlot,
+    ),
+    index('r012_capture_list').on(
+      table.candidateId,
+      table.createdAt.desc(),
+      table.opportunityId.desc(),
+    ),
+    index('r012_capture_url').on(table.candidateId, table.normalizedUrl),
+    index('r012_capture_match').on(table.candidateId, table.matchKey),
   ],
 );
 

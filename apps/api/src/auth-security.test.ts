@@ -135,6 +135,45 @@ describe('Cloud authentication adversarial security', () => {
     return result.count;
   }
 
+  it('restricts manual captures to the session grant and owner', async () => {
+    const owner = await registerBearer('manual-owner@example.com');
+    const attacker = await registerBearer('manual-attacker@example.com');
+    const path = (id: string) => `/candidates/${id}/manual-opportunities`;
+    const ownerPath = path(owner.session.primaryCandidateId);
+    expect((await app.inject({ url: ownerPath })).statusCode).toBe(401);
+    const saved = await app.inject({
+      method: 'POST',
+      url: ownerPath,
+      headers: {
+        authorization: `Bearer ${owner.token}`,
+        'idempotency-key': 'aeaf43a4-be06-4cd6-9d9d-9424acf3d522',
+      },
+      payload: {
+        category: 'FELLOWSHIP',
+        title: 'Private role',
+        organization: 'Example',
+        sourceContext: 'Private email',
+      },
+    });
+    expect(saved.statusCode).toBe(201);
+    const id = saved.json().record.id as string;
+    const headers = { authorization: `Bearer ${attacker.token}` };
+    expect(
+      (await app.inject({ url: ownerPath + '/' + id, headers })).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          url: path(attacker.session.primaryCandidateId) + '/' + id,
+          headers,
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (await app.inject({ url: '/opportunities/' + id, headers })).statusCode,
+    ).toBe(404);
+  });
+
   it('never exposes local setup to authenticated or anonymous cloud requests even with opt-in', async () => {
     const account = await registerBearer('local-setup-boundary@example.com');
     for (const authorization of [undefined, `Bearer ${account.token}`]) {

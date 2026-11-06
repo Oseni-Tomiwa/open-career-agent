@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   check,
+  foreignKey,
   index,
   integer,
   sqliteTable,
@@ -308,10 +309,30 @@ export const careerProfileReevaluations = sqliteTable(
   ],
 );
 
-export const opportunities = sqliteTable('opportunities', {
-  id: text('id').primaryKey(),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-});
+export const opportunities = sqliteTable(
+  'opportunities',
+  {
+    id: text('id').primaryKey(),
+    visibility: text('visibility', { enum: ['PUBLIC', 'CANDIDATE_PRIVATE'] })
+      .notNull()
+      .default('PUBLIC'),
+    ownerCandidateId: text('owner_candidate_id').references(
+      () => candidates.id,
+      { onDelete: 'restrict' },
+    ),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('r012_opportunity_owner_key').on(
+      table.id,
+      table.ownerCandidateId,
+    ),
+    check(
+      'r012_opportunity_scope',
+      sql`(${table.visibility} = 'PUBLIC' AND ${table.ownerCandidateId} IS NULL) OR (${table.visibility} = 'CANDIDATE_PRIVATE' AND ${table.ownerCandidateId} IS NOT NULL)`,
+    ),
+  ],
+);
 
 export const opportunitySnapshots = sqliteTable(
   'opportunity_snapshots',
@@ -321,6 +342,23 @@ export const opportunitySnapshots = sqliteTable(
       .notNull()
       .references(() => opportunities.id, { onDelete: 'restrict' }),
     observedAt: integer('observed_at', { mode: 'timestamp_ms' }).notNull(),
+    category: text('category', {
+      enum: [
+        'JOB',
+        'INTERNSHIP',
+        'FREELANCE_CONTRACT',
+        'FELLOWSHIP',
+        'GRANT',
+        'COMPETITION',
+        'HACKATHON',
+      ],
+    })
+      .notNull()
+      .default('JOB'),
+    deadlineDate: text('deadline_date'),
+    manualSourceUrl: text('manual_source_url'),
+    manualSourceContext: text('manual_source_context'),
+    manualRevision: integer('manual_revision'),
     title: text('title').notNull(),
     organization: text('organization').notNull(),
     location: text('location'),
@@ -332,10 +370,79 @@ export const opportunitySnapshots = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (table) => [
+    uniqueIndex('r012_snapshot_revision_key').on(
+      table.opportunityId,
+      table.manualRevision,
+    ),
+    check(
+      'r012_snapshot_category',
+      sql`${table.category} IN ('JOB','INTERNSHIP','FREELANCE_CONTRACT','FELLOWSHIP','GRANT','COMPETITION','HACKATHON')`,
+    ),
+    check(
+      'r012_snapshot_deadline',
+      sql`${table.deadlineDate} IS NULL OR (length(${table.deadlineDate}) = 10 AND substr(${table.deadlineDate},1,4) <> '0000' AND date(${table.deadlineDate},'+0 days') IS ${table.deadlineDate})`,
+    ),
+    check(
+      'r012_snapshot_revision',
+      sql`${table.manualRevision} IS NULL OR (typeof(${table.manualRevision}) = 'integer' AND ${table.manualRevision} BETWEEN 1 AND 2147483647 AND (NULLIF(trim(${table.manualSourceUrl}), '') IS NOT NULL OR NULLIF(trim(${table.manualSourceContext}), '') IS NOT NULL))`,
+    ),
     index('opportunity_snapshots_opp_time_idx').on(
       table.opportunityId,
       table.observedAt,
     ),
+  ],
+);
+
+// Ownership trigger and deferred revision FK timing are installed by the reviewed SQL.
+export const manualOpportunityCaptures = sqliteTable(
+  'manual_opportunity_captures',
+  {
+    opportunityId: text('opportunity_id').notNull().primaryKey(),
+    candidateId: text('candidate_id').notNull(),
+    version: integer('version').notNull(),
+    normalizedUrl: text('normalized_url'),
+    matchKey: text('match_key').notNull(),
+    duplicateFingerprint: text('duplicate_fingerprint').notNull(),
+    duplicateSlot: text('duplicate_slot').notNull().default('default'),
+    createIdempotencyKey: text('create_idempotency_key').notNull(),
+    createRequestHash: text('create_request_hash').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    check(
+      'r012_capture_version',
+      sql`typeof(${table.version}) = 'integer' AND ${table.version} BETWEEN 1 AND 2147483647`,
+    ),
+    foreignKey({
+      name: 'r012_capture_owner',
+      columns: [table.opportunityId, table.candidateId],
+      foreignColumns: [opportunities.id, opportunities.ownerCandidateId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'r012_capture_revision',
+      columns: [table.opportunityId, table.version],
+      foreignColumns: [
+        opportunitySnapshots.opportunityId,
+        opportunitySnapshots.manualRevision,
+      ],
+    }),
+    uniqueIndex('r012_capture_create_key').on(
+      table.candidateId,
+      table.createIdempotencyKey,
+    ),
+    uniqueIndex('r012_capture_duplicate_slot').on(
+      table.candidateId,
+      table.duplicateFingerprint,
+      table.duplicateSlot,
+    ),
+    index('r012_capture_list').on(
+      table.candidateId,
+      sql`${table.createdAt} DESC`,
+      sql`${table.opportunityId} DESC`,
+    ),
+    index('r012_capture_url').on(table.candidateId, table.normalizedUrl),
+    index('r012_capture_match').on(table.candidateId, table.matchKey),
   ],
 );
 

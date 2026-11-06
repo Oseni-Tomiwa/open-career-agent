@@ -1,4 +1,5 @@
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { discoveryLineage } from '../public-opportunity-scope.js';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import {
   discoveryMatchId,
   opportunityId,
@@ -409,8 +410,24 @@ export class SearchTargetRepository {
   }): Promise<DiscoveryMatchRecord> {
     const id = input.id ?? discoveryMatchId(`dm_${crypto.randomUUID()}`);
     const now = new Date();
-    const { discoveryMatches } = getTables(this.handle);
+    const { discoveryMatches, opportunities } = getTables(this.handle);
     const db = this.handle.db as any;
+    const target = await db
+      .select({ id: opportunities.id })
+      .from(opportunities)
+      .where(
+        and(
+          eq(opportunities.id, input.opportunityId),
+          discoveryLineage({
+            candidateId: sql`${input.candidateId}`,
+            searchTargetId: sql`${input.searchTargetId}`,
+            discoveryRunId: sql`${input.discoveryRunId}`,
+            sourceListingId: sql`${input.sourceListingId}`,
+            opportunityId: opportunities.id,
+          }),
+        ),
+      );
+    if (!target.length) throw new Error('Public discovery lineage not found');
 
     const row = {
       id,
@@ -448,7 +465,12 @@ export class SearchTargetRepository {
     const rows = await db
       .select({ opportunityId: discoveryMatches.opportunityId })
       .from(discoveryMatches)
-      .where(eq(discoveryMatches.candidateId, cId));
+      .where(
+        and(
+          eq(discoveryMatches.candidateId, cId),
+          discoveryLineage(discoveryMatches),
+        ),
+      );
 
     return rows.map((row: any) => opportunityId(row.opportunityId));
   }
@@ -462,7 +484,12 @@ export class SearchTargetRepository {
     const rows = await db
       .select()
       .from(discoveryMatches)
-      .where(eq(discoveryMatches.candidateId, cId))
+      .where(
+        and(
+          eq(discoveryMatches.candidateId, cId),
+          discoveryLineage(discoveryMatches),
+        ),
+      )
       .orderBy(desc(discoveryMatches.matchedAt));
 
     return rows.map((row: any) => ({

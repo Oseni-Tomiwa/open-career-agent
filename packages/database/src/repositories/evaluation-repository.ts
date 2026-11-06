@@ -1,3 +1,8 @@
+import {
+  publicEvaluation,
+  publicSnapshot,
+  publicOpportunity,
+} from '../public-opportunity-scope.js';
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, isNotNull, isNull, or } from 'drizzle-orm';
 import type { DatabaseHandle } from '../client.js';
@@ -92,7 +97,12 @@ export class EvaluationRepository {
       const sourceRows = await transaction
         .select()
         .from(evaluations)
-        .where(eq(evaluations.id, input.sourceEvaluationId));
+        .where(
+          and(
+            eq(evaluations.id, input.sourceEvaluationId),
+            publicSnapshot(evaluations.snapshotId),
+          ),
+        );
       const source = sourceRows[0];
       if (!source)
         throw new Error(`Evaluation ${input.sourceEvaluationId} not found`);
@@ -181,15 +191,31 @@ export class EvaluationRepository {
       const sourceRows = await transaction
         .select()
         .from(evaluations)
-        .where(eq(evaluations.id, input.sourceEvaluationId));
+        .where(
+          and(
+            eq(evaluations.id, input.sourceEvaluationId),
+            publicSnapshot(evaluations.snapshotId),
+          ),
+        );
       const targetRows = await transaction
         .select()
         .from(evaluations)
-        .where(eq(evaluations.id, input.targetEvaluationId));
+        .where(
+          and(
+            eq(evaluations.id, input.targetEvaluationId),
+            publicSnapshot(evaluations.snapshotId),
+          ),
+        );
       const source = sourceRows[0];
       const target = targetRows[0];
 
-      if (!source || !target) return false;
+      if (
+        !source ||
+        !target ||
+        source.candidateId !== target.candidateId ||
+        source.snapshotId !== target.snapshotId
+      )
+        return false;
 
       if (input.category === 'fit') {
         if (!source.fitAssessmentStatus || target.fitAssessmentStatus)
@@ -264,6 +290,7 @@ export class EvaluationRepository {
         and(
           eq(evaluations.candidateId, input.candidateId),
           eq(evaluations.snapshotId, input.snapshotId),
+          publicSnapshot(evaluations.snapshotId),
           isNull(evaluations.supersededAt),
         ),
       );
@@ -283,6 +310,7 @@ export class EvaluationRepository {
         and(
           eq(evaluations.candidateId, candidateId),
           eq(evaluations.snapshotId, snapshotId),
+          publicSnapshot(evaluations.snapshotId),
           isNull(evaluations.supersededAt),
         ),
       )
@@ -336,14 +364,26 @@ export class EvaluationRepository {
     });
   }
 
-  public async getEvaluation(id: EvaluationId): Promise<any | null> {
+  public async getEvaluation(
+    id: EvaluationId,
+    lineage?: { snapshotId: string; candidateId?: string | undefined },
+  ): Promise<any | null> {
     const { evaluations } = getTables(this.db);
     const db = this.db.db as any;
 
     const rows = await db
       .select()
       .from(evaluations)
-      .where(eq(evaluations.id, id));
+      .where(
+        and(
+          eq(evaluations.id, id),
+          publicSnapshot(evaluations.snapshotId),
+          lineage ? eq(evaluations.snapshotId, lineage.snapshotId) : undefined,
+          lineage?.candidateId
+            ? eq(evaluations.candidateId, lineage.candidateId)
+            : undefined,
+        ),
+      );
     return rows[0] ?? null;
   }
 
@@ -356,7 +396,12 @@ export class EvaluationRepository {
     return await db
       .select()
       .from(evaluationFindings)
-      .where(eq(evaluationFindings.evaluationId, evaluationId));
+      .where(
+        and(
+          eq(evaluationFindings.evaluationId, evaluationId),
+          publicEvaluation(evaluationFindings.evaluationId),
+        ),
+      );
   }
 
   public async persistFitResult(input: {
@@ -500,6 +545,7 @@ export class EvaluationRepository {
         and(
           eq(evaluations.candidateId, input.candidateId),
           eq(evaluations.snapshotId, input.snapshotId),
+          publicSnapshot(evaluations.snapshotId),
           eq(evaluations.fitEngineVersion, input.engineVersion),
           eq(evaluations.fitInputFingerprint, input.inputFingerprint),
         ),
@@ -519,6 +565,7 @@ export class EvaluationRepository {
       .where(
         and(
           eq(evaluations.snapshotId, snapshotId),
+          publicSnapshot(evaluations.snapshotId),
           or(
             isNotNull(evaluations.fitAssessmentStatus),
             isNotNull(evaluations.fitLevel),
@@ -569,7 +616,12 @@ export class EvaluationRepository {
       const existingRows = await transaction
         .select()
         .from(evaluations)
-        .where(eq(evaluations.id, input.evaluationId));
+        .where(
+          and(
+            eq(evaluations.id, input.evaluationId),
+            publicSnapshot(evaluations.snapshotId),
+          ),
+        );
 
       const existing = existingRows[0];
       if (!existing) return false;
@@ -591,7 +643,12 @@ export class EvaluationRepository {
           qualityEvaluatedAt: input.quality.evaluatedAt,
           qualityFreshnessBucket: input.quality.freshnessBucket,
         })
-        .where(eq(evaluations.id, input.evaluationId));
+        .where(
+          and(
+            eq(evaluations.id, input.evaluationId),
+            publicSnapshot(evaluations.snapshotId),
+          ),
+        );
 
       for (const finding of input.findings) {
         await transaction.insert(evaluationFindings).values({
@@ -634,6 +691,7 @@ export class EvaluationRepository {
   }
 
   public async findQualityEvaluation(input: {
+    candidateId?: CandidateId;
     snapshotId: SnapshotId;
     engineVersion: string;
     inputFingerprint: string;
@@ -647,6 +705,10 @@ export class EvaluationRepository {
       .where(
         and(
           eq(evaluations.snapshotId, input.snapshotId),
+          publicSnapshot(evaluations.snapshotId),
+          input.candidateId
+            ? eq(evaluations.candidateId, input.candidateId)
+            : undefined,
           eq(evaluations.qualityEngineVersion, input.engineVersion),
           eq(evaluations.qualityInputFingerprint, input.inputFingerprint),
         ),
@@ -666,6 +728,7 @@ export class EvaluationRepository {
       .where(
         and(
           eq(evaluations.snapshotId, snapshotId),
+          publicSnapshot(evaluations.snapshotId),
           isNotNull(evaluations.qualityLevel),
         ),
       )
@@ -685,6 +748,7 @@ export class EvaluationRepository {
       .where(
         and(
           eq(evaluationFindings.evaluationId, evaluationId),
+          publicEvaluation(evaluationFindings.evaluationId),
           eq(evaluationFindings.category, 'eligibility'),
         ),
       );
@@ -702,6 +766,7 @@ export class EvaluationRepository {
       .where(
         and(
           eq(evaluationFindings.evaluationId, evaluationId),
+          publicEvaluation(evaluationFindings.evaluationId),
           eq(evaluationFindings.category, 'fit'),
         ),
       );
@@ -719,6 +784,7 @@ export class EvaluationRepository {
       .where(
         and(
           eq(evaluationFindings.evaluationId, evaluationId),
+          publicEvaluation(evaluationFindings.evaluationId),
           eq(evaluationFindings.category, 'quality'),
         ),
       );
@@ -756,7 +822,12 @@ export class EvaluationRepository {
       const evalRows = await transaction
         .select()
         .from(evaluations)
-        .where(eq(evaluations.id, decision.evaluationId));
+        .where(
+          and(
+            eq(evaluations.id, decision.evaluationId),
+            publicSnapshot(evaluations.snapshotId),
+          ),
+        );
 
       const evaluation = evalRows[0];
       if (
@@ -837,7 +908,19 @@ export class EvaluationRepository {
     const { decisions } = getTables(this.db);
     const db = this.db.db as any;
 
-    const rows = await db.select().from(decisions).where(eq(decisions.id, id));
+    const rows = await db
+      .select()
+      .from(decisions)
+      .where(
+        and(
+          eq(decisions.id, id),
+          publicSnapshot(decisions.snapshotId),
+          publicEvaluation(decisions.evaluationId, {
+            candidate: decisions.candidateId,
+            snapshot: decisions.snapshotId,
+          }),
+        ),
+      );
     return rows[0] ?? null;
   }
 
@@ -850,7 +933,16 @@ export class EvaluationRepository {
     const rows = await db
       .select()
       .from(decisions)
-      .where(eq(decisions.evaluationId, evaluationId))
+      .where(
+        and(
+          eq(decisions.evaluationId, evaluationId),
+          publicSnapshot(decisions.snapshotId),
+          publicEvaluation(decisions.evaluationId, {
+            candidate: decisions.candidateId,
+            snapshot: decisions.snapshotId,
+          }),
+        ),
+      )
       .orderBy(desc(decisions.createdAt));
     return rows[0] ?? null;
   }
@@ -868,6 +960,10 @@ export class EvaluationRepository {
       .where(
         and(
           eq(decisions.evaluationId, evaluationId),
+          publicSnapshot(decisions.snapshotId),
+          publicSnapshot(evaluations.snapshotId),
+          eq(decisions.candidateId, evaluations.candidateId),
+          eq(decisions.snapshotId, evaluations.snapshotId),
           isNull(evaluations.supersededAt),
           eq(
             decisions.eligibilityInputFingerprint,
@@ -906,7 +1002,14 @@ export class EvaluationRepository {
       })
       .from(decisions)
       .innerJoin(evaluations, eq(decisions.evaluationId, evaluations.id))
-      .where(eq(evaluations.snapshotId, snapshotId))
+      .where(
+        and(
+          eq(evaluations.snapshotId, snapshotId),
+          publicSnapshot(evaluations.snapshotId),
+          eq(decisions.candidateId, evaluations.candidateId),
+          eq(decisions.snapshotId, evaluations.snapshotId),
+        ),
+      )
       .orderBy(desc(decisions.createdAt));
 
     return rows[0] ?? null;
@@ -926,6 +1029,9 @@ export class EvaluationRepository {
       .where(
         and(
           eq(decisions.candidateId, candidateId),
+          eq(evaluations.candidateId, candidateId),
+          eq(decisions.snapshotId, evaluations.snapshotId),
+          publicSnapshot(evaluations.snapshotId),
           eq(decisions.snapshotId, snapshotId),
           isNull(evaluations.supersededAt),
           eq(
@@ -947,13 +1053,27 @@ export class EvaluationRepository {
   public async getDecisionReasons(
     decisionId: DecisionId,
   ): Promise<readonly any[]> {
-    const { decisionReasons } = getTables(this.db);
+    const { decisionReasons, decisions } = getTables(this.db);
     const db = this.db.db as any;
 
     return await db
-      .select()
+      .select({
+        decisionId: decisionReasons.decisionId,
+        reasonCode: decisionReasons.reasonCode,
+        findingId: decisionReasons.findingId,
+      })
       .from(decisionReasons)
-      .where(eq(decisionReasons.decisionId, decisionId));
+      .innerJoin(decisions, eq(decisions.id, decisionReasons.decisionId))
+      .where(
+        and(
+          eq(decisionReasons.decisionId, decisionId),
+          publicSnapshot(decisions.snapshotId),
+          publicEvaluation(decisions.evaluationId, {
+            candidate: decisions.candidateId,
+            snapshot: decisions.snapshotId,
+          }),
+        ),
+      );
   }
 
   public async getDecisionHistoryForCandidate(
@@ -974,6 +1094,9 @@ export class EvaluationRepository {
       .where(
         and(
           eq(decisions.candidateId, cId),
+          eq(evaluations.candidateId, cId),
+          eq(decisions.snapshotId, evaluations.snapshotId),
+          publicOpportunity(opportunitySnapshots.opportunityId),
           eq(opportunitySnapshots.opportunityId, oppId),
         ),
       )

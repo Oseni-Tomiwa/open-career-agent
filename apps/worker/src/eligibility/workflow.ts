@@ -94,6 +94,7 @@ export function createEligibilityHandlers(deps: {
       const linkedSet = payload.requirementSetId
         ? await requirementSets.getById(
             requirementSetId(payload.requirementSetId),
+            snapId as SnapshotId,
           )
         : await requirementSets.getLatestCompatible({
             snapshotId: snapId as SnapshotId,

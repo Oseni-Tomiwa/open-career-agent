@@ -8,6 +8,7 @@ import {
   CandidateRepository,
   ApplicationRepository,
   EvaluationRepository,
+  ManualOpportunityRepository,
   openDatabase,
   OpportunityRepository,
   SourceListingRepository,
@@ -155,6 +156,72 @@ describe('decision.evaluate durable workflow', () => {
   afterEach(async () => {
     await database.close();
     rmSync(directory, { recursive: true, force: true });
+  });
+
+  it('rejects forged evaluation tasks for a private manual snapshot', async () => {
+    const manual = await new ManualOpportunityRepository(database).create(
+      candidate,
+      '5c759433-5380-4dc1-9538-995221f9e784',
+      {
+        category: 'JOB',
+        title: 'Private opportunity',
+        organization: 'Example',
+        sourceUrl: null,
+        sourceContext: 'Private email',
+        deadline: null,
+      },
+    );
+    const privateId = database
+      .sqlite!.prepare(
+        'SELECT id FROM opportunity_snapshots WHERE opportunity_id=?',
+      )
+      .get(manual.record.id)!.id as string;
+    database
+      .sqlite!.prepare(
+        "INSERT INTO evaluations (id,candidate_id,snapshot_id,eligibility_state,created_at) VALUES ('forged-private',?,?,'unknown',0)",
+      )
+      .run(candidate, privateId);
+    await new CandidateRepository(database).addClaim({
+      id: claimId('claim-private-fanout'),
+      candidateId: candidate,
+      kind: 'skill',
+      value: 'SQLite',
+      state: 'SUPPORTED',
+    });
+    expect(
+      database
+        .sqlite!.prepare(
+          'SELECT count(*) AS count FROM background_tasks WHERE payload LIKE ?',
+        )
+        .get('%' + privateId + '%')?.count,
+    ).toBe(0);
+    const payload = {
+      candidateId: candidate,
+      snapshotId: privateId,
+      evaluationId: 'forged-private',
+    };
+    const handlers = {
+      ...createDecisionHandlers(database),
+      ...createFitHandlers({ db: database }),
+      ...createQualityHandlers({ db: database }),
+      ...createEligibilityHandlers({ db: database }),
+    };
+    for (const taskType of [
+      'decision.evaluate',
+      'fit.evaluate',
+      'quality.evaluate',
+      'eligibility.evaluate',
+    ]) {
+      const task = await ledger.enqueue({ taskType, payload });
+      await expect(handlers[taskType]!(task)).rejects.toThrow(/not found/i);
+    }
+    expect(
+      database
+        .sqlite!.prepare(
+          "SELECT COUNT(*) AS count FROM decisions WHERE evaluation_id='forged-private'",
+        )
+        .get()?.count,
+    ).toBe(0);
   });
 
   it('populates Decision without mutating Eligibility, Fit, or Quality', async () => {

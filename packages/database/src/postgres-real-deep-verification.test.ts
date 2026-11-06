@@ -1,3 +1,4 @@
+import { ManualOpportunityRepository } from './repositories/manual-opportunity-repository.js';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -114,6 +115,95 @@ d('FINAL PRODUCTION DATA LAYER V1 DEEP POSTGRESQL VERIFICATION SUITE', () => {
       );
     } finally {
       await handle.close();
+    }
+  });
+
+  it('serializes manual capture across independent PostgreSQL handles and replays after reopen', async () => {
+    await new CandidateRepository(handle).ensureCandidate(
+      candidateId('manual-owner'),
+    );
+    await new CandidateRepository(handle).ensureCandidate(
+      candidateId('manual-other'),
+    );
+    const other = openDatabase({
+      engine: 'postgres',
+      databaseUrl: POSTGRES_URL!,
+    });
+    const first = new ManualOpportunityRepository(handle);
+    const second = new ManualOpportunityRepository(other);
+    const input = {
+      category: 'FREELANCE_CONTRACT',
+      title: 'Example',
+      organization: 'Example Studio',
+      sourceUrl: null,
+      sourceContext: 'Email',
+      deadline: '2028-02-29',
+    } as const;
+    const key = 'eb1b107a-3513-47a5-a536-39456465e4a0';
+    try {
+      const [a, b] = await Promise.all([
+        first.create('manual-owner', key, input),
+        second.create('manual-owner', key, input),
+      ]);
+      expect([a.replayed, b.replayed].sort()).toEqual([false, true]);
+      expect(a.record).toEqual(b.record);
+      expect(await second.get('manual-other', a.record.id)).toBeNull();
+      const versions = await Promise.allSettled([
+        first.edit('manual-owner', a.record.id, 1, {
+          ...input,
+          title: 'Revision A',
+        }),
+        second.edit('manual-owner', a.record.id, 1, {
+          ...input,
+          title: 'Revision B',
+        }),
+      ]);
+      expect(
+        versions.filter((result) => result.status === 'fulfilled'),
+      ).toHaveLength(1);
+      expect(
+        versions.find((result) => result.status === 'rejected'),
+      ).toMatchObject({ reason: { code: 'STALE_VERSION' } });
+      await handle.pgPool!.query(`
+        CREATE FUNCTION reject_capture_fixture() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'injected capture failure'; END; $$;
+        CREATE TRIGGER reject_capture_fixture BEFORE INSERT ON manual_opportunity_captures
+        FOR EACH ROW EXECUTE FUNCTION reject_capture_fixture()
+      `);
+      const retryKey = '14ad6141-cc35-47db-beb1-4967fb998e6a';
+      const retryInput = { ...input, title: 'Rollback fixture' };
+      await expect(
+        first.create('manual-owner', retryKey, retryInput),
+      ).rejects.toThrow();
+      const count = await handle.pgPool!.query(
+        "SELECT count(*)::integer AS n FROM opportunities WHERE visibility = 'CANDIDATE_PRIVATE'",
+      );
+      expect(count.rows[0]?.n).toBe(1);
+      await handle.pgPool!.query(
+        'DROP TRIGGER reject_capture_fixture ON manual_opportunity_captures; DROP FUNCTION reject_capture_fixture()',
+      );
+      expect(
+        (await first.create('manual-owner', retryKey, retryInput)).replayed,
+      ).toBe(false);
+      await other.close();
+      const reopened = openDatabase({
+        engine: 'postgres',
+        databaseUrl: POSTGRES_URL!,
+      });
+      try {
+        const repo = new ManualOpportunityRepository(reopened);
+        expect(await repo.create('manual-owner', key, input)).toMatchObject({
+          record: { id: a.record.id, version: 2, deadline: '2028-02-29' },
+          replayed: true,
+        });
+        expect(
+          (await repo.detail('manual-owner', a.record.id))?.revisions,
+        ).toHaveLength(2);
+      } finally {
+        await reopened.close();
+      }
+    } finally {
+      await other.close();
     }
   });
 

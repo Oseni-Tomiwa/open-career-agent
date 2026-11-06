@@ -20,3 +20,4 @@ export * from './career-signals.js';
 export * from './requirements.js';
 
 export * from './workspace.js';
+export * from './manual-opportunity.js';

@@ -1,4 +1,9 @@
-import { eq } from 'drizzle-orm';
+import {
+  publicEvaluation,
+  publicOpportunity,
+  publicSnapshot,
+} from '../public-opportunity-scope.js';
+import { and, eq } from 'drizzle-orm';
 import type { DatabaseHandle } from '../client.js';
 import { getTables } from '../schema-helper.js';
 import { BackgroundTaskLedger } from '../task-ledger.js';
@@ -53,7 +58,8 @@ export class EvidenceRepository {
       const ledger = new BackgroundTaskLedger(this.db);
       const snapshots = await db
         .select({ id: opportunitySnapshots.id })
-        .from(opportunitySnapshots);
+        .from(opportunitySnapshots)
+        .where(publicOpportunity(opportunitySnapshots.opportunityId));
 
       for (const snapshot of snapshots) {
         await ledger.enqueue({
@@ -80,6 +86,17 @@ export class EvidenceRepository {
     const { evidence, opportunitySnapshotEvidence } = getTables(this.db);
     const db = this.db.db as any;
 
+    const { opportunitySnapshots } = getTables(this.db);
+    const allowed = await db
+      .select({ id: opportunitySnapshots.id })
+      .from(opportunitySnapshots)
+      .where(
+        and(
+          eq(opportunitySnapshots.id, snapshotId),
+          publicSnapshot(opportunitySnapshots.id),
+        ),
+      );
+    if (!allowed.length) throw new Error('Public evidence target not found');
     await db.transaction(async (tx: any) => {
       await tx.insert(evidence).values({
         id: ev.id,
@@ -109,9 +126,20 @@ export class EvidenceRepository {
     },
     timestamp: number = Date.now(),
   ): Promise<void> {
-    const { evidence, evaluationFindingEvidence } = getTables(this.db);
+    const { evidence, evaluationFindingEvidence, evaluationFindings } =
+      getTables(this.db);
     const db = this.db.db as any;
 
+    const allowed = await db
+      .select({ id: evaluationFindings.id })
+      .from(evaluationFindings)
+      .where(
+        and(
+          eq(evaluationFindings.id, findingId),
+          publicEvaluation(evaluationFindings.evaluationId),
+        ),
+      );
+    if (!allowed.length) throw new Error('Public evidence target not found');
     await db.transaction(async (tx: any) => {
       await tx.insert(evidence).values({
         id: ev.id,
@@ -153,7 +181,8 @@ export class EvidenceRepository {
   public async getFindingEvidence(
     findingId: FindingId,
   ): Promise<readonly any[]> {
-    const { evidence, evaluationFindingEvidence } = getTables(this.db);
+    const { evidence, evaluationFindingEvidence, evaluationFindings } =
+      getTables(this.db);
     const db = this.db.db as any;
 
     return await db
@@ -170,6 +199,15 @@ export class EvidenceRepository {
         evaluationFindingEvidence,
         eq(evidence.id, evaluationFindingEvidence.evidenceId),
       )
-      .where(eq(evaluationFindingEvidence.findingId, findingId));
+      .innerJoin(
+        evaluationFindings,
+        eq(evaluationFindings.id, evaluationFindingEvidence.findingId),
+      )
+      .where(
+        and(
+          eq(evaluationFindingEvidence.findingId, findingId),
+          publicEvaluation(evaluationFindings.evaluationId),
+        ),
+      );
   }
 }

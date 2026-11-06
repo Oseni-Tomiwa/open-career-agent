@@ -38,10 +38,15 @@ export function createDecisionHandlers(
     };
 
     const evalId = evaluationId(payload.evaluationId);
-    const evaluation = await evaluationRepository.getEvaluation(evalId);
+    const evaluation = await evaluationRepository.getEvaluation(evalId, {
+      snapshotId: payload.snapshotId,
+      candidateId: payload.candidateId,
+    });
 
     if (!evaluation) {
-      throw new Error(`Evaluation ${payload.evaluationId} not found`);
+      throw new Error(
+        'Decision task input does not match its Evaluation (not found in public scope)',
+      );
     }
     if (
       evaluation.snapshotId !== payload.snapshotId ||

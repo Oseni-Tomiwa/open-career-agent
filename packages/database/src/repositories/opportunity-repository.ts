@@ -1,5 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import type { DatabaseHandle } from '../client.js';
+import { publicOpportunity } from '../public-opportunity-scope.js';
 import { getTables } from '../schema-helper.js';
 import type { OpportunityId, SnapshotId } from '@oca/domain';
 
@@ -34,6 +35,8 @@ export class OpportunityRepository {
     },
     timestamp: number = Date.now(),
   ): Promise<void> {
+    if (!(await this.getOpportunity(snapshot.opportunityId)))
+      throw new Error('Public opportunity not found');
     const { opportunitySnapshots, opportunitySnapshotSources } = getTables(
       this.db,
     );
@@ -72,7 +75,12 @@ export class OpportunityRepository {
     const result = await db
       .select()
       .from(opportunitySnapshots)
-      .where(eq(opportunitySnapshots.opportunityId, opportunityId))
+      .where(
+        and(
+          eq(opportunitySnapshots.opportunityId, opportunityId),
+          publicOpportunity(opportunitySnapshots.opportunityId),
+        ),
+      )
       .orderBy(opportunitySnapshots.observedAt);
     return result[result.length - 1] ?? null;
   }
@@ -81,6 +89,13 @@ export class OpportunityRepository {
     id: SnapshotId,
     sourceObservationId: string,
   ): Promise<void> {
+    const snapshot = await this.getSnapshot(id);
+    if (!snapshot) throw new Error('Public snapshot not found');
+    const observations = await this.getObservationsForOpportunity(
+      snapshot.opportunityId as OpportunityId,
+    );
+    if (!observations.some((row) => row.id === sourceObservationId))
+      throw new Error('Public source lineage does not match');
     const { opportunitySnapshotSources } = getTables(this.db);
     await (this.db.db as any)
       .insert(opportunitySnapshotSources)
@@ -94,7 +109,12 @@ export class OpportunityRepository {
     const rows = await db
       .select()
       .from(opportunitySnapshots)
-      .where(eq(opportunitySnapshots.id, snapshotId));
+      .where(
+        and(
+          eq(opportunitySnapshots.id, snapshotId),
+          publicOpportunity(opportunitySnapshots.opportunityId),
+        ),
+      );
     return rows[0] ?? null;
   }
 
@@ -106,25 +126,70 @@ export class OpportunityRepository {
     return await db
       .select()
       .from(opportunitySnapshots)
-      .where(eq(opportunitySnapshots.opportunityId, opportunityId));
+      .where(
+        and(
+          eq(opportunitySnapshots.opportunityId, opportunityId),
+          publicOpportunity(opportunitySnapshots.opportunityId),
+        ),
+      );
   }
 
   public async getSnapshotSources(
     snapshotId: SnapshotId,
   ): Promise<readonly any[]> {
-    const { opportunitySnapshotSources } = getTables(this.db);
+    const {
+      opportunitySnapshotSources,
+      sourceObservations,
+      sourceListings,
+      opportunitySnapshots,
+    } = getTables(this.db);
     const db = this.db.db as any;
     return await db
-      .select()
+      .select({
+        snapshotId: opportunitySnapshotSources.snapshotId,
+        sourceObservationId: opportunitySnapshotSources.sourceObservationId,
+      })
       .from(opportunitySnapshotSources)
-      .where(eq(opportunitySnapshotSources.snapshotId, snapshotId));
+      .innerJoin(
+        sourceObservations,
+        eq(
+          sourceObservations.id,
+          opportunitySnapshotSources.sourceObservationId,
+        ),
+      )
+      .innerJoin(
+        sourceListings,
+        eq(sourceListings.id, sourceObservations.sourceListingId),
+      )
+      .innerJoin(
+        opportunitySnapshots,
+        eq(opportunitySnapshots.id, opportunitySnapshotSources.snapshotId),
+      )
+      .where(
+        and(
+          eq(opportunitySnapshotSources.snapshotId, snapshotId),
+          publicOpportunity(opportunitySnapshots.opportunityId),
+          or(
+            eq(
+              sourceListings.opportunityId,
+              opportunitySnapshots.opportunityId,
+            ),
+            isNull(sourceListings.opportunityId),
+          ),
+          sql`${sourceListings.sourceSystem} <> 'MANUAL'`,
+        ),
+      );
   }
 
   public async getObservationsForSnapshot(
     snapshotId: SnapshotId,
   ): Promise<readonly any[]> {
-    const { opportunitySnapshotSources, sourceObservations, sourceListings } =
-      getTables(this.db);
+    const {
+      opportunitySnapshotSources,
+      sourceObservations,
+      sourceListings,
+      opportunitySnapshots,
+    } = getTables(this.db);
     const db = this.db.db as any;
 
     const direct = await db
@@ -151,7 +216,24 @@ export class OpportunityRepository {
         sourceListings,
         eq(sourceObservations.sourceListingId, sourceListings.id),
       )
-      .where(eq(opportunitySnapshotSources.snapshotId, snapshotId));
+      .innerJoin(
+        opportunitySnapshots,
+        eq(opportunitySnapshots.id, opportunitySnapshotSources.snapshotId),
+      )
+      .where(
+        and(
+          eq(opportunitySnapshotSources.snapshotId, snapshotId),
+          publicOpportunity(opportunitySnapshots.opportunityId),
+          or(
+            eq(
+              sourceListings.opportunityId,
+              opportunitySnapshots.opportunityId,
+            ),
+            isNull(sourceListings.opportunityId),
+          ),
+          sql`${sourceListings.sourceSystem} <> 'MANUAL'`,
+        ),
+      );
 
     if (direct.length > 0) return direct;
 
@@ -186,13 +268,22 @@ export class OpportunityRepository {
         sourceObservations,
         eq(sourceObservations.sourceListingId, sourceListings.id),
       )
-      .where(eq(sourceListings.opportunityId, opportunityId));
+      .where(
+        and(
+          eq(sourceListings.opportunityId, opportunityId),
+          publicOpportunity(sourceListings.opportunityId),
+          sql`${sourceListings.sourceSystem} <> 'MANUAL'`,
+        ),
+      );
   }
 
   public async getOpportunities(): Promise<readonly any[]> {
     const { opportunities } = getTables(this.db);
     const db = this.db.db as any;
-    return await db.select().from(opportunities);
+    return await db
+      .select()
+      .from(opportunities)
+      .where(sql`${opportunities}.visibility = 'PUBLIC'`);
   }
 
   public async getOpportunitySummaries(): Promise<readonly any[]> {
@@ -230,7 +321,12 @@ export class OpportunityRepository {
     const rows = await db
       .select()
       .from(opportunities)
-      .where(eq(opportunities.id, id));
+      .where(
+        and(
+          eq(opportunities.id, id),
+          sql`${opportunities}.visibility = 'PUBLIC'`,
+        ),
+      );
     return rows[0] ?? null;
   }
 }

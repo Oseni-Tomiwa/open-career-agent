@@ -1,3 +1,4 @@
+import { publicOpportunity } from '../public-opportunity-scope.js';
 import { and, eq } from 'drizzle-orm';
 import type { DatabaseHandle } from '../client.js';
 import { getTables } from '../schema-helper.js';
@@ -88,7 +89,8 @@ export class CandidateRepository {
 
     const snapshots = await db
       .select({ id: opportunitySnapshots.id })
-      .from(opportunitySnapshots);
+      .from(opportunitySnapshots)
+      .where(publicOpportunity(opportunitySnapshots.opportunityId));
 
     const ledger = new BackgroundTaskLedger(this.db);
     for (const snapshot of snapshots) {

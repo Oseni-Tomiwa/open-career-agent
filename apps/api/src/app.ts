@@ -64,6 +64,7 @@ import {
 } from '@oca/schemas';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 
+import { registerManualOpportunities } from './manual-opportunities.js';
 import { registerLocalWorkspace } from './local-workspace.js';
 import { registerAuthBoundary, type AuthBoundaryServices } from './auth.js';
 
@@ -218,7 +219,18 @@ export async function createApiApp(
   );
 
   app.setErrorHandler((error, request, reply) => {
-    request.log.error({ err: error }, 'Request failed');
+    if (
+      request.routeOptions.url?.startsWith(
+        '/candidates/:candidateId/manual-opportunities',
+      )
+    ) {
+      request.log.error(
+        { code: (error as { code?: string } | null)?.code },
+        'Manual opportunity request failed',
+      );
+    } else {
+      request.log.error({ err: error }, 'Request failed');
+    }
     const statusCode = publicStatusCode(error);
     const code = statusCode === 500 ? 'INTERNAL_ERROR' : 'INVALID_REQUEST';
     const message =
@@ -240,6 +252,7 @@ export async function createApiApp(
   );
 
   registerLocalWorkspace(app, options.config, options.database);
+  registerManualOpportunities(app, options.config, options.database);
 
   const profileParams = Type.Object({ candidateId: Type.String() });
   const claimParams = Type.Object({
@@ -1438,32 +1451,19 @@ export async function createApiApp(
       const snapshotsWithEvaluations = await Promise.all(
         snapshots.map(async (snapshot: any) => {
           const sId = snapshotId(snapshot.id);
-          const isCloud = options.config.identityMode === 'cloud';
           const evaluation = request.query.candidateId
             ? await evaluationRepository.getCurrentEvaluation(
                 candidateId(request.query.candidateId),
                 sId,
               )
             : null;
-          const fit = request.query.candidateId
-            ? evaluation
-            : isCloud
-              ? null
-              : await evaluationRepository.getLatestFitForSnapshot(sId);
-          const quality = request.query.candidateId
-            ? evaluation
-            : isCloud
-              ? null
-              : await evaluationRepository.getLatestQualityForSnapshot(sId);
-          const decision = request.query.candidateId
-            ? evaluation
-              ? await evaluationRepository.getCurrentDecisionForEvaluation(
-                  evaluationId(evaluation.id),
-                )
-              : null
-            : isCloud
-              ? null
-              : await evaluationRepository.getLatestDecisionForSnapshot(sId);
+          const fit = evaluation;
+          const quality = evaluation;
+          const decision = evaluation
+            ? await evaluationRepository.getCurrentDecisionForEvaluation(
+                evaluationId(evaluation.id),
+              )
+            : null;
 
           let fitResult = undefined;
           let eligibilityResult = undefined;

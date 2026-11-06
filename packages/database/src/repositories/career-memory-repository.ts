@@ -1,3 +1,4 @@
+import { publicOpportunity } from '../public-opportunity-scope.js';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { and, asc, eq } from 'drizzle-orm';
@@ -804,7 +805,8 @@ export class CareerMemoryRepository {
     const { opportunitySnapshots } = getTables(this.handle);
     const snapshots = await (this.handle.db as any)
       .select()
-      .from(opportunitySnapshots);
+      .from(opportunitySnapshots)
+      .where(publicOpportunity(opportunitySnapshots.opportunityId));
     const latest = new Map<string, any>();
     for (const snapshot of snapshots) {
       const current = latest.get(snapshot.opportunityId);

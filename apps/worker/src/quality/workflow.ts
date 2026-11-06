@@ -121,7 +121,10 @@ export function createQualityHandlers(deps: {
 
     let evaluationId = payload.evaluationId as EvaluationId;
     const snapshotId = payload.snapshotId as SnapshotId;
-    const evaluation = await evaluationRepository.getEvaluation(evaluationId);
+    const evaluation = await evaluationRepository.getEvaluation(evaluationId, {
+      snapshotId: snapshotId,
+      candidateId: payload.candidateId,
+    });
     if (!evaluation) {
       throw new Error(`Evaluation not found: ${payload.evaluationId}`);
     }
@@ -183,6 +186,7 @@ export function createQualityHandlers(deps: {
     });
 
     const existing = await evaluationRepository.findQualityEvaluation({
+      candidateId: evaluation.candidateId,
       snapshotId,
       engineVersion: engine.version,
       inputFingerprint,

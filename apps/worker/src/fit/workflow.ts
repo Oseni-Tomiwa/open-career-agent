@@ -126,7 +126,10 @@ export function createFitHandlers(deps: {
       const evaluationId = payload.evaluationId as EvaluationId;
       const snapshotId = payload.snapshotId as SnapshotId;
       const candidateId = payload.candidateId as CandidateId;
-      const evaluation = await evaluationRepository.getEvaluation(evaluationId);
+      const evaluation = await evaluationRepository.getEvaluation(
+        evaluationId,
+        { snapshotId: snapshotId, candidateId: candidateId },
+      );
       if (!evaluation)
         throw new Error(`Evaluation not found: ${payload.evaluationId}`);
       if (
@@ -143,6 +146,7 @@ export function createFitHandlers(deps: {
       const linkedSet = evaluation.requirementSetId
         ? await requirementSets.getById(
             requirementSetId(evaluation.requirementSetId),
+            snapshotId,
           )
         : null;
       if (evaluation.requirementSetId && !linkedSet) {

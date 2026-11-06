@@ -58,3 +58,7 @@ export {
   CareerSignalsRepository,
   type CareerSignalsOptions,
 } from './repositories/career-signals-repository.js';
+export {
+  ManualOpportunityError,
+  ManualOpportunityRepository,
+} from './repositories/manual-opportunity-repository.js';

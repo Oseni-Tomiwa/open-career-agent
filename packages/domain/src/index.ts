@@ -44,8 +44,11 @@ export {
   requirementAssistanceRunId,
   sourceObservationId,
 } from './identifiers.js';
-export type { OpportunityType } from './opportunity.js';
-export { OPPORTUNITY_TYPES } from './opportunity.js';
+export type { ManualOpportunityInput, OpportunityType } from './opportunity.js';
+export {
+  normalizeManualOpportunityInput,
+  OPPORTUNITY_TYPES,
+} from './opportunity.js';
 export * from './requirements.js';
 export {
   CAREER_MEMORY_CLAIM_STATES,

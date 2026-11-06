@@ -1,3 +1,7 @@
+import {
+  publicOpportunity,
+  publicEvaluation,
+} from '../public-opportunity-scope.js';
 import { randomUUID } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import type {
@@ -75,17 +79,6 @@ export function validateTransition(
 export class ApplicationRepository {
   public constructor(private readonly handle: DatabaseHandle) {}
 
-  private async findApplication(id: ApplicationId): Promise<any | null> {
-    const { applications } = getTables(this.handle);
-    const db = this.handle.db as any;
-
-    const rows = await db
-      .select()
-      .from(applications)
-      .where(eq(applications.id, id));
-    return rows[0] ?? null;
-  }
-
   public async createApplication(
     input: {
       id?: ApplicationId;
@@ -98,10 +91,26 @@ export class ApplicationRepository {
     },
     timestamp: number = Date.now(),
   ): Promise<any> {
-    const { applications, decisions, opportunitySnapshots, applicationEvents } =
-      getTables(this.handle);
+    const {
+      applications,
+      decisions,
+      opportunitySnapshots,
+      applicationEvents,
+      opportunities,
+    } = getTables(this.handle);
     const db = this.handle.db as any;
 
+    const target = await db
+      .select({ id: opportunities.id })
+      .from(opportunities)
+      .where(
+        and(
+          eq(opportunities.id, input.opportunityId),
+          publicOpportunity(opportunities.id),
+        ),
+      );
+    if (!target.length)
+      throw new ApplicationError('Opportunity not found.', 'NOT_FOUND');
     const existingRows = await db
       .select()
       .from(applications)
@@ -136,7 +145,15 @@ export class ApplicationRepository {
       const decRows = await db
         .select()
         .from(decisions)
-        .where(eq(decisions.id, input.originatingDecisionId));
+        .where(
+          and(
+            eq(decisions.id, input.originatingDecisionId),
+            publicEvaluation(decisions.evaluationId, {
+              candidate: decisions.candidateId,
+              snapshot: decisions.snapshotId,
+            }),
+          ),
+        );
       const dec = decRows[0];
 
       if (!dec || dec.candidateId !== input.candidateId) {
@@ -231,7 +248,13 @@ export class ApplicationRepository {
     const rows = await db
       .select()
       .from(applications)
-      .where(and(eq(applications.id, id), eq(applications.candidateId, cId)));
+      .where(
+        and(
+          eq(applications.id, id),
+          eq(applications.candidateId, cId),
+          publicOpportunity(applications.opportunityId),
+        ),
+      );
 
     return rows[0] ?? null;
   }
@@ -249,6 +272,7 @@ export class ApplicationRepository {
       .where(
         and(
           eq(applications.candidateId, cId),
+          publicOpportunity(applications.opportunityId),
           eq(applications.opportunityId, oppId),
         ),
       );
@@ -263,7 +287,12 @@ export class ApplicationRepository {
     return await db
       .select()
       .from(applications)
-      .where(eq(applications.candidateId, cId));
+      .where(
+        and(
+          eq(applications.candidateId, cId),
+          publicOpportunity(applications.opportunityId),
+        ),
+      );
   }
 
   public async updateApplication(
@@ -279,7 +308,7 @@ export class ApplicationRepository {
     },
     timestamp: number = Date.now(),
   ): Promise<any> {
-    const current = await this.findApplication(input.id);
+    const current = await this.getApplication(input.candidateId, input.id);
     if (!current) {
       throw new ApplicationError(
         `Application '${input.id}' not found.`,

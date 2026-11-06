@@ -327,7 +327,7 @@ describe('API application', () => {
     const opportunityRepository = new OpportunityRepository(database);
     opportunityRepository.createOpportunity(opportunity);
     recordTestDiscoveryMatch(candidate, opportunity, 'qual');
-    opportunityRepository.appendSnapshot({
+    await opportunityRepository.appendSnapshot({
       id: snapshot,
       opportunityId: opportunity,
       title: 'Full Stack Engineer',
@@ -425,7 +425,7 @@ describe('API application', () => {
     const opportunityRepository = new OpportunityRepository(database);
     opportunityRepository.createOpportunity(opportunity);
     recordTestDiscoveryMatch(candidate, opportunity, 'dec');
-    opportunityRepository.appendSnapshot({
+    await opportunityRepository.appendSnapshot({
       id: snapshot,
       opportunityId: opportunity,
       title: 'Principal Engineer',
@@ -510,7 +510,7 @@ describe('API application', () => {
     const opportunityRepository = new OpportunityRepository(database);
     opportunityRepository.createOpportunity(opportunity);
     recordTestDiscoveryMatch(candidate, opportunity, 'multirev');
-    opportunityRepository.appendSnapshot({
+    await opportunityRepository.appendSnapshot({
       id: snap1,
       opportunityId: opportunity,
       title: 'Software Engineer',
@@ -518,7 +518,7 @@ describe('API application', () => {
       content: 'Original listing.',
       fingerprint: 'fp-snap-1',
     });
-    opportunityRepository.appendSnapshot({
+    await opportunityRepository.appendSnapshot({
       id: snap2,
       opportunityId: opportunity,
       title: 'Senior Software Engineer',
@@ -1152,7 +1152,7 @@ describe('API application', () => {
 
     const oppRepo = new OpportunityRepository(database);
     oppRepo.createOpportunity(opp1);
-    oppRepo.appendSnapshot({
+    await oppRepo.appendSnapshot({
       id: snap1,
       opportunityId: opp1,
       title: 'Principal Backend Systems Architect',

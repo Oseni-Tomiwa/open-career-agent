@@ -1,3 +1,7 @@
+import {
+  providerListing,
+  publicOpportunity,
+} from '../public-opportunity-scope.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import type { DatabaseHandle } from '../client.js';
 import { getTables } from '../schema-helper.js';
@@ -19,6 +23,21 @@ export class SourceListingRepository {
     const { sourceListings } = getTables(this.db);
     const db = this.db.db as any;
 
+    if (listing.sourceSystem === 'MANUAL')
+      throw new Error('Manual source is not a provider');
+    if (opportunityId) {
+      const { opportunities } = getTables(this.db);
+      const rows = await db
+        .select({ id: opportunities.id })
+        .from(opportunities)
+        .where(
+          and(
+            eq(opportunities.id, opportunityId),
+            publicOpportunity(opportunities.id),
+          ),
+        );
+      if (!rows.length) throw new Error('Public opportunity not found');
+    }
     await db
       .insert(sourceListings)
       .values({
@@ -50,6 +69,7 @@ export class SourceListingRepository {
       .from(sourceListings)
       .where(
         and(
+          providerListing(sourceListings.id, true),
           eq(sourceListings.sourceSystem, sourceSystem),
           eq(sourceListings.sourceExternalId, sourceExternalId),
         ),
@@ -63,10 +83,26 @@ export class SourceListingRepository {
   ): Promise<void> {
     const { sourceListings } = getTables(this.db);
     const db = this.db.db as any;
+    const { opportunities } = getTables(this.db);
+    const rows = await db
+      .select({ id: opportunities.id })
+      .from(opportunities)
+      .where(
+        and(
+          eq(opportunities.id, opportunityId),
+          publicOpportunity(opportunities.id),
+        ),
+      );
+    if (!rows.length) throw new Error('Public opportunity not found');
     await db
       .update(sourceListings)
       .set({ opportunityId, updatedAt: new Date() })
-      .where(eq(sourceListings.id, id));
+      .where(
+        and(
+          eq(sourceListings.id, id),
+          providerListing(sourceListings.id, true),
+        ),
+      );
   }
 
   public async resolveCanonicalOpportunity(input: {
@@ -90,7 +126,13 @@ export class SourceListingRepository {
       const listingRows = await tx
         .select()
         .from(sourceListings)
-        .where(eq(sourceListings.id, input.listingId));
+        .where(
+          and(
+            eq(sourceListings.id, input.listingId),
+            providerListing(sourceListings.id, true),
+          ),
+        );
+      if (!listingRows.length) throw new Error('Provider listing not found');
       const linked = listingRows[0]?.opportunityId as string | null | undefined;
       if (linked) {
         for (const evidence of input.identityEvidence) {
@@ -124,9 +166,12 @@ export class SourceListingRepository {
           .select()
           .from(opportunityIdentityKeys)
           .where(
-            inArray(
-              opportunityIdentityKeys.identityKey,
-              keys.map((item) => item.key),
+            and(
+              publicOpportunity(opportunityIdentityKeys.opportunityId),
+              inArray(
+                opportunityIdentityKeys.identityKey,
+                keys.map((item) => item.key),
+              ),
             ),
           );
         const uniqueOwners: string[] = Array.from(
@@ -179,7 +224,12 @@ export class SourceListingRepository {
           const ownerRows = await tx
             .select()
             .from(opportunityIdentityKeys)
-            .where(eq(opportunityIdentityKeys.identityKey, keys[0].key));
+            .where(
+              and(
+                eq(opportunityIdentityKeys.identityKey, keys[0].key),
+                publicOpportunity(opportunityIdentityKeys.opportunityId),
+              ),
+            );
           const winner = ownerRows[0]?.opportunityId as string | undefined;
           if (winner && winner !== resolved) {
             await tx
@@ -226,7 +276,12 @@ export class SourceListingRepository {
     return await (this.db.db as any)
       .select()
       .from(opportunityIdentityKeys)
-      .where(eq(opportunityIdentityKeys.opportunityId, opportunityId));
+      .where(
+        and(
+          eq(opportunityIdentityKeys.opportunityId, opportunityId),
+          publicOpportunity(opportunityIdentityKeys.opportunityId),
+        ),
+      );
   }
 
   public async persistObservation(
@@ -242,6 +297,17 @@ export class SourceListingRepository {
     const { sourceObservations } = getTables(this.db);
     const db = this.db.db as any;
 
+    const { sourceListings } = getTables(this.db);
+    const rows = await db
+      .select({ id: sourceListings.id })
+      .from(sourceListings)
+      .where(
+        and(
+          eq(sourceListings.id, sourceListingId),
+          providerListing(sourceListings.id, true),
+        ),
+      );
+    if (!rows.length) throw new Error('Provider listing not found');
     await db
       .insert(sourceObservations)
       .values({
@@ -273,6 +339,7 @@ export class SourceListingRepository {
       .where(
         and(
           eq(sourceObservations.sourceListingId, sourceListingId),
+          providerListing(sourceObservations.sourceListingId, true),
           eq(sourceObservations.fingerprint, fingerprint),
         ),
       );
@@ -285,7 +352,12 @@ export class SourceListingRepository {
     const rows = await db
       .select()
       .from(sourceListings)
-      .where(eq(sourceListings.id, id));
+      .where(
+        and(
+          eq(sourceListings.id, id),
+          providerListing(sourceListings.id, true),
+        ),
+      );
     return rows[0] ?? null;
   }
 
@@ -297,7 +369,12 @@ export class SourceListingRepository {
     const rows = await db
       .select()
       .from(sourceListings)
-      .where(eq(sourceListings.opportunityId, opportunityId));
+      .where(
+        and(
+          eq(sourceListings.opportunityId, opportunityId),
+          providerListing(sourceListings.id),
+        ),
+      );
     return rows[0] ?? null;
   }
 
@@ -309,7 +386,12 @@ export class SourceListingRepository {
     return await db
       .select()
       .from(sourceObservations)
-      .where(eq(sourceObservations.sourceListingId, sourceListingId));
+      .where(
+        and(
+          eq(sourceObservations.sourceListingId, sourceListingId),
+          providerListing(sourceObservations.sourceListingId),
+        ),
+      );
   }
 }
 
