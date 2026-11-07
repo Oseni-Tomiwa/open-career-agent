@@ -39,7 +39,7 @@ describe('application shell navigation', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders exact V1 primary navigation items and excludes deferred surfaces', async () => {
+  it('renders approved primary navigation items and excludes deferred surfaces', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn<typeof fetch>().mockRejectedValue(new Error('offline')),
@@ -59,6 +59,9 @@ describe('application shell navigation', () => {
 
     // Must contain V1 primary navigation items
     expect(screen.getByRole('link', { name: 'Overview' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Saved Opportunities' }),
+    ).toHaveAttribute('href', '/saved-opportunities');
     expect(
       screen.getByRole('link', { name: 'Discover Jobs' }),
     ).toBeInTheDocument();

@@ -7,7 +7,7 @@ import { WorkspacePageEnd } from '../components/WorkspacePageEnd.js';
 import { browserConfig } from '../config.js';
 import { useProductData } from './ProductDataProvider.js';
 import { useTheme, type ThemePreference } from './ThemeProvider.js';
-import { useAuth } from './authContext.js';
+import { beforeWorkspaceSignOut, useAuth } from './authContext.js';
 
 const primaryNavigation: readonly {
   readonly to: string;
@@ -15,6 +15,11 @@ const primaryNavigation: readonly {
   readonly icon: IconName;
 }[] = [
   { to: '/overview', label: 'Overview', icon: 'today' },
+  {
+    to: '/saved-opportunities',
+    label: 'Saved Opportunities',
+    icon: 'opportunities',
+  },
   { to: '/discover', label: 'Discover Jobs', icon: 'opportunities' },
   { to: '/matches', label: 'Matches', icon: 'matches' },
   { to: '/applications', label: 'Applications', icon: 'applications' },
@@ -122,7 +127,15 @@ export function AppShell() {
           </div>
           <button
             className="auth-switch"
-            onClick={() => void auth.signOut()}
+            onClick={() => {
+              if (
+                window.dispatchEvent(
+                  new Event(beforeWorkspaceSignOut, { cancelable: true }),
+                )
+              )
+                void auth.signOut();
+              else setNavigationOpen(false);
+            }}
             type="button"
           >
             Sign out

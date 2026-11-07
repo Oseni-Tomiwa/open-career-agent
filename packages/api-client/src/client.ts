@@ -1,4 +1,8 @@
 import {
+  type ManualOpportunityRequestSchema,
+  ManualOpportunityRecordSchema,
+  ManualOpportunityListSchema,
+  ManualOpportunityDetailSchema,
   LocalWorkspaceStatusSchema,
   LocalWorkspaceReadySchema,
   type LocalWorkspaceReady,
@@ -39,7 +43,7 @@ import {
   ReplaceCandidateClaimInputSchema,
   RetireCandidateClaimInputSchema,
 } from '@oca/schemas';
-import type { Static, TSchema } from '@sinclair/typebox';
+import { Type, type Static, type TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
 import {
@@ -682,6 +686,68 @@ export class RoleviaApiClient {
     );
   }
 
+  public listManualOpportunities(
+    candidate: string,
+    after?: string,
+    options?: RequestOptions,
+  ) {
+    const query = after ? `?after=${encodeURIComponent(after)}` : '';
+    return this.request(
+      manualPath(candidate) + query,
+      ManualOpportunityListSchema,
+      'GET',
+      undefined,
+      options,
+      true,
+    );
+  }
+
+  public getManualOpportunity(
+    candidate: string,
+    id: string,
+    options?: RequestOptions,
+  ) {
+    return this.request(
+      manualPath(candidate, id),
+      ManualOpportunityDetailSchema,
+      'GET',
+      undefined,
+      options,
+      true,
+    );
+  }
+
+  public createManualOpportunity(
+    candidate: string,
+    key: string,
+    input: Static<typeof ManualOpportunityRequestSchema>,
+  ) {
+    return this.request(
+      manualPath(candidate),
+      manualCreationSchema,
+      'POST',
+      input,
+      { headers: { 'Idempotency-Key': key } },
+      true,
+    );
+  }
+
+  public editManualOpportunity(
+    candidate: string,
+    id: string,
+    version: number,
+    input: Static<typeof ManualOpportunityRequestSchema>,
+  ) {
+    return this.request(
+      manualPath(candidate, id),
+      ManualOpportunityRecordSchema,
+      'PATCH',
+      input,
+      { headers: { 'If-Match': `"v${version}"` } },
+      true,
+    );
+  }
+
   private async request<TSchemaType extends TSchema>(
     path: string,
     schema: TSchemaType,
@@ -798,4 +864,12 @@ export class RoleviaApiClient {
         return new ApiClientError(message, 'UNKNOWN_ERROR', status, body);
     }
   }
+}
+
+const manualCreationSchema = Type.Object({
+  record: ManualOpportunityRecordSchema,
+  replayed: Type.Boolean(),
+});
+function manualPath(candidate: string, id?: string) {
+  return `/candidates/${encodeURIComponent(candidate)}/manual-opportunities${id ? '/' + encodeURIComponent(id) : ''}`;
 }

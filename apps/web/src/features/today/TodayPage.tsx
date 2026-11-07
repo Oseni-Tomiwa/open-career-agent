@@ -163,7 +163,8 @@ export function TodayPage() {
             </Link>
           </div>
           <p className="workspace-setup-note">
-            Manual opportunity capture is planned for a later milestone.
+            Found something worth keeping?{' '}
+            <Link to="/saved-opportunities/new">Add an opportunity</Link>.
           </p>
         </section>
       </div>

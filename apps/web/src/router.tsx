@@ -23,6 +23,8 @@ const AgentActivityPage = lazy(
   () => import('./features/activity/AgentActivityPage.js'),
 );
 const SettingsPage = lazy(() => import('./features/settings/SettingsPage.js'));
+const savedPages = () =>
+  import('./features/saved-opportunities/SavedOpportunities.js');
 const NotFoundPage = lazy(() => import('./features/NotFoundPage.js'));
 
 function lazyPage(page: React.ReactNode) {
@@ -42,6 +44,22 @@ export const router = createBrowserRouter([
       {
         path: 'discover/:opportunityId',
         element: lazyPage(<OpportunityDetailPage />),
+      },
+      {
+        path: 'saved-opportunities',
+        lazy: async () => ({ Component: (await savedPages()).SavedListPage }),
+      },
+      {
+        path: 'saved-opportunities/new',
+        lazy: async () => ({ Component: (await savedPages()).SavedNewPage }),
+      },
+      {
+        path: 'saved-opportunities/:opportunityId',
+        lazy: async () => ({ Component: (await savedPages()).SavedDetailPage }),
+      },
+      {
+        path: 'saved-opportunities/:opportunityId/edit',
+        lazy: async () => ({ Component: (await savedPages()).SavedEditPage }),
       },
       { path: 'matches', element: lazyPage(<MatchesPage />) },
       { path: 'applications', element: lazyPage(<ApplicationsPage />) },

@@ -370,3 +370,334 @@ test('setup and failure states support the dark theme and keyboard retry', async
     page.getByRole('button', { name: 'Open my workspace' }),
   ).toBeFocused();
 });
+
+async function openCapture(page: Page) {
+  await page.goto('/overview');
+  await page.getByRole('button', { name: 'Create my workspace' }).click();
+  await page.getByRole('button', { name: 'Open my workspace' }).click();
+  await page
+    .getByRole('link', { name: 'Add an opportunity', exact: true })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'Add opportunity', exact: true }),
+  ).toBeFocused();
+}
+async function fillCapture(page: Page, title: string, category = 'Job') {
+  await page.getByLabel('Category').selectOption({ label: category });
+  await page.getByLabel('Title', { exact: true }).fill(title);
+  await page
+    .getByLabel('Organization', { exact: true })
+    .fill('Example foundation');
+  await page
+    .getByLabel('Source context', { exact: true })
+    .fill('Fictional email referral');
+}
+
+test('manual capture preserves categories, source context, dates and revisions', async ({
+  page,
+}, info) => {
+  await openCapture(page);
+  await page.keyboard.press('Tab');
+  await expect(
+    page.getByRole('link', {
+      name: 'Back to saved opportunities',
+      exact: true,
+    }),
+  ).toBeFocused();
+  await page.keyboard.press('Tab');
+  const category = page.getByLabel('Category');
+  await expect(category).toBeFocused();
+  const focus = await category.evaluate((node) => ({
+    style: getComputedStyle(node).outlineStyle,
+    width: getComputedStyle(node).outlineWidth,
+    keyboard: node.matches(':focus-visible'),
+  }));
+  expect(focus).toEqual({ style: 'solid', width: '3px', keyboard: true });
+  await page.screenshot({
+    path: info.outputPath('saved-keyboard-focus.png'),
+    fullPage: true,
+  });
+  await page.keyboard.press('Tab');
+  await expect(page.getByLabel('Title', { exact: true })).toBeFocused();
+  await fillCapture(page, 'Fictional Job');
+  await page.getByLabel('Deadline (optional)').fill('2020-02-29');
+  await expect(page.getByText(/This deadline has passed/)).toBeVisible();
+  await noOverflow(page);
+  await page.screenshot({
+    path: info.outputPath('saved-capture.png'),
+    fullPage: true,
+  });
+  await page
+    .getByRole('button', { name: 'Save opportunity', exact: true })
+    .press('Enter');
+  await expect(
+    page.getByRole('heading', { name: 'Fictional Job' }),
+  ).toBeFocused();
+  await expect(
+    page.getByText('Manually entered · unverified', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('Not evaluated', { exact: true })).toBeVisible();
+  await expect(page.getByText('2020-02-29', { exact: true })).toBeVisible();
+  await expect(page.getByText('No source URL', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Edit opportunity' }).click();
+  await page.getByLabel('Title', { exact: true }).fill('Updated Job');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Updated Job' }),
+  ).toBeFocused();
+  await page.reload();
+  await expect(page.getByText('2020-02-29', { exact: true })).toBeVisible();
+  await page.getByText('Revision history', { exact: true }).click();
+  await expect(page.getByText(/Revision 1 ·/)).toBeVisible();
+  await expect(page.getByText(/Revision 2 ·/)).toBeVisible();
+  await noOverflow(page);
+  await page.screenshot({
+    path: info.outputPath('saved-detail.png'),
+    fullPage: true,
+  });
+  for (const kind of [
+    'Internship',
+    'Freelance contract',
+    'Fellowship',
+    'Grant',
+    'Competition',
+    'Hackathon',
+  ]) {
+    await page
+      .getByRole('link', { name: 'Back to saved opportunities', exact: true })
+      .click();
+    await page
+      .getByRole('link', { name: 'Add opportunity', exact: true })
+      .click();
+    await fillCapture(page, 'Fictional ' + kind, kind);
+    if (kind === 'Grant') {
+      await page
+        .getByLabel('Source URL (optional)')
+        .fill('https://example.invalid/grant');
+      await page.getByLabel('Source context', { exact: true }).fill('');
+    }
+    await page
+      .getByRole('button', { name: 'Save opportunity', exact: true })
+      .click();
+    await expect(
+      page.getByRole('heading', { name: 'Fictional ' + kind }),
+    ).toBeVisible();
+    await expect(page.getByText('No deadline', { exact: true })).toBeVisible();
+    if (kind === 'Grant')
+      await expect(
+        page.getByRole('link', { name: 'https://example.invalid/grant' }),
+      ).toHaveAttribute('href', 'https://example.invalid/grant');
+  }
+  await page
+    .getByRole('link', { name: 'Back to saved opportunities', exact: true })
+    .click();
+  await expect(page.locator('.saved-list > li')).toHaveCount(7);
+  await noOverflow(page);
+  await page.screenshot({
+    path: info.outputPath('saved-list.png'),
+    fullPage: true,
+  });
+});
+
+test('manual retry keeps the exact request, handles duplicates and recovers stale drafts', async ({
+  page,
+}) => {
+  await openCapture(page);
+  await fillCapture(page, 'Retry example');
+  const requests: { key: string | undefined; body: string | null }[] = [];
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const endpoint =
+    'http://127.0.0.1:4311/candidates/e2e-personal/manual-opportunities';
+  await page.route(endpoint, async (route) => {
+    const req = route.request();
+    if (req.method() !== 'POST') return route.continue();
+    requests.push({
+      key: req.headers()['idempotency-key'],
+      body: req.postData(),
+    });
+    if (requests.length === 1) {
+      await barrier;
+      const result = await route.fetch();
+      expect(result.status()).toBe(201);
+      return route.abort();
+    }
+    return route.continue();
+  });
+  const menu = page.getByRole('button', { name: 'Open navigation' });
+  if (await menu.isVisible()) await menu.click();
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  const signOut = page.getByRole('dialog', {
+    name: 'Sign out with this draft?',
+  });
+  await expect(signOut.getByRole('button', { name: 'Go back' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue(
+    'Retry example',
+  );
+  const save = page.getByRole('button', {
+    name: 'Save opportunity',
+    exact: true,
+  });
+  await save.click();
+  await expect(save).toBeDisabled();
+  await expect(page.getByText('Saving opportunity…')).toBeVisible();
+  release();
+  await expect(page.getByRole('alert')).toBeFocused();
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue(
+    'Retry example',
+  );
+  await expect(page.getByLabel('Title', { exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Retry same save' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Retry example' }),
+  ).toBeVisible();
+  expect(requests).toHaveLength(2);
+  expect(requests[0]?.key).toBeTruthy();
+  expect(requests[0]).toEqual(requests[1]);
+  await page.unroute(endpoint);
+  const recordId = page.url().split('/').at(-1)!;
+  await page
+    .getByRole('link', { name: 'Back to saved opportunities', exact: true })
+    .click();
+  await expect(page.locator('.saved-list > li')).toHaveCount(1);
+  await page
+    .getByRole('link', { name: 'Add opportunity', exact: true })
+    .click();
+  await fillCapture(page, 'Retry example');
+  await save.click();
+  await expect(
+    page.getByRole('region', { name: 'Possible duplicates' }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: /Open existing Retry example/ }).click();
+  await expect(
+    page.getByRole('dialog', { name: 'Leave this draft?' }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole('dialog', { name: 'Leave this draft?' })
+      .getByRole('button', { name: 'Go back' }),
+  ).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue(
+    'Retry example',
+  );
+  await page.getByRole('link', { name: /Open existing Retry example/ }).click();
+  await page.getByRole('button', { name: 'Discard draft and leave' }).click();
+  await expect(page).toHaveURL(
+    new RegExp('/saved-opportunities/' + recordId + '$'),
+  );
+  await page
+    .getByRole('link', { name: 'Back to saved opportunities', exact: true })
+    .click();
+  await page
+    .getByRole('link', { name: 'Add opportunity', exact: true })
+    .click();
+  await fillCapture(page, 'Retry example');
+  await save.click();
+  await page.getByRole('button', { name: 'Edit draft', exact: true }).click();
+  await save.click();
+  await page
+    .getByRole('button', { name: 'Save as separate', exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole('dialog', { name: 'Save as separate?' })
+      .getByRole('button', { name: 'Go back' }),
+  ).toBeFocused();
+  await page.getByRole('button', { name: 'Confirm separate capture' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Retry example' }),
+  ).toBeVisible();
+  expect(page.url().split('/').at(-1)).not.toBe(recordId);
+  await page.goto('/saved-opportunities/' + recordId + '/edit');
+  await page.getByLabel('Title', { exact: true }).fill('My draft');
+  const concurrent = await page.request.patch(endpoint + '/' + recordId, {
+    headers: { 'If-Match': '"v1"' },
+    data: {
+      category: 'JOB',
+      title: 'Concurrent edit',
+      organization: 'Example foundation',
+      sourceContext: 'Another fictional email',
+    },
+  });
+  expect(concurrent.status()).toBe(200);
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByRole('alert')).toContainText('changed elsewhere');
+  await page.getByRole('button', { name: 'Reload latest revision' }).click();
+  await expect(page.getByText(/Revision 2 · Concurrent edit/)).toBeVisible();
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue(
+    'My draft',
+  );
+  await page.getByRole('button', { name: 'Reapply my draft' }).click();
+  await expect(page.getByLabel('Source context', { exact: true })).toHaveValue(
+    'Another fictional email',
+  );
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByRole('heading', { name: 'My draft' })).toBeFocused();
+});
+
+test('manual empty, loading, unavailable and invalid states stay in personal mode', async ({
+  page,
+}) => {
+  await openCapture(page);
+  await page
+    .getByRole('link', { name: 'Back to saved opportunities', exact: true })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'No saved opportunities yet' }),
+  ).toBeVisible();
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const endpoint =
+    'http://127.0.0.1:4311/candidates/e2e-personal/manual-opportunities';
+  await page.route(endpoint, async (route) => {
+    await wait;
+    await route.abort();
+  });
+  await page.reload();
+  await expect(
+    page.getByText('Loading saved opportunities…', { exact: true }),
+  ).toBeVisible();
+  release();
+  await expect(page.getByRole('alert')).toHaveText(
+    'Saved opportunities are unavailable.',
+  );
+  await expect(
+    page.getByRole('heading', { name: 'No saved opportunities yet' }),
+  ).toHaveCount(0);
+  await page.unroute(endpoint);
+  await page.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'No saved opportunities yet' }),
+  ).toBeVisible();
+  await page
+    .getByRole('link', { name: 'Add opportunity', exact: true })
+    .click();
+  await fillCapture(page, 'Validation example');
+  await page.getByLabel('Deadline (optional)').fill('10000-01-01');
+  await page
+    .getByRole('button', { name: 'Save opportunity', exact: true })
+    .click();
+  expect(
+    await page
+      .getByLabel('Deadline (optional)')
+      .evaluate((node) => (node as HTMLInputElement).validity.rangeOverflow),
+  ).toBe(true);
+  await expect(page.getByLabel('Deadline (optional)')).toBeFocused();
+  await page.getByLabel('Deadline (optional)').fill('');
+  await page.getByLabel('Source URL (optional)').fill('javascript:alert(1)');
+  await page
+    .getByRole('button', { name: 'Save opportunity', exact: true })
+    .click();
+  await expect(page.getByRole('alert')).toHaveText(
+    'Enter a valid HTTP or HTTPS source URL.',
+  );
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue(
+    'Validation example',
+  );
+});

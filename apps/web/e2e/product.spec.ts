@@ -6,11 +6,12 @@ test.beforeEach(({ page }) => {
   });
 });
 
-test('all seven primary navigation routes render successfully in the browser runtime', async ({
+test('all primary navigation routes render successfully in the browser runtime', async ({
   page,
 }) => {
   const routes = [
     { url: '/overview', expectedHeading: /^Today$/i },
+    { url: '/saved-opportunities', expectedHeading: /^Saved Opportunities$/i },
     { url: '/discover', expectedHeading: /Discover Jobs/i },
     { url: '/matches', expectedHeading: /^Matches$/i },
     { url: '/applications', expectedHeading: /^Applications$/i },
@@ -474,4 +475,28 @@ test('demo-to-personal guidance keeps the fictional demo active until a configur
   await expect(
     page.getByRole('button', { name: 'Create my workspace' }),
   ).toHaveCount(0);
+});
+
+test('demo saved opportunities never request the personal capture API', async ({
+  page,
+}) => {
+  const requests: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/manual-opportunities'))
+      requests.push(request.url());
+  });
+  for (const route of [
+    '/saved-opportunities',
+    '/saved-opportunities/new',
+    '/saved-opportunities/fixture/edit',
+  ]) {
+    await page.goto(route);
+    await expect(
+      page.getByRole('heading', { name: 'Demo workspace', exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Save opportunity', exact: true }),
+    ).toHaveCount(0);
+  }
+  expect(requests).toEqual([]);
 });

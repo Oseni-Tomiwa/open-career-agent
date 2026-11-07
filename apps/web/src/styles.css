@@ -5176,6 +5176,8 @@ svg {
   .sidebar {
     visibility: hidden;
     width: 16rem;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
     transform: translateX(-105%);
     transition:
       transform 200ms ease,

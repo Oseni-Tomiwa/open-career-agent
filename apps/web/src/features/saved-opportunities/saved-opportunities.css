@@ -1,0 +1,126 @@
+.saved-opportunities {
+  max-width: 66rem;
+}
+.saved-opportunities
+  :is(a, button, input, select, textarea, summary):focus-visible,
+.saved-opportunities [tabindex='-1']:focus {
+  outline: 3px solid var(--focus);
+  outline-offset: 4px;
+}
+.saved-opportunities > a,
+.saved-opportunities li a,
+.saved-detail a {
+  display: inline-block;
+  padding-block: 0.6rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  overflow-wrap: anywhere;
+}
+.saved-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  padding: 0;
+  gap: 1rem;
+  list-style: none;
+}
+.saved-panel,
+.saved-notice {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: clamp(1rem, 3vw, 1.6rem);
+  margin-block: 1rem;
+  overflow-wrap: anywhere;
+}
+.saved-list .saved-panel {
+  margin: 0;
+}
+.saved-panel h2,
+.saved-panel p,
+.saved-notice p {
+  margin-block: 0 0.65rem;
+}
+.saved-meta {
+  color: var(--text-secondary);
+}
+.saved-form {
+  max-width: 44rem;
+}
+.saved-form fieldset {
+  display: grid;
+  gap: 1rem;
+  min-inline-size: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.saved-form legend {
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+.saved-form label,
+.saved-field {
+  display: grid;
+  gap: 0.45rem;
+}
+.saved-form :is(input, select, textarea) {
+  min-height: 44px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: inherit;
+  background: var(--surface);
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+}
+.saved-form textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+.saved-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.saved-opportunities .button,
+.saved-dialog .button,
+.saved-opportunities summary {
+  min-height: 44px;
+}
+.saved-opportunities summary {
+  align-content: center;
+  cursor: pointer;
+}
+.saved-detail dt {
+  font-weight: 600;
+}
+.saved-detail dd {
+  margin: 0 0 1rem;
+  white-space: pre-wrap;
+}
+.saved-dialog {
+  max-width: min(90vw, 30rem);
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 1.4rem;
+  border-radius: 12px;
+  margin: auto;
+}
+.saved-dialog::backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+.saved-dialog .button {
+  margin: 0.25rem;
+}
+.saved-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

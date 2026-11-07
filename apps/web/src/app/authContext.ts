@@ -25,3 +25,5 @@ export const AuthContext = createContext<AuthContextValue>({
 export function useAuth(): AuthContextValue {
   return use(AuthContext);
 }
+
+export const beforeWorkspaceSignOut = 'rolevia:before-workspace-sign-out';
