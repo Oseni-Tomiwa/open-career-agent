@@ -46,3 +46,8 @@ flowchart LR
 ## Consequences
 
 The same well-identified vacancy can share one Opportunity and all source provenance, while candidate-owned conclusions and actions remain isolated. Some true duplicates remain separate when providers expose no safe common identifier. That is an intentional correctness tradeoff. Fuzzy/aggressive merging, automatic historical title/company backfills, and candidate-derived identity are prohibited.
+
+
+## R-01.2 extension approved for controlled implementation
+
+Public provider opportunities retain their existing identity and immutable provenance. Manual capture adds a candidate-private scope with immutable ownership and its own revision history. Manual entries never claim public canonical keys, merge with ATS opportunities, or participate in automated evaluation. Candidate authorization and parent lineage are required for private reads. Legacy public readers and workers must be protected before private writes are enabled. The paired migration SQL remains subject to the separate execution gate.
